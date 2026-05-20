@@ -1,0 +1,21 @@
+   
+📚 Context:
+{context}
+___________
+❓ Question:
+{question}
+
+📝 Instructions:
+- Help the user understand how ARTIV generates solutions, by walking through the major steps in order, if possible.
+- Summarize or clarify information when needed to improve user understanding.
+- If describing a process, list the main steps or phases, even if some steps are only partially specified.
+- If multiple methods or parameters are involved, briefly compare them.
+- If important details are missing, say: "Not fully specified in provided documents."
+- Respond at the appropriate level:
+- For how-to or general understanding questions, provide a simple, direct explanation that any adult could follow.
+- For technical or math-heavy questions, give a precise and structured explanation, as an engineer or domain expert would.
+- Format your answer clearly:
+- For simple questions, provide a direct answer in full sentences.
+- For questions about processes or solution generation, describe the workflow as a series of logical steps or decisions.
+- Do not invent information beyond the provided context.
+

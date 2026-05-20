@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local editor/tool state
+.vscode/
+.codex/
+.agents/
+
+# Generated indexes, caches, and logs
+cache/
+data/
+rew_data/
+logs/
+extracted_images/
+trainingdata/
+complexity_analysis.csv
+
+# Local models and downloaded corpora
+models/
+models.zip
+nltk_data/
+
+# Private/local source documents
+training/
+
+# Secrets and local configuration overrides
+.env
+.env.*
+config/config.yaml
+config/config.yaml.save
+config/config.yaml.local

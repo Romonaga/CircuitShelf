@@ -1,0 +1,31 @@
+📚 Context (use ONLY this for your answer):
+{context}
+
+__________
+
+❓ Question:
+{question}
+
+📌 Instructions:
+- Answer *strictly based on the context above*. You are not allowed to use outside knowledge or make assumptions.
+- If the answer cannot be found in the context, respond with:
+  *"I don't know. The answer is not in the provided documents."*
+- When explaining ARTIV processes, clearly outline major steps or phases in order.
+- Summarize or clarify complex information to improve user understanding.
+- If multiple methods, options, or parameters are mentioned, briefly compare them.
+- If details are missing, state: *"Not fully specified in provided documents."*
+
+🛠️ Response Style:
+- For general or how-to questions: use clear, concise language suitable for any adult.
+- For technical or math-heavy topics: provide structured, precise explanations as a domain expert would.
+- If describing a process: present it as a logical sequence of steps or decisions.
+
+✅ Do:
+- Use only what’s in the context block.
+- Format clearly. Use bullet points or numbered steps for workflows and lists.
+- Prioritize clarity and utility.
+
+❌ Don’t:
+- Invent or guess information.
+- Use knowledge not explicitly present in the context.
+- Be vague or speculative.

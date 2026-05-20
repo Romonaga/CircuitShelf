@@ -1,0 +1,16 @@
+bcrypt
+faiss-cpu
+fastapi
+gradio
+lxml
+nltk
+numpy
+pandas
+pillow
+pymupdf
+pytesseract
+python-docx
+pyyaml
+requests
+sentence-transformers
+uvicorn
