@@ -42,10 +42,18 @@ export default function App() {
       onLogout={logout}
     >
       <ErrorMessage message={error} className="top-error" />
-      {activeView === "ask" ? <AskView config={config} /> : null}
-      {activeView === "documents" ? <DocumentsView /> : null}
-      {activeView === "trace" ? <TraceView /> : null}
-      {activeView === "status" ? <StatusView status={status} refresh={refreshStatus} /> : null}
+      <div hidden={activeView !== "ask"}>
+        <AskView config={config} />
+      </div>
+      <div hidden={activeView !== "documents"}>
+        <DocumentsView />
+      </div>
+      <div hidden={activeView !== "trace"}>
+        <TraceView />
+      </div>
+      <div hidden={activeView !== "status"}>
+        <StatusView status={status} refresh={refreshStatus} />
+      </div>
     </AppShell>
   );
 }
