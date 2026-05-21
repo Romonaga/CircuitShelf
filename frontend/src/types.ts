@@ -98,6 +98,43 @@ export interface DocumentChunk {
   preview: string;
 }
 
+export interface DocumentImage {
+  imageKey: string;
+  caption: string;
+  page?: number | string | null;
+  imageBase64: string;
+  ocrText?: string;
+}
+
+export interface DocumentPage {
+  page: number | string;
+  chunks: DocumentChunk[];
+  images: DocumentImage[];
+}
+
+export interface DocumentPin {
+  pin: number;
+  label: string;
+  function: string;
+  page?: number | string | null;
+  chunkIndex?: number | null;
+}
+
+export interface DocumentPinout {
+  source: string;
+  displayName: string;
+  pins: DocumentPin[];
+}
+
+export interface DocumentDetail {
+  document: string;
+  displayName: string;
+  chunks: DocumentChunk[];
+  images: DocumentImage[];
+  pages: DocumentPage[];
+  pinout: DocumentPinout;
+}
+
 export interface StatusPayload {
   chunks: number;
   sources: number;

@@ -1,6 +1,6 @@
 import type {
   AppConfig,
-  DocumentChunk,
+  DocumentDetail,
   DocumentSummary,
   QueryRequest,
   QueryResponse,
@@ -135,8 +135,8 @@ export function triggerIndexCheck(): Promise<{ ok: boolean; started: boolean; st
   return requestJson<{ ok: boolean; started: boolean; status: unknown }>("/api/index/check", { method: "POST" });
 }
 
-export function getDocument(source: string): Promise<{ document: string; chunks: DocumentChunk[] }> {
-  return requestJson<{ document: string; chunks: DocumentChunk[] }>(`/api/document?source=${encodeURIComponent(source)}`);
+export function getDocument(source: string): Promise<DocumentDetail> {
+  return requestJson<DocumentDetail>(`/api/document?source=${encodeURIComponent(source)}`);
 }
 
 export function getTrace(): Promise<Record<string, unknown>> {

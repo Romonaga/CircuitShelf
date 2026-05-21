@@ -51,6 +51,7 @@ from reranker_module import Reranker
 from ocr_utils import run_ocr
 from pdf_visuals import link_chunks_to_rendered_pages, render_pdf_visual_pages
 from index_builder import IndexBuilder
+from pinout_extractor import extract_pinout_map
 from ingest_manifest import IngestManifest
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
 from db.connection import Database, database_url_from_config
@@ -2488,16 +2489,37 @@ async def upload_documents(
 
 def build_document_detail(doc_name):
     rows = []
+    pages = OrderedDict()
+    image_assets = []
     chunks = state.get_chunks()
     metadata = state.get_metadata()
     sources = state.get_sources()
+    image_store_payload = state.get_image_store()
+    image_captions = state.get_image_captions()
+    image_text = state.get_image_page_text()
+
+    for image_id, image_base64 in sorted(image_store_payload.items()):
+        if not image_asset_belongs_to_document(image_id, doc_name):
+            continue
+        page = extract_page_number(image_id) or None
+        image_payload = {
+            "imageKey": image_id,
+            "caption": image_captions.get(image_id, image_id),
+            "page": page,
+            "imageBase64": image_base64,
+            "ocrText": image_text.get(image_id, ""),
+        }
+        image_assets.append(image_payload)
+        if page is not None:
+            pages.setdefault(page, {"page": page, "chunks": [], "images": []})["images"].append(image_payload)
+
     for idx, source in enumerate(sources):
         meta = metadata[idx] if idx < len(metadata) else {}
         doc_source = document_source_from_metadata(source, meta)
         if doc_source != doc_name:
             continue
         text = chunks[idx] if idx < len(chunks) else ""
-        rows.append({
+        row = {
             "index": idx,
             "section": meta.get("section", "Unknown"),
             "category": meta.get("category", "Uncategorized"),
@@ -2505,8 +2527,28 @@ def build_document_detail(doc_name):
             "sourceImageId": source_image_id_from_metadata(source, meta),
             "tokens": TokenUtils.tokenize_len(text),
             "preview": text[:500],
-        })
-    return {"document": doc_name, "displayName": display_source_name(doc_name), "chunks": rows}
+        }
+        rows.append(row)
+        page = row["page"]
+        if page is not None:
+            page_entry = pages.setdefault(page, {"page": page, "chunks": [], "images": []})
+            page_entry["chunks"].append(row)
+
+    pinout_chunks = list(chunks)
+    pinout_metadata = list(metadata)
+    for image in image_assets:
+        if image.get("ocrText"):
+            pinout_chunks.append(image["ocrText"])
+            pinout_metadata.append({"source": doc_name, "page": image.get("page")})
+    pinout = extract_pinout_map(pinout_chunks, pinout_metadata, doc_name)
+    return {
+        "document": doc_name,
+        "displayName": display_source_name(doc_name),
+        "chunks": rows,
+        "images": image_assets,
+        "pages": sorted(pages.values(), key=lambda item: int(item["page"])),
+        "pinout": pinout,
+    }
 
 
 @app.get("/api/document")
