@@ -1,7 +1,6 @@
 bcrypt
 faiss-cpu
 fastapi
-gradio
 lxml
 nltk
 numpy

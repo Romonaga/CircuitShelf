@@ -436,14 +436,20 @@ class ChunkingUtils:
 
     # Helper functions (modularize internal steps)
     def build_chunk_payload(self, selected_hits):
-        return [{
-            "text": self.state.chunks[i],
-            "index": i,
-            "distance": d,
-            "section": self.state.chunk_metadata[i].get("section", "Unknown"),
-            "source": self.state.sources[i],
-            "category": self.state.chunk_metadata[i].get("category", "Uncategorized")
-        } for i, d in selected_hits]
+        payload = []
+        for i, d in selected_hits:
+            meta = self.state.chunk_metadata[i]
+            payload.append({
+                "text": self.state.chunks[i],
+                "index": i,
+                "distance": d,
+                "section": meta.get("section", "Unknown"),
+                "source": meta.get("parent_source") or meta.get("source") or self.state.sources[i],
+                "source_image_id": meta.get("source_image_id"),
+                "page": meta.get("page"),
+                "category": meta.get("category", "Uncategorized")
+            })
+        return payload
 
     def compute_faiss_confidence(self, selected_hits, dist_thresh):
         avg_dist = np.mean([d for _, d in selected_hits])

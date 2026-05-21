@@ -1,10 +1,11 @@
 # CircuitShelf
 
-Local electronics-focused RAG for querying datasheets, electronics books, OCR output, and project notes through Ollama-compatible models.
+Local electronics-focused RAG for querying datasheets, electronics books, OCR output, and project notes through Ollama-backed models.
 
 ## What This Repo Contains
 
-- Python ingestion, OCR, chunking, indexing, reranking, and UI/API code.
+- Python ingestion, OCR, chunking, indexing, reranking, and application server code.
+- A React + TypeScript frontend under `frontend/`.
 - A sanitized example config at `config/config.example.yaml`.
 - FAISS-based local vector indexing.
 - Local manifest-based change detection for training files.
@@ -25,7 +26,7 @@ The following are intentionally ignored because this is planned as a public repo
 ## Setup
 
 1. Create and activate a virtual environment.
-2. Install dependencies:
+2. Install Python dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -37,7 +38,53 @@ pip install -r requirements.txt
 cp config/config.example.yaml config/config.yaml
 ```
 
-4. Edit `config/config.yaml` for local models, hosts, users, and training paths.
+4. Install frontend dependencies:
+
+```bash
+cd frontend
+npm install
+```
+
+5. Edit `config/config.yaml` for local models, hosts, users, and training paths.
+
+## Running
+
+For development, run the Python application server and the Vite frontend:
+
+```bash
+python circuitshelf.py
+```
+
+```bash
+cd frontend
+npm run dev
+```
+
+Vite proxies `/api/*` to the Python server at `http://127.0.0.1:1964`.
+
+For a single-server local deployment, build the frontend and start Python:
+
+```bash
+cd frontend
+npm run build
+cd ..
+python circuitshelf.py
+```
+
+The Python process serves the React build from `frontend/dist` and handles the UI's JSON endpoints.
+
+## Health Checks
+
+The application exposes container-friendly probes:
+
+- `GET /healthz` returns `200` when the process is alive.
+- `GET /readyz` returns `200` only when the text index, chunks, embeddings, and model configuration are loaded; otherwise it returns `503`.
+
+A future Docker health check can use:
+
+```bash
+curl -fsS http://127.0.0.1:1964/healthz
+```
 
 ## Indexing
 
@@ -52,7 +99,7 @@ SQL migrations live in `db/migrations/` and are tracked by the `schema_migration
 Apply migrations with:
 
 ```bash
-DATABASE_URL="postgresql://user:password@localhost:5432/romollm" python tools/db_migrate.py
+DATABASE_URL="postgresql://user:password@localhost:5432/circuitshelf" python tools/db_migrate.py
 ```
 
 Do not commit real database credentials.
@@ -61,4 +108,5 @@ Do not commit real database credentials.
 
 ```bash
 python -m unittest discover -s tests
+cd frontend && npm run build
 ```

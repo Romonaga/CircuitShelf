@@ -1,6 +1,6 @@
 # Copy this file to config/config.yaml and adjust local paths, hosts, users, and models.
 
-UI_AUTO: false
+REACT_DIST_DIR: "frontend/dist"
 API_USE_OLLAMA_PROMPT: true
 TRACE_LOG_LEVEL: INFO
 QUERY_RETRIES: 3
@@ -16,7 +16,7 @@ USE_ADAPTIVE_CHUNKING: false
 ENABLE_MATH_HEAVY_CHUNKING: false
 ENABLE_TOKEN_NORMALIZATION: false
 SAVE_EXTRACTED_IMAGES: true
-INDEX_IMAGE_OCR_AS_TEXT: false
+INDEX_IMAGE_OCR_AS_TEXT: true
 
 USE_CHAT_HISTORY: false
 USE_CHAT_ENDPOINT: true
@@ -24,11 +24,10 @@ USE_LLAMA: false
 MAX_CHAT_HISTORY_TURNS: 10
 MAX_CHAT_HISTORY_CHARS: 10000
 POST_TIMEOUT: 600
+RAG_CHAT_SYSTEM_PROMPT: "You are CircuitShelf's retrieval-grounded electronics assistant. Use retrieved context as the source of truth. If the context is missing details, say what is missing. For wiring questions, give practical pin-by-pin steps, power and ground details, and safety cautions."
 
-UI_HOST: 127.0.0.1
-UI_PORT: 1963
-API_HOST: 127.0.0.1
-API_PORT: 1964
+APP_HOST: 127.0.0.1
+APP_PORT: 1964
 SITE_NAME: "CircuitShelf"
 
 # Replace with your own bcrypt hashes. Keep config/config.yaml private.
@@ -46,7 +45,7 @@ OLLAMA_API_URL: "http://localhost:11434/api"
 LLAMA_API_URL: "http://localhost:2025/v1"
 
 TRAINING_DIR: "training"
-TRAINING_RECURSIVE: true
+TRAINING_RECURSIVE: false
 TRAINING_EXCLUDE_DIRS: []
 INGEST_MANIFEST_FILE: "data/ingest_manifest.json"
 INGEST_HASH_FILES: false
@@ -106,6 +105,7 @@ LRU_CACHE_SIZE: 200
 MIN_TOKENS_PER_CHUNK: 5
 MAX_TOKENS_PER_CHUNK: 700
 MIN_ACCEPTED_SCORE: 0.25
+RERANK_FALLBACK_TOP_K: 8
 EMBED_BATCH_SIZE: 16
 
 PROMPT_SECURITY:
@@ -142,10 +142,13 @@ RERANK_PROFILES:
       - circuit
       - schematic
       - datasheet
+      - diagram
       - application
       - typical
       - absolute maximum
       - electrical characteristics
+      - 555
+      - timer
   technical:
     weight_faiss: 0.6
     weight_rerank: 0.4
@@ -157,6 +160,9 @@ RERANK_PROFILES:
       - capacitor
       - transistor
       - oscillator
+      - diagram
+      - 555
+      - timer
       - equation
       - formula
       - timing

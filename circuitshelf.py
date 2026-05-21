@@ -12,14 +12,15 @@ import os
 import re
 import pickle
 import requests
-import gradio as gr
 import time
 import base64
+import bcrypt
 import zipfile
 import atexit
 import fitz  # PyMuPDF
 import pytesseract
 import nltk
+import numpy as np
 import pandas as pd
 import multiprocessing
 import threading
@@ -35,14 +36,14 @@ from PIL import Image
 from nltk.tokenize import sent_tokenize
 from requests.exceptions import RequestException
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 
 
 #internal
 from state_manager import StateManager
-from ui_gradio import ArtivUI
 from chunking_util import ChunkingUtils
 from tokenize_util import TokenUtils
 from system_init import SystemInit
@@ -102,7 +103,7 @@ SAVE_EXTRACTED_IMAGES = config.get("SAVE_EXTRACTED_IMAGES", False)
 INDEX_IMAGE_OCR_AS_TEXT = config.get("INDEX_IMAGE_OCR_AS_TEXT", False)
 OCR_INDEX_TEXT_MIN_CHARS = config.get("OCR_INDEX_TEXT_MIN_CHARS", 80)
 POST_TIMEOUT = config.get("POST_TIMEOUT", 60)
-UI_AUTO = config.get("UI_AUTO", False)
+REACT_DIST_DIR = config.get("REACT_DIST_DIR", "frontend/dist")
 QUERY_RETRIES = config.get("QUERY_RETRIES", 3)
 QUERY_RETRY_DELAY = config.get("QUERY_RETRY_DELAY", 5)
 
@@ -163,15 +164,20 @@ USE_CHAT_ENDPOINT = config.get("USE_CHAT_ENDPOINT", False)
 # === can not be used with USE_CHAT_ENDPOINT == true ===
 USE_CHAT_HISTORY = config.get("USE_CHAT_HISTORY", False)
 MAX_CHAT_HISTORY_TURNS = config.get("MAX_CHAT_HISTORY_TURNS", 5)
-MAX_CHAT_HISTORY_CHARS = config.get("MAX_CHAT_HISTORY_CHARS", 2000) 
+MAX_CHAT_HISTORY_CHARS = config.get("MAX_CHAT_HISTORY_CHARS", 2000)
 BANNED_PHRASES = config.get("PROMPT_SECURITY", {}).get("BANNED_PHRASES", [])
-
-
-# === Settings for API ===
-API_ENDPOINT = config.get("API_ENDPOINT", "chat")
-
-
-
+RAG_CHAT_SYSTEM_PROMPT = config.get(
+    "RAG_CHAT_SYSTEM_PROMPT",
+    (
+        "You are CircuitShelf's retrieval-grounded electronics assistant. "
+        "Use the provided retrieved context as the source of truth. If the context "
+        "does not contain enough information, say what is missing instead of making "
+        "up facts. Preserve useful prior chat context for follow-up questions. "
+        "When the user asks how to build or wire something, give practical pin-by-pin "
+        "steps, power and ground details, component values when supported by context, "
+        "and safety cautions."
+    ),
+)
 # === Settings for Reranking ===
 RERANK_PROFILES = config.get("RERANK_PROFILES")
 EMBED_BATCH_SIZE = config.get("EMBED_BATCH_SIZE", 16)
@@ -365,6 +371,19 @@ def ocr_image_bytes(image_bytes, image_id):
 def format_confidence(confidence):
     return f", confidence: {confidence:.1f}" if confidence is not None else ""
 
+
+def image_bytes_to_png_bytes(image_bytes, image_id="image"):
+    try:
+        with Image.open(BytesIO(image_bytes)) as image:
+            if image.mode not in ("RGB", "RGBA"):
+                image = image.convert("RGBA" if "transparency" in image.info else "RGB")
+            output = BytesIO()
+            image.save(output, format="PNG")
+            return output.getvalue()
+    except Exception as e:
+        trace_logger.warning(f"⚠️ Could not normalize {image_id} to PNG for web display: {e}")
+        return image_bytes
+
 @trace_timer("save_image_text")
 def save_image_text(image_data, image_text, base_name, output_dir, img_extension="png", txt_extension="txt") -> str:
    
@@ -431,24 +450,26 @@ def load_pdf_text(path):
                 ocr_text = ocr_result["text"]
                 score = ocr_result["score"]
                 confidence = ocr_result["confidence"]
+                web_image_bytes = image_bytes_to_png_bytes(image_bytes, img_name)
 
                 trace_logger.info(f"🧠 OCR accepted for {img_name}: {len(ocr_text)} chars | score: {score:.2f}{format_confidence(confidence)}")
 
-                state.add_image_store(img_name, base64.b64encode(image_bytes).decode("utf-8"))
+                state.add_image_store(img_name, base64.b64encode(web_image_bytes).decode("utf-8"))
                 state.add_image_caption(img_name, f"Image from {os.path.basename(path)}, page {page_num+1}")
                 
                 # Save the image using the save_image helper
                 if SAVE_EXTRACTED_IMAGES:
-                    _ = save_image_text(image_bytes, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
+                    _ = save_image_text(web_image_bytes, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
 
                 state.add_image_page_text(img_name, ocr_text)
                 if INDEX_IMAGE_OCR_AS_TEXT and len(ocr_text) >= OCR_INDEX_TEXT_MIN_CHARS:
                     extra_chunks.append(ocr_text)
-                    extra_sources.append(img_name)
+                    extra_sources.append(path)
                     extra_meta.append({
                         "page": page_num + 1,
-                        "source": img_name,
+                        "source": path,
                         "parent_source": path,
+                        "source_image_id": img_name,
                         "section": "Image OCR",
                         "ocr_score": score,
                         "ocr_confidence": confidence,
@@ -508,12 +529,13 @@ def extract_images_from_docx_textboxes(path):
                                 )
                                 continue
                             ocr_text = ocr_result["text"]
-                            state.add_image_store(img_name, base64.b64encode(img_data).decode("utf-8"))
+                            web_img_data = image_bytes_to_png_bytes(img_data, img_name)
+                            state.add_image_store(img_name, base64.b64encode(web_img_data).decode("utf-8"))
                             state.add_image_caption(img_name, f"Textbox image in {base_doc}")
                             state.add_image_page_text(img_name, ocr_text)
 
                             if SAVE_EXTRACTED_IMAGES:
-                                _ = save_image_text(img_data, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
+                                _ = save_image_text(web_img_data, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
 
                             score = ocr_result["score"]
                             confidence = ocr_result["confidence"]
@@ -646,7 +668,8 @@ def process_image_file(fpath, state, trace_logger, chunker, token_utils=None):
         ocr_text = ocr_result["text"]
         score = ocr_result["score"]
         confidence = ocr_result["confidence"]
-        state.add_image_store(img_name, base64.b64encode(img_data).decode("utf-8"))
+        web_img_data = image_bytes_to_png_bytes(img_data, img_name)
+        state.add_image_store(img_name, base64.b64encode(web_img_data).decode("utf-8"))
         state.add_image_caption(img_name, f"Image: {img_name}")
         state.add_image_page_text(img_name, ocr_text)
         state.add_image_id(img_name)
@@ -655,7 +678,7 @@ def process_image_file(fpath, state, trace_logger, chunker, token_utils=None):
 
         # Save OCR text
         if SAVE_EXTRACTED_IMAGES:
-            save_image_text(img_data, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
+            save_image_text(web_img_data, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
 
         # Chunk OCR text
         use_adaptive = config.get("USE_ADAPTIVE_CHUNKING", False)
@@ -954,6 +977,41 @@ def expand_query(q):
     return list(OrderedDict.fromkeys(synonyms))
 
 
+def document_source_from_metadata(source, metadata=None):
+    metadata = metadata or {}
+    return metadata.get("parent_source") or metadata.get("source") or source
+
+
+def display_source_name(source):
+    return os.path.basename(source) if source else "Unknown"
+
+
+def source_image_id_from_metadata(source, metadata=None):
+    metadata = metadata or {}
+    if metadata.get("source_image_id"):
+        return metadata["source_image_id"]
+
+    candidate = metadata.get("source") or source
+    if not candidate:
+        return None
+
+    candidate_base = os.path.basename(candidate)
+    parent_base = os.path.basename(metadata.get("parent_source") or "")
+    if parent_base and candidate_base.startswith(f"{parent_base}_page"):
+        return candidate
+    if "_page" in candidate_base and "_img" in candidate_base:
+        return candidate
+    return None
+
+
+def deduplicate_hits_by_index(hits):
+    best_by_index = {}
+    for idx, distance in hits:
+        if idx not in best_by_index or distance < best_by_index[idx]:
+            best_by_index[idx] = distance
+    return sorted(best_by_index.items(), key=lambda item: item[1])
+
+
 #def clean_response(text):
 #    return re.sub(r"<[^>]+>", "", text).strip()
 
@@ -1090,19 +1148,41 @@ def summarize_chat_with_llm(chat_history, summarizer_model, llm_api_url):
         trace_logger.warning(f"❌ Summarization LLM call failed: {e}")
         return "[Error: Summarization failed]"
 
+
+def build_ollama_chat_messages(prompt, chat_history=None):
+    messages = [{"role": "system", "content": RAG_CHAT_SYSTEM_PROMPT}]
+
+    if chat_history:
+        for turn in chat_history[-MAX_CHAT_HISTORY_TURNS:]:
+            if isinstance(turn, dict):
+                role = turn.get("role")
+                content = turn.get("content")
+                if role in {"user", "assistant"} and isinstance(content, str) and content.strip():
+                    messages.append({"role": role, "content": content})
+            elif isinstance(turn, (list, tuple)) and len(turn) == 2:
+                q, a = turn
+                if q:
+                    messages.append({"role": "user", "content": str(q)})
+                if a:
+                    messages.append({"role": "assistant", "content": str(a)})
+
+    messages.append({"role": "user", "content": prompt})
+    return messages
+
+
 @trace_timer("query_llm with retry")
 def query_llm_with_retry(prompt, model_name, chat_history=None, retries=QUERY_RETRIES,
                          delay=QUERY_RETRY_DELAY):
 
-    LLM_API_KEY = config.get("LLM_API_KEY","BobWasHere")
-  
+    LLM_API_KEY = config.get("LLM_API_KEY", "")
+
     OLLAMA_API_URL = config.get("OLLAMA_API_URL")
     LLAMA_API_URL = config.get("LLAMA_API_URL")
 
     use_llam = config.get("USE_LLAMA", False)
     if use_llam:
 
-        url = f"{LLAMA_API_URL}/chat/completions" if USE_CHAT_ENDPOINT else "{LLAMA_API_URL}/completions"
+        url = f"{LLAMA_API_URL}/chat/completions" if USE_CHAT_ENDPOINT else f"{LLAMA_API_URL}/completions"
     else:
         url = f"{OLLAMA_API_URL}/chat" if USE_CHAT_ENDPOINT else f"{OLLAMA_API_URL}/generate"
 
@@ -1124,17 +1204,7 @@ def query_llm_with_retry(prompt, model_name, chat_history=None, retries=QUERY_RE
     }
 
     if USE_CHAT_ENDPOINT:
-        messages = []
-        if chat_history:
-            for turn in chat_history[-MAX_CHAT_HISTORY_TURNS:]:
-                if isinstance(turn, dict):
-                    messages.append(turn)
-                elif isinstance(turn, (list, tuple)) and len(turn) == 2:
-                    q, a = turn
-                    messages.append({"role": "user", "content": q})
-                    messages.append({"role": "assistant", "content": a})
-        messages.append({"role": "user", "content": prompt})
-        payload["messages"] = messages
+        payload["messages"] = build_ollama_chat_messages(prompt, chat_history)
     else:
         payload["prompt"] = prompt
 
@@ -1192,7 +1262,6 @@ def get_rag_response(
     synonyms = expand_query(norm_q)
     cache_key = f"{model_name}::{strategy}::{norm_q}"
     
-    faiss_time = 0
     if not bypass_cache:
         cached = cache.get(cache_key)
         if cached:
@@ -1205,6 +1274,7 @@ def get_rag_response(
 
     # === FAISS Retrieval ===
     all_hits = []
+    faiss_start = time.time()
     for syn in synonyms:
         emb = embedder.encode([syn], convert_to_numpy=True).astype("float32")
         distances, indices = state.index.search(emb, top_k)
@@ -1212,26 +1282,28 @@ def get_rag_response(
             adjusted = dist * (1 + 0.1 * (1 - len(state.chunks[i]) / 500))
             if adjusted < dist_thresh:
                 all_hits.append((i, adjusted))
+    faiss_duration = time.time() - faiss_start
 
     if not all_hits:
         response = f"No relevant documents found for: {norm_q}"
         trace_logger.warning(f"⚠️ No results for query: {norm_q}")
         return norm_q, chat_history + [[norm_q, response]], "", cache.stats(), "0.00", get_average_query_time()
 
-    dedup_hits = list(OrderedDict.fromkeys(all_hits))
+    dedup_hits = deduplicate_hits_by_index(all_hits)
+    rerank_duration = None
 
     if strategy == "FAISS only":
-        faiss_time = time.time()
         selected = sorted(dedup_hits, key=lambda x: x[1])[:top_k]
         selected_chunks = reranker_engine.build_chunk_payload(selected)
         confidence = chunker.compute_faiss_confidence(selected, dist_thresh)
         profile = "N/A"
     else:
+        rerank_start = time.time()
         reranked_chunks, confidence, profile = reranker_engine.rerank_chunks(dedup_hits, norm_q)
+        rerank_duration = time.time() - rerank_start
         selected_chunks = reranked_chunks
         if not selected_chunks:
             trace_logger.warning("⚠️ Reranker returned no chunks; falling back to top FAISS hits.")
-            faiss_time = time.time()
             selected = sorted(dedup_hits, key=lambda x: x[1])[:top_k]
             selected_chunks = reranker_engine.build_chunk_payload(selected)
             confidence = chunker.compute_faiss_confidence(selected, dist_thresh)
@@ -1294,8 +1366,9 @@ def get_rag_response(
         "model": model_name,
         "confidence": confidence,
         "weighting_profile": profile,
-        "faiss_duration": f"{time.time() - faiss_time:.2f}s",
-        "rerank_duration": "N/A" if strategy == "FAISS only" else f"{time.time() - start_time:.2f}s",
+        "faiss_duration": f"{faiss_duration:.2f}s",
+        "rerank_duration": "N/A" if rerank_duration is None else f"{rerank_duration:.2f}s",
+        "total_duration": f"{time.time() - start_time:.2f}s",
         "top_chunks": selected_chunks,
     })
 
@@ -1403,59 +1476,246 @@ def _assemble_final_markdown(response, image_blocks):
 
 app = FastAPI()
 
-@app.post("/api/{API_ENDPOINT}")
-async def unified_query(req: Request):
+
+def sanitize_for_json(value):
+    if isinstance(value, dict):
+        return {str(key): sanitize_for_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [sanitize_for_json(item) for item in value]
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return sanitize_for_json(value.tolist())
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
+def normalize_sources_for_api(sources):
+    if isinstance(sources, str):
+        return [source for source in sources.splitlines() if source.strip()]
+    if isinstance(sources, (list, tuple, set)):
+        return list(sources)
+    return []
+
+
+def build_runtime_status():
+    index = state.get_index()
+    image_index = state.get_image_embeddings()
+    chunks = state.get_chunks()
+    sources = state.get_sources()
+    metadata = state.get_metadata()
+    embeddings = state.get_embeddings()
+    image_ids = state.get_image_id_list()
+    document_sources = {
+        document_source_from_metadata(source, metadata[idx] if idx < len(metadata) else {})
+        for idx, source in enumerate(sources)
+    }
+    return {
+        "chunks": len(chunks),
+        "sources": len(document_sources),
+        "embeddings": len(embeddings),
+        "faissTotal": index.ntotal if index else 0,
+        "imageIds": len(image_ids),
+        "imageFaissTotal": image_index.ntotal if image_index else 0,
+        "cacheStats": cache.stats(),
+    }
+
+
+def build_readiness_status():
+    runtime = build_runtime_status()
+    checks = {
+        "modelConfigured": bool(LLM_MODEL_NAME),
+        "embeddingModelConfigured": bool(EMBED_MODEL_NAME),
+        "textChunksLoaded": runtime["chunks"] > 0,
+        "textIndexLoaded": runtime["faissTotal"] > 0,
+        "embeddingsLoaded": runtime["embeddings"] > 0,
+    }
+    ready = all(checks.values())
+    return ready, {
+        "status": "ready" if ready else "not_ready",
+        "service": "CircuitShelf",
+        "checks": checks,
+        "runtime": runtime,
+    }
+
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok", "service": "CircuitShelf"}
+
+
+@app.get("/readyz")
+async def readyz():
+    ready, payload = build_readiness_status()
+    return JSONResponse(payload, status_code=200 if ready else 503)
+
+
+def verify_user(username, password):
+    users = config.get("USERS", {})
+    if username in users:
+        stored_hash = users[username].get("hashed_password", "")
+        return bool(stored_hash and bcrypt.checkpw(password.encode(), stored_hash.encode()))
+    return False
+
+
+@app.post("/api/login")
+async def login(req: Request):
+    data = await req.json()
+    username = data.get("username", "")
+    password = data.get("password", "")
+    if verify_user(username, password):
+        return {"ok": True, "username": username}
+    return {"ok": False, "error": "Invalid credentials"}
+
+@app.get("/api/app-config")
+async def app_config():
+    return {
+        "siteName": config.get("SITE_NAME", "CircuitShelf"),
+        "models": LLM_MODEL_OPTIONS,
+        "defaultModel": LLM_MODEL_NAME,
+        "authConfigured": bool(config.get("USERS", {})),
+        "retrievalStrategies": ["FAISS only", "FAISS + CrossEncoder"],
+        "defaults": {
+            "topK": 15,
+            "distanceThreshold": 4.0,
+            "maxTokens": 1800,
+            "showFullText": False,
+            "bypassCache": True,
+            "strategy": "FAISS + CrossEncoder",
+        },
+    }
+
+
+@app.post("/api/query")
+async def react_query(req: Request):
     try:
         data = await req.json()
-
-        trace_logger.info("📩 [API] OLLAMA-style incoming request detected")
-        
-        model = data.get("model", LLM_MODEL_OPTIONS[0])
-        messages = data.get("messages", [])
-        user_message = next((m.get("content") for m in reversed(messages) if m.get("role") == "user"), "")
-
-        if not user_message:
-            trace_logger.warning("⚠️ OLLAMA request missing user message")
-            return {"error": "No user message provided."}
+        question = data.get("question", "")
+        if not question.strip():
+            return {"error": "No question provided."}
 
         _, chat_history, sources, cache_stats, confidence, avg_time = get_rag_response(
-            question=user_message,
-            chat_history=[],
-            show_full_text=False,  # OLLAMA likely doesn't want full text and images
-            top_k=20,
-            dist_thresh=4.0,
-            max_tokens=1800,
-            bypass_cache=True,
-            strategy="FAISS + CrossEncoder",
-            model_name=model
+            question=question,
+            chat_history=data.get("chatHistory", []),
+            show_full_text=bool(data.get("showFullText", False)),
+            top_k=int(data.get("topK", 15)),
+            dist_thresh=float(data.get("distanceThreshold", 4.0)),
+            max_tokens=int(data.get("maxTokens", 1800)),
+            bypass_cache=bool(data.get("bypassCache", True)),
+            strategy=data.get("strategy", "FAISS + CrossEncoder"),
+            model_name=data.get("model", LLM_MODEL_NAME),
         )
 
         return {
-            "model": model,
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "message": {
-                "role": "assistant",
-                "content": chat_history[-1][1] if chat_history else "[No answer]"
-            },
-            "done": True
+            "question": question,
+            "answer": chat_history[-1][1] if chat_history else "",
+            "chatHistory": chat_history,
+            "sources": normalize_sources_for_api(sources),
+            "cacheStats": cache_stats,
+            "confidence": confidence,
+            "averageQueryTime": avg_time,
         }
-
-        
     except Exception as e:
-        trace_logger.error(f"❌ [API] Failed to process unified query: {e}")
+        trace_logger.error(f"❌ [API] React query failed: {e}")
         return {"error": str(e)}
 
 
+@app.get("/api/documents")
+async def documents():
+    grouped = {}
+    metadata = state.get_metadata()
+    for idx, source in enumerate(state.get_sources()):
+        meta = metadata[idx] if idx < len(metadata) else {}
+        doc_source = document_source_from_metadata(source, meta)
+        doc = grouped.setdefault(
+            doc_source,
+            {
+                "source": doc_source,
+                "displayName": display_source_name(doc_source),
+                "chunkCount": 0,
+                "imageIds": set(),
+            },
+        )
+        doc["chunkCount"] += 1
+        image_id = source_image_id_from_metadata(source, meta)
+        if image_id:
+            doc["imageIds"].add(image_id)
 
-# Optional: allow browser access from localhost
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # You can restrict this
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    docs = []
+    for doc in grouped.values():
+        docs.append({
+            "source": doc["source"],
+            "displayName": doc["displayName"],
+            "chunkCount": doc["chunkCount"],
+            "imageCount": len(doc["imageIds"]),
+        })
+    docs.sort(key=lambda item: item["displayName"].lower())
+    return {"documents": docs}
 
+
+def build_document_detail(doc_name):
+    rows = []
+    chunks = state.get_chunks()
+    metadata = state.get_metadata()
+    sources = state.get_sources()
+    for idx, source in enumerate(sources):
+        meta = metadata[idx] if idx < len(metadata) else {}
+        doc_source = document_source_from_metadata(source, meta)
+        if doc_source != doc_name:
+            continue
+        text = chunks[idx] if idx < len(chunks) else ""
+        rows.append({
+            "index": idx,
+            "section": meta.get("section", "Unknown"),
+            "category": meta.get("category", "Uncategorized"),
+            "page": meta.get("page"),
+            "sourceImageId": source_image_id_from_metadata(source, meta),
+            "tokens": TokenUtils.tokenize_len(text),
+            "preview": text[:500],
+        })
+    return {"document": doc_name, "displayName": display_source_name(doc_name), "chunks": rows}
+
+
+@app.get("/api/document")
+async def document_detail_query(source: str):
+    return build_document_detail(source)
+
+
+@app.get("/api/documents/{doc_name:path}")
+async def document_detail(doc_name: str):
+    return build_document_detail(doc_name)
+
+
+@app.get("/api/trace")
+async def trace():
+    return sanitize_for_json(state.get_last_trace())
+
+
+@app.get("/api/status")
+async def status():
+    return build_runtime_status()
+
+
+def mount_react_app():
+    dist_dir = os.path.abspath(REACT_DIST_DIR)
+    index_html = os.path.join(dist_dir, "index.html")
+    assets_dir = os.path.join(dist_dir, "assets")
+    if not os.path.exists(index_html):
+        trace_logger.warning(f"React dist not found at {dist_dir}; API will run without static UI.")
+        return
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="react-assets")
+
+    @app.get("/")
+    async def react_index():
+        return FileResponse(index_html)
+
+    @app.get("/{full_path:path}")
+    async def react_spa(full_path: str):
+        if full_path.startswith("api/") or full_path.startswith("assets/"):
+            return {"error": "Not found"}
+        return FileResponse(index_html)
 
 
 # Shutdown Registration
@@ -1469,42 +1729,26 @@ def flush_trace_log():
             
 
 
-# API Endpoint
-def start_fastapi_in_thread(host, port):
-   
+def start_app_server(host, port):
+
     uv_config = uvicorn.Config(app=app, host=host, port=port, log_level="info")
     server = uvicorn.Server(uv_config)
     server.run()
-   
+
 
 if __name__ == "__main__":
 
-    api_host = config.get("API_HOST", "localhost")
-    api_port = config.get("API_PORT", 8080)
-    ui_host = config.get("UI_HOST", "localhost")
-    ui_port = config.get("UI_PORT", 80)
-    
+    app_host = config.get("APP_HOST", config.get("API_HOST", "127.0.0.1"))
+    app_port = config.get("APP_PORT", config.get("API_PORT", 1964))
+
     get_or_build_index()
  
     atexit.register(save_on_exit)
     atexit.register(SystemInit.flush_logger, trace_logger)
 
-    
-    try:
-        trace_logger.info(f"🌐 Launching API server at http://{api_host}:{api_port}")
-        threading.Thread(target=start_fastapi_in_thread, args=(api_host, api_port), daemon=True).start()
-    
-    except Exception as e:
-        trace_logger.error(f"❌ Failed to launch API server: {e} address: {api_host} port: {api_port}")
-
-    ui_app = ArtivUI(state, config, trace_logger,chunker,  get_rag_response, load_documents_parallel)
-
-    if UI_AUTO:
-        trace_logger.info(f"🌐 Launching UI/UX server in browser")
-        ui_app.launch(inbrowser=True)
-    else:
-        trace_logger.info(f"🌐 Launching UI/UX server at http://{ui_host}:{ui_port}")
-        ui_app.launch(server_name=ui_host, server_port=ui_port)
+    mount_react_app()
+    trace_logger.info(f"🌐 CircuitShelf available at http://{app_host}:{app_port}")
+    start_app_server(app_host, app_port)
 
 
 
