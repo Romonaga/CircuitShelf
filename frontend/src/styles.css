@@ -957,6 +957,14 @@ nav {
   width: 100%;
 }
 
+.upload-selection {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
 .checkbox-label {
   display: flex;
   align-items: center;

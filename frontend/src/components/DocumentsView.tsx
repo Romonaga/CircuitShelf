@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getDocument, getDocuments, triggerIndexCheck, uploadDocument } from "../api";
+import { getDocument, getDocuments, triggerIndexCheck, uploadDocuments } from "../api";
 import type { DocumentChunk, DocumentSummary, StatusPayload } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
@@ -26,7 +26,8 @@ export function DocumentsView({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadInputKey, setUploadInputKey] = useState(0);
   const [overwrite, setOverwrite] = useState(false);
 
   const filteredDocuments = useMemo(() => {
@@ -57,16 +58,18 @@ export function DocumentsView({
   }, [loadDocuments]);
 
   async function submitUpload() {
-    if (!uploadFile) {
+    if (!uploadFiles.length) {
       return;
     }
     setUploading(true);
     setError("");
     setMessage("");
     try {
-      const response = await uploadDocument(uploadFile, overwrite);
-      setMessage(`${response.filename} uploaded. Incremental indexing ${response.indexing.started ? "started" : "is already running"}; it will appear in Review before retrieval.`);
-      setUploadFile(null);
+      const response = await uploadDocuments(uploadFiles, overwrite);
+      const fileWord = response.count === 1 ? "file" : "files";
+      setMessage(`${formatInteger(response.count)} ${fileWord} uploaded. Incremental indexing ${response.indexing.started ? "started" : "is already running"}; uploads will appear in Review before retrieval.`);
+      setUploadFiles([]);
+      setUploadInputKey((key) => key + 1);
       onStatusChange();
     } catch (err) {
       setError(errorMessage(err, "Upload failed"));
@@ -125,16 +128,23 @@ export function DocumentsView({
         {isAdmin ? (
           <div className="upload-panel">
             <input
+              key={uploadInputKey}
               type="file"
-              onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+              multiple
+              onChange={(event) => setUploadFiles(Array.from(event.target.files ?? []))}
               disabled={uploading}
             />
+            {uploadFiles.length ? (
+              <p className="upload-selection">
+                {formatInteger(uploadFiles.length)} selected: {uploadFiles.map((file) => file.name).join(", ")}
+              </p>
+            ) : null}
             <label className="checkbox-label">
               <input type="checkbox" checked={overwrite} onChange={(event) => setOverwrite(event.target.checked)} />
               Replace existing
             </label>
-            <button className="primary-button" onClick={submitUpload} disabled={!uploadFile || uploading}>
-              {uploading ? "Uploading..." : "Upload"}
+            <button className="primary-button" onClick={submitUpload} disabled={!uploadFiles.length || uploading}>
+              {uploading ? "Uploading..." : uploadFiles.length > 1 ? `Upload ${formatInteger(uploadFiles.length)} files` : "Upload"}
             </button>
           </div>
         ) : null}

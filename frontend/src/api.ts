@@ -7,7 +7,8 @@ import type {
   AppSetting,
   ReviewChunk,
   ReviewDocument,
-  StatusPayload
+  StatusPayload,
+  UploadDocumentsResponse
 } from "./types";
 
 const sessionStorageKey = "circuitshelf-session";
@@ -79,11 +80,11 @@ export function getDocuments(): Promise<{ documents: DocumentSummary[] }> {
   return requestJson<{ documents: DocumentSummary[] }>("/api/documents");
 }
 
-export function uploadDocument(file: File, overwrite: boolean): Promise<{ ok: boolean; filename: string; bytes: number; indexing: { started: boolean } }> {
+export function uploadDocuments(files: File[], overwrite: boolean): Promise<UploadDocumentsResponse> {
   const body = new FormData();
-  body.append("file", file);
-  return requestJson<{ ok: boolean; filename: string; bytes: number; indexing: { started: boolean } }>(
-    `/api/documents/upload?overwrite=${overwrite ? "true" : "false"}`,
+  files.forEach((file) => body.append("files", file));
+  return requestJson<UploadDocumentsResponse>(
+    `/api/documents/upload-batch?overwrite=${overwrite ? "true" : "false"}`,
     {
       method: "POST",
       body,

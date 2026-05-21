@@ -1126,7 +1126,10 @@ def get_or_build_index():
             if not changes.has_changes:
                 image_counts = image_store.counts()
                 if image_counts["referenced"] > image_counts["stored"]:
-                    raise ValueError("DB image catalog is incomplete; rebuilding document ingestion.")
+                    trace_logger.warning(
+                        "⚠️ DB image catalog is incomplete; serving the existing text/vector catalog. "
+                        "Run an index check to repair missing image rows."
+                    )
                 if image_counts["stored"] > image_counts["embeddings"]:
                     trace_logger.info("🖼️ Backfilling DB image embeddings from stored OCR text.")
                     persist_db_image_state(current_manifest)
@@ -1137,26 +1140,19 @@ def get_or_build_index():
                 return
 
             trace_logger.info(
-                f"🔁 Training changes detected in DB catalog. Added: {len(changes.added)}, "
+                f"🔁 Training changes detected at startup. Added: {len(changes.added)}, "
                 f"modified: {len(changes.modified)}, removed: {len(changes.removed)}, "
-                f"unchanged: {len(changes.unchanged)}"
+                f"unchanged: {len(changes.unchanged)}. Serving the DB catalog; "
+                "watcher or manual Check now will ingest changes."
             )
-            build_result = run_incremental_ingest(changes, current_manifest)
-
+            set_index_status(
+                lastReason="startup",
+                lastResult="training_changes_pending",
+                lastChanges=file_changes_payload(changes),
+            )
             duration = time.time() - start_time
-            SystemInit.log_build_info(
-                trace_logger,
-                state.get_chunks(),
-                state.get_embeddings(),
-                state.get_image_id_list(),
-                duration
-            )
-            trace_logger.info(
-                f"📊 DB incremental ingest complete. Chunks: {len(state.get_chunks())}, "
-                f"Embeddings: {len(state.get_embeddings())}, Images: {len(state.get_image_id_list())}, "
-                f"Dropped changed chunks: {build_result.dropped_chunks if build_result else 0}"
-            )
-            trace_logger.info(f"✅ Incremental DB ingest completed in {duration:.2f} sec")
+            SystemInit.log_build_info(trace_logger, chunks, embeddings, state.get_image_id_list(), duration)
+            trace_logger.info(f"✅ DB catalog loaded in {duration:.2f} sec with pending training changes")
             return
         except Exception as e:
             trace_logger.warning(f"🧹 DB catalog load failed, rebuilding from source documents: {e}")
@@ -1877,6 +1873,65 @@ def safe_upload_filename(filename: str) -> str:
     return name
 
 
+async def write_uploaded_documents(files: list[UploadFile], overwrite: bool) -> list[dict]:
+    if not files:
+        raise ValueError("Upload must include at least one file.")
+
+    os.makedirs(TRAINING_DIR, exist_ok=True)
+    training_root = os.path.abspath(TRAINING_DIR)
+    prepared = []
+    seen_names = set()
+    tmp_paths = []
+    uploaded = []
+
+    try:
+        for file in files:
+            filename = safe_upload_filename(file.filename or "")
+            if filename in seen_names:
+                raise ValueError(f"Duplicate file selected: {filename}")
+            seen_names.add(filename)
+
+            destination = os.path.abspath(os.path.join(TRAINING_DIR, filename))
+            if not destination.startswith(training_root + os.sep):
+                raise ValueError("Upload destination is outside the training directory.")
+            if os.path.exists(destination) and not overwrite:
+                raise FileExistsError(f"A document with that name already exists: {filename}")
+
+            tmp_path = os.path.join(TRAINING_DIR, f".{filename}.{uuid.uuid4().hex}.upload")
+            prepared.append((file, filename, destination, tmp_path))
+            tmp_paths.append(tmp_path)
+
+        for file, filename, destination, tmp_path in prepared:
+            bytes_written = 0
+            with open(tmp_path, "wb") as out_file:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    bytes_written += len(chunk)
+                    out_file.write(chunk)
+            if bytes_written <= 0:
+                raise ValueError(f"Uploaded file was empty: {filename}")
+            uploaded.append({
+                "filename": filename,
+                "destination": destination,
+                "tmpPath": tmp_path,
+                "bytes": bytes_written,
+            })
+
+        for item in uploaded:
+            os.replace(item["tmpPath"], item["destination"])
+        return [{"filename": item["filename"], "bytes": item["bytes"]} for item in uploaded]
+    except Exception:
+        for tmp_path in tmp_paths:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        raise
+    finally:
+        for file in files:
+            await file.close()
+
+
 def review_document_payload(row):
     return {
         "source": row["source_path"],
@@ -2132,45 +2187,54 @@ async def upload_document(
         return error
 
     try:
-        filename = safe_upload_filename(file.filename or "")
+        uploaded = await write_uploaded_documents([file], overwrite)
+    except FileExistsError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
-
-    os.makedirs(TRAINING_DIR, exist_ok=True)
-    destination = os.path.abspath(os.path.join(TRAINING_DIR, filename))
-    training_root = os.path.abspath(TRAINING_DIR)
-    if not destination.startswith(training_root + os.sep):
-        return JSONResponse({"error": "Upload destination is outside the training directory."}, status_code=400)
-    if os.path.exists(destination) and not overwrite:
-        return JSONResponse({"error": "A document with that name already exists."}, status_code=409)
-
-    tmp_path = os.path.join(TRAINING_DIR, f".{filename}.{uuid.uuid4().hex}.upload")
-    bytes_written = 0
-    try:
-        with open(tmp_path, "wb") as out_file:
-            while True:
-                chunk = await file.read(1024 * 1024)
-                if not chunk:
-                    break
-                bytes_written += len(chunk)
-                out_file.write(chunk)
-        if bytes_written <= 0:
-            os.remove(tmp_path)
-            return JSONResponse({"error": "Uploaded file was empty."}, status_code=400)
-        os.replace(tmp_path, destination)
     except Exception as exc:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        trace_logger.error(f"❌ Document upload failed for {filename}: {exc}")
+        trace_logger.error(f"❌ Document upload failed: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
-    finally:
-        await file.close()
 
+    filename = uploaded[0]["filename"]
     index_job = start_index_check(f"upload:{filename}")
     return {
         "ok": True,
         "filename": filename,
-        "bytes": bytes_written,
+        "bytes": uploaded[0]["bytes"],
+        "files": uploaded,
+        "count": 1,
+        "indexing": index_job,
+    }
+
+
+@app.post("/api/documents/upload-batch")
+async def upload_documents(
+    req: Request,
+    files: list[UploadFile] = File(...),
+    overwrite: bool = Query(False),
+):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+
+    try:
+        uploaded = await write_uploaded_documents(files, overwrite)
+    except FileExistsError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        trace_logger.error(f"❌ Batch document upload failed: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+    reason = f"upload-batch:{len(uploaded)}"
+    index_job = start_index_check(reason)
+    return {
+        "ok": True,
+        "files": uploaded,
+        "count": len(uploaded),
+        "bytes": sum(item["bytes"] for item in uploaded),
         "indexing": index_job,
     }
 

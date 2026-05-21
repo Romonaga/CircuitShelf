@@ -51,6 +51,23 @@ export interface DocumentSummary {
   imageCount: number;
 }
 
+export interface UploadedDocument {
+  filename: string;
+  bytes: number;
+}
+
+export interface UploadDocumentsResponse {
+  ok: boolean;
+  files: UploadedDocument[];
+  count: number;
+  bytes: number;
+  filename?: string;
+  indexing: {
+    started: boolean;
+    status?: unknown;
+  };
+}
+
 export interface SourceChunk {
   index?: number | null;
   page?: number | string | null;
