@@ -190,6 +190,15 @@ class ImageStore:
             page_text[key] = row["ocr_text"] or ""
         return image_store, captions, page_text
 
+    def list_review_images(self, source_path: str) -> list[dict]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("review_document_images.sql"), (source_path,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_document_images(self, source_path: str) -> None:
+        with self.database.connection() as conn:
+            conn.execute(load_query("review_document_images_delete.sql"), (source_path, source_path))
+
     def _metadata_by_image_key(self, metadata: list[dict]) -> dict[str, dict]:
         result = {}
         for meta in metadata:

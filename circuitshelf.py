@@ -1279,6 +1279,24 @@ def get_or_build_index():
             image_count = load_db_image_state()
 
             if not chunks or not embeddings:
+                if vector_store.counts()["documents"] == 0 and vector_store.pending_review_count() > 0:
+                    state.replace_catalog(
+                        chunks=[],
+                        sources=[],
+                        metadata=[],
+                        embeddings=[],
+                        image_store={},
+                        image_captions={},
+                        image_page_text={},
+                        image_id_list=[],
+                        index=None,
+                    )
+                    duration = time.time() - start_time
+                    trace_logger.info(
+                        "✅ DB has pending review documents but no approved catalog; "
+                        f"serving empty active state in {duration:.2f} sec"
+                    )
+                    return
                 raise ValueError("DB vector catalog is incomplete.")
 
             changes = manifest.diff(previous_manifest, current_manifest)
@@ -2124,6 +2142,17 @@ def review_chunk_payload(row):
     }
 
 
+def review_image_payload(row):
+    return {
+        "imageKey": row["image_key"],
+        "caption": row["caption"] or row["image_key"],
+        "page": row["page_number"],
+        "width": int(row["width_px"] or 0),
+        "height": int(row["height_px"] or 0),
+        "imageBase64": row["image_base64"],
+    }
+
+
 @app.post("/api/login")
 async def login(req: Request):
     data = await req.json()
@@ -2220,6 +2249,15 @@ async def review_document(req: Request, source: str, limit: int = 50):
     }
 
 
+@app.get("/api/review/document/images")
+async def review_document_images(req: Request, source: str):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+    rows = image_store.list_review_images(source)
+    return {"document": source, "images": [review_image_payload(row) for row in rows]}
+
+
 @app.post("/api/review/document/approve")
 async def review_document_approve(req: Request):
     user, error = require_admin_user(req)
@@ -2227,6 +2265,9 @@ async def review_document_approve(req: Request):
         return error
     data = await req.json()
     source = data.get("source", "")
+    include_images = bool(data.get("includeImages", True))
+    if not include_images:
+        image_store.delete_document_images(source)
     row = vector_store.set_document_status(source, "indexed", user.username)
     if not row:
         return JSONResponse({"error": "Document not found."}, status_code=404)

@@ -7,6 +7,7 @@ import type {
   AppSetting,
   ReviewChunk,
   ReviewDocument,
+  ReviewImage,
   StatusPayload,
   UploadDocumentsResponse
 } from "./types";
@@ -103,10 +104,16 @@ export function getReviewDocument(source: string): Promise<{ document: string; d
   );
 }
 
-export function approveReviewDocument(source: string): Promise<{ ok: boolean }> {
+export function getReviewDocumentImages(source: string): Promise<{ document: string; images: ReviewImage[] }> {
+  return requestJson<{ document: string; images: ReviewImage[] }>(
+    `/api/review/document/images?source=${encodeURIComponent(source)}`
+  );
+}
+
+export function approveReviewDocument(source: string, includeImages = true): Promise<{ ok: boolean }> {
   return requestJson<{ ok: boolean }>("/api/review/document/approve", {
     method: "POST",
-    body: JSON.stringify({ source })
+    body: JSON.stringify({ source, includeImages })
   });
 }
 

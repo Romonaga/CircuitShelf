@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { approveReviewDocument, getReviewDocument, getReviewDocuments, reindexReviewDocument, removeReviewDocument } from "../api";
-import type { ReviewChunk, ReviewDocument } from "../types";
+import {
+  approveReviewDocument,
+  getReviewDocument,
+  getReviewDocumentImages,
+  getReviewDocuments,
+  reindexReviewDocument,
+  removeReviewDocument
+} from "../api";
+import type { ReviewChunk, ReviewDocument, ReviewImage } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
 import { ErrorMessage } from "./ErrorMessage";
@@ -18,6 +25,7 @@ export function ReviewView({
   const [documents, setDocuments] = useState<ReviewDocument[]>([]);
   const [selected, setSelected] = useState("");
   const [chunks, setChunks] = useState<ReviewChunk[]>([]);
+  const [images, setImages] = useState<ReviewImage[]>([]);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
@@ -63,13 +71,15 @@ export function ReviewView({
   useEffect(() => {
     if (!selected) {
       setChunks([]);
+      setImages([]);
       return;
     }
     let active = true;
-    getReviewDocument(selected)
-      .then((response) => {
+    Promise.all([getReviewDocument(selected), getReviewDocumentImages(selected)])
+      .then(([documentResponse, imageResponse]) => {
         if (active) {
-          setChunks(response.chunks);
+          setChunks(documentResponse.chunks);
+          setImages(imageResponse.images);
         }
       })
       .catch((err) => setError(errorMessage(err, "Could not load review details")));
@@ -78,7 +88,7 @@ export function ReviewView({
     };
   }, [selected]);
 
-  async function approveSelected() {
+  async function approveSelected(includeImages: boolean) {
     if (!selectedDocument) {
       return;
     }
@@ -86,9 +96,15 @@ export function ReviewView({
     setError("");
     setMessage("");
     try {
-      await approveReviewDocument(selectedDocument.source);
-      setMessage(`${selectedDocument.displayName} approved for retrieval.`);
+      await approveReviewDocument(selectedDocument.source, includeImages);
+      setMessage(
+        includeImages
+          ? `${selectedDocument.displayName} approved for retrieval with images.`
+          : `${selectedDocument.displayName} approved for retrieval without images.`
+      );
       await loadDocuments();
+      setChunks([]);
+      setImages([]);
       onStatusChange();
     } catch (err) {
       setError(errorMessage(err, "Could not approve document"));
@@ -158,7 +174,7 @@ export function ReviewView({
           {!filteredDocuments.length ? <div className="empty-state compact">No documents need review.</div> : null}
         </div>
       </div>
-      <div className="chunk-panel">
+      <div className="chunk-panel review-panel">
         <SectionHeader
           title={selectedDocument?.displayName || "No document selected"}
           description={
@@ -169,9 +185,14 @@ export function ReviewView({
           actions={
             selectedDocument ? (
               <div className="review-actions">
-                <button className="primary-button" onClick={approveSelected} disabled={actionBusy}>
-                  Approve
+                <button className="primary-button" onClick={() => approveSelected(true)} disabled={actionBusy}>
+                  Approve with images
                 </button>
+                {selectedDocument.imageCount > 0 ? (
+                  <button className="ghost-button" onClick={() => approveSelected(false)} disabled={actionBusy}>
+                    Approve text only
+                  </button>
+                ) : null}
                 <button className="ghost-button" onClick={reindexSelected} disabled={actionBusy}>
                   Re-index
                 </button>
@@ -182,6 +203,23 @@ export function ReviewView({
             ) : null
           }
         />
+        <div className="review-summary-strip">
+          <span>{formatInteger(chunks.length)} parsed text chunks</span>
+          <span>{formatInteger(images.length)} stored images</span>
+        </div>
+        <div className="review-images">
+          {images.map((image) => (
+            <article key={image.imageKey} className="review-image-card">
+              <div className="chunk-meta">
+                <strong>{image.caption}</strong>
+                {image.page ? <span>Page {image.page}</span> : null}
+                <span>{formatInteger(image.width)} x {formatInteger(image.height)}</span>
+              </div>
+              <img src={`data:image/png;base64,${image.imageBase64}`} alt={image.caption} />
+            </article>
+          ))}
+          {selectedDocument && !images.length ? <div className="empty-state compact">No image assets were extracted for this document.</div> : null}
+        </div>
         <div className="chunk-table">
           {chunks.map((chunk) => (
             <article key={chunk.index} className={chunk.quality < 0.35 ? "chunk-row warning-row" : "chunk-row"}>

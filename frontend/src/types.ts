@@ -181,3 +181,12 @@ export interface ReviewChunk {
   qualityFlags: string[];
   preview: string;
 }
+
+export interface ReviewImage {
+  imageKey: string;
+  caption: string;
+  page?: number | string | null;
+  width: number;
+  height: number;
+  imageBase64: string;
+}
