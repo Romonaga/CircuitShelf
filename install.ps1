@@ -9,7 +9,12 @@ Set-Location $RootDir
 
 $ConfigFile = "config/config.yaml"
 $ExampleConfig = "config/config.example.yaml"
-$VenvPython = Join-Path $VenvDir "Scripts/python.exe"
+if ($IsWindows) {
+    $VenvPython = Join-Path $VenvDir "Scripts/python.exe"
+}
+else {
+    $VenvPython = Join-Path $VenvDir "bin/python"
+}
 
 function Write-Info {
     param([string]$Message)
