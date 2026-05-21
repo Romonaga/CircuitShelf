@@ -1,0 +1,29 @@
+BEGIN;
+
+DELETE FROM app_settings
+WHERE key IN (
+    'USE_DB_VECTOR_STORE',
+    'USE_DB_IMAGE_STORE',
+    'USE_DB_RESPONSE_CACHE',
+    'USE_DB_QUERY_LOG',
+    'INGEST_MANIFEST_FILE',
+    'INDEX_FILE',
+    'CHUNKS_FILE',
+    'SOURCES_FILE',
+    'METADATA_FILE',
+    'EMBEDDINGS_FILE',
+    'IMAGE_STORE_FILE',
+    'IMAGE_CAPTIONS_FILE',
+    'IMAGE_PAGE_TEXT_FILE',
+    'IMAGE_EMBEDDINGS_FILE',
+    'IMAGE_IDS_FILE',
+    'TRAINING_OUTPUT_FILE',
+    'CACHE_FILE',
+    'IMAGE_BLOCK_HTML_FILE'
+);
+
+INSERT INTO schema_migrations (version, name)
+VALUES (5, 'remove_legacy_file_settings')
+ON CONFLICT (version) DO NOTHING;
+
+COMMIT;

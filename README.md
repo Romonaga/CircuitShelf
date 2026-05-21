@@ -7,10 +7,10 @@ Local electronics-focused RAG for querying datasheets, electronics books, OCR ou
 - Python ingestion, OCR, chunking, indexing, reranking, and application server code.
 - A React + TypeScript frontend under `frontend/`.
 - A sanitized example config at `config/config.example.yaml`.
-- FAISS-based local vector indexing.
-- Local manifest-based change detection for training files.
+- Postgres/pgvector-backed text and image retrieval.
+- Database-backed change detection for training files.
 - Database migrations under `db/migrations/` and named SQL query files under `db/queries/`.
-- Audit tools under `tools/`.
+- Database setup and user-management tools under `tools/`.
 
 ## What This Repo Does Not Contain
 
@@ -18,9 +18,8 @@ The following are intentionally ignored because this is planned as a public repo
 
 - `training/` source books and datasheets
 - `models/` downloaded model snapshots
-- `data/` generated FAISS indexes and pickle state
-- `extracted_images/` OCR sidecars
-- `logs/`, `cache/`, and local runtime output
+- `data/` local logs or temporary operator output
+- `logs/` and local runtime output
 - `config/config.yaml` with local hosts, passwords, and database URLs
 
 ## Setup
@@ -190,13 +189,13 @@ curl -fsS http://127.0.0.1:1964/healthz
 
 ## Indexing
 
-The indexer scans `TRAINING_DIR`, extracts text/OCR, chunks content, builds FAISS indexes, and saves generated state under `data/`.
+The indexer scans `TRAINING_DIR`, extracts text/OCR, chunks content, embeds text and accepted images, and stores the catalog in Postgres.
 
-The ingest manifest (`INGEST_MANIFEST_FILE`) records training-file size and mtime. After a baseline index exists, future runs can detect added, modified, and removed files, re-ingest only changed source documents, then rebuild FAISS from the cleaned chunk state.
+The `documents` table records training-file size, mtime, and optional hashes. Future runs detect added, modified, and removed files from that catalog, re-ingest changed source documents, and refresh pgvector embeddings.
 
 ## Database Migrations
 
-Postgres is the canonical application store for users, settings, ingest metadata, source catalog data, and response-cache records. Generated FAISS/vector artifacts may still live on disk while indexing is being migrated.
+Postgres is the canonical application store for users, settings, ingest metadata, source catalog data, text embeddings, image embeddings, response-cache records, and query logs.
 
 Schema changes are versioned as numbered SQL migrations in `db/migrations/` and tracked by the `schema_migrations` table. Once a migration has been applied in a shared database, add a new numbered migration instead of editing the old one.
 

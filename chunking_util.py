@@ -848,7 +848,7 @@ class ChunkingUtils:
             })
         return payload
 
-    def compute_faiss_confidence(self, selected_hits, dist_thresh):
+    def compute_vector_confidence(self, selected_hits, dist_thresh):
         avg_dist = np.mean([d for _, d in selected_hits])
         return f"{max(0.2, 1 - avg_dist / dist_thresh):.2f}"
 

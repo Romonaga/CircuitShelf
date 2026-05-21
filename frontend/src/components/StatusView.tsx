@@ -19,9 +19,9 @@ export function StatusView({ status, refresh }: { status: StatusPayload | null; 
         <Stat label="Chunks" value={formatNumber(status?.chunks)} />
         <Stat label="Documents" value={formatNumber(status?.sources)} />
         <Stat label="Text embeddings" value={formatNumber(status?.embeddings)} />
-        <Stat label="Vector rows" value={formatNumber(status?.vectorEmbeddings ?? status?.faissTotal)} />
+        <Stat label="Vector rows" value={formatNumber(status?.vectorEmbeddings)} />
         <Stat label="Image IDs" value={formatNumber(status?.imageIds)} />
-        <Stat label="Image FAISS rows" value={formatNumber(status?.imageFaissTotal)} />
+        <Stat label="Image embeddings" value={formatNumber(status?.imageEmbeddings)} />
       </div>
       <h3>Cache</h3>
       <pre className="json-view">{formatObject(status?.cacheStats)}</pre>

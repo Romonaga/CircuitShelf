@@ -1,11 +1,10 @@
-"""Build FAISS indexes from prepared chunks and OCR text."""
+"""Build DB-ready embeddings from prepared chunks and OCR text."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
-import faiss
 import numpy as np
 
 
@@ -57,15 +56,14 @@ class IndexBuilder:
             self.logger.warning(f"⚠️ Dropped {dropped} chunks outside token range [{min_tokens}, {max_tokens}].")
 
         embeddings = self._encode(filtered_chunks)
-        faiss_index = self._build_faiss_index(embeddings)
 
         self.state.set_chunks(filtered_chunks)
         self.state.set_sources(filtered_sources)
         self.state.set_metadata(filtered_metadata)
         self.state.set_embeddings(embeddings)
-        self.state.set_index(faiss_index)
+        self.state.set_index(None)
 
-        image_count = self._build_image_index()
+        image_count = self.build_image_index()
         return IndexBuildResult(
             chunks=len(filtered_chunks),
             dropped_chunks=dropped,
@@ -73,24 +71,18 @@ class IndexBuilder:
             embedding_dim=int(embeddings.shape[1]),
         )
 
-    def _build_image_index(self) -> int:
+    def build_image_index(self) -> int:
         image_text = self.state.get_image_page_text()
         min_chars = self.config.get("IMAGE_INDEX_MIN_CHARS", self.config.get("OCR_MIN_LENGTH", 20))
         image_ids = sorted(key for key, value in image_text.items() if len(value.strip()) >= min_chars)
 
         if not image_ids:
             self.state.set_image_id_list([])
-            self.state.set_image_embeddings(None)
             self.logger.info("ℹ️ No image OCR text met indexing criteria.")
             return 0
 
-        ocr_texts = [image_text[key] for key in image_ids]
-        image_embeddings = self._encode(ocr_texts)
-        image_index = self._build_faiss_index(image_embeddings)
-
         self.state.set_image_id_list(image_ids)
-        self.state.set_image_embeddings(image_index)
-        self.logger.info(f"✅ OCR image index built: {len(image_ids)} entries")
+        self.logger.info(f"✅ OCR image catalog prepared: {len(image_ids)} entries")
         return len(image_ids)
 
     def _encode(self, texts: list[str]) -> np.ndarray:
@@ -100,11 +92,3 @@ class IndexBuilder:
         if embeddings.ndim != 2 or embeddings.shape[0] != len(texts):
             raise ValueError(f"Embedder returned invalid shape {embeddings.shape} for {len(texts)} texts.")
         return embeddings
-
-    @staticmethod
-    def _build_faiss_index(embeddings: np.ndarray):
-        if embeddings.ndim != 2 or embeddings.shape[0] == 0:
-            raise ValueError("Cannot build FAISS index from empty embeddings.")
-        index = faiss.IndexFlatL2(embeddings.shape[1])
-        index.add(embeddings)
-        return index

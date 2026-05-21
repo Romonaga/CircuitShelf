@@ -10,12 +10,10 @@ Created on Mon Apr 21 06:54:37 2025
 
 import os
 import re
-import pickle
 import requests
 import time
 import base64
 import zipfile
-import atexit
 import fitz  # PyMuPDF
 import pytesseract
 import nltk
@@ -46,20 +44,21 @@ from state_manager import StateManager
 from chunking_util import ChunkingUtils
 from tokenize_util import TokenUtils
 from system_init import SystemInit
-from persistence_module import PersistenceManager, PersistenceConfig
-from training_logger import TrainingLogger
 from reranker_module import Reranker
 from ocr_utils import run_ocr
 from index_builder import IndexBuilder
 from ingest_manifest import IngestManifest
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
 from db.connection import Database, database_url_from_config
+from db.image_store import ImageStore
+from db.query_log_store import QueryLogStore
+from db.response_cache_store import PostgresResponseCache
+from db.settings import AppSettingsStore
 from db.users import UserStore
 from db.vector_store import VectorStore
 from response_cache import (
     ResponseCacheEntry,
     ResponseCacheKey,
-    build_index_fingerprint,
     should_cache_response,
 )
 
@@ -67,8 +66,44 @@ from response_cache import (
 config, trace_logger = SystemInit.load_config_and_logger()
 state = StateManager(use_lock=True, cache_capacity=200, trace_logger=trace_logger)
 database = Database(database_url_from_config(config), trace_logger)
+if not database.configured:
+    raise RuntimeError("DATABASE_URL is required. CircuitShelf is database-backed and no longer supports file-backed runtime state.")
+
+settings_store = AppSettingsStore(database, trace_logger)
+seeded_settings = settings_store.seed_from_config(config.config)
+prompt_seeded = 0
+prompt_files = {
+    "PROMPT_TEMPLATE_GENERAL": os.path.join(config.get("PROMPT_DIR", "prompts"), "general_prompt.txt"),
+    "PROMPT_TEMPLATE_MATH": os.path.join(config.get("PROMPT_DIR", "prompts"), "math_prompt.txt"),
+}
+for prompt_key, prompt_path in prompt_files.items():
+    if os.path.exists(prompt_path):
+        with open(prompt_path, "r", encoding="utf-8") as prompt_file:
+            if settings_store.seed_text_setting(prompt_key, prompt_file.read(), f"Imported from {prompt_path}."):
+                prompt_seeded += 1
+applied_settings = settings_store.apply_to_config(config)
+if seeded_settings or applied_settings:
+    trace_logger.info(
+        f"⚙️ DB settings active. Seeded: {seeded_settings}, "
+        f"prompts: {prompt_seeded}, loaded: {applied_settings}"
+    )
 user_store = UserStore(database, trace_logger)
+query_log_store = QueryLogStore(database, trace_logger)
 vector_store = VectorStore(database, config.get("TRAINING_DIR", "training"), config.get("EMBED_MODEL_NAME"), trace_logger)
+image_store = ImageStore(database, config.get("TRAINING_DIR", "training"), trace_logger)
+db_response_cache = PostgresResponseCache(
+    database,
+    capacity=config.get("RESPONSE_CACHE_CAPACITY", 200),
+    logger=trace_logger,
+)
+if not vector_store.available():
+    raise RuntimeError("Postgres vector store is unavailable. Run database migrations before starting CircuitShelf.")
+if not image_store.available():
+    raise RuntimeError("Postgres image store is unavailable. Run database migrations before starting CircuitShelf.")
+if not db_response_cache.available():
+    raise RuntimeError("Postgres response cache is unavailable. Run database migrations before starting CircuitShelf.")
+if not query_log_store.available():
+    raise RuntimeError("Postgres query log is unavailable. Run database migrations before starting CircuitShelf.")
 trace_logger.info("🛠️ Configuration and logger successfully initialized.")
 
 # === Decorators ===
@@ -125,30 +160,13 @@ MD_EXT = config.get("MD_EXT")
 
 
 
-# === DataStore Files ===
-INDEX_FILE = config.get("INDEX_FILE")
-CHUNKS_FILE = config.get("CHUNKS_FILE")
-SOURCES_FILE = config.get("SOURCES_FILE")
-METADATA_FILE = config.get("METADATA_FILE")
-EMBEDDINGS_FILE = config.get("EMBEDDINGS_FILE")
-IMAGE_STORE_FILE = config.get("IMAGE_STORE_FILE")
-IMAGE_CAPTIONS_FILE = config.get("IMAGE_CAPTIONS_FILE")
-IMAGE_PAGE_TEXT_FILE = config.get("IMAGE_PAGE_TEXT_FILE")
-IMAGE_EMBEDDINGS_FILE = config.get("IMAGE_EMBEDDINGS_FILE")
-IMAGE_IDS_FILE = config.get("IMAGE_IDS_FILE")
-CACHE_FILE = config.get("CACHE_FILE", "cache/cache.pkl")
-IMAGE_BLOCK_HTML_FILE = config.get("IMAGE_BLOCK_HTML_FILE")
-USE_DB_VECTOR_STORE = config.get("USE_DB_VECTOR_STORE", True)
-
 # === Directory Info ===
 PROMPT_DIR = config.get("PROMPT_DIR", "prompts")
 EXTRACTED_IMAGES_DIR = config.get("EXTRACTED_IMAGES_DIR", "extracted_images")
 TRAINING_DIR = config.get("TRAINING_DIR", "training")
-INGEST_MANIFEST_FILE = config.get("INGEST_MANIFEST_FILE", "data/ingest_manifest.json")
 
 
 # === Stats and logging ===
-TRAINING_OUTPUT_FILE = config.get("TRAINING_OUTPUT_FILE","trainingdata/training_output.jsonl")
 BUILD_INDEX_LOG_FILE = config.get("BUILD_INDEX_LOG_FILE")
 
 
@@ -189,54 +207,11 @@ SPECIAL_SECTION_PRIORITY = config.get("SPECIAL_SECTION_PRIORITY")
 
 
 
-#This makes it simpler when we are saving and loading these files
-#else you would have a very long signature.
-persistence_config = PersistenceConfig(
-    cache_file=CACHE_FILE,
-    embeddings_file=EMBEDDINGS_FILE,
-    index_file=INDEX_FILE,
-    chunks_file=CHUNKS_FILE,
-    sources_file=SOURCES_FILE,
-    metadata_file=METADATA_FILE,
-    image_store_file=IMAGE_STORE_FILE,
-    image_captions_file=IMAGE_CAPTIONS_FILE,
-    image_page_text_file=IMAGE_PAGE_TEXT_FILE,
-    image_ids_file=IMAGE_IDS_FILE,
-    image_embeddings_file=IMAGE_EMBEDDINGS_FILE
-)
-persistence = PersistenceManager(state, trace_logger, persistence_config)
-
-
-
-#used to see if the systme has been saved, so we can reload from disk
-files_to_check = [
-        INDEX_FILE,
-        CHUNKS_FILE,
-        SOURCES_FILE,
-        METADATA_FILE,
-        EMBEDDINGS_FILE,
-        IMAGE_STORE_FILE,
-        IMAGE_CAPTIONS_FILE,
-        IMAGE_PAGE_TEXT_FILE,
-        IMAGE_EMBEDDINGS_FILE,
-        IMAGE_IDS_FILE]
-
-
-
 token_utils = TokenUtils(state=state, trace_logger=trace_logger)
 chunker = ChunkingUtils(state=state, token_utils=token_utils, config=config, trace_logger=trace_logger)
 
-training_logger = TrainingLogger(output_path=TRAINING_OUTPUT_FILE,trace_logger=trace_logger)
-
-
 #validat we have rerank profiles
 config.validate_rerank_profiles(RERANK_PROFILES)
-
-#now we will check to see that all file directories are there and if not create.
-persistence.ensure_directories()
-
-if not os.path.exists(IMAGE_BLOCK_HTML_FILE):
-    trace_logger.critical(f"Could not find {IMAGE_BLOCK_HTML_FILE}")
 
 
 # === Initialize Globals ===
@@ -259,7 +234,7 @@ def supported_training_extensions():
 
 def build_ingest_manifest():
     return IngestManifest(
-        manifest_path=INGEST_MANIFEST_FILE,
+        manifest_path="",
         training_dir=TRAINING_DIR,
         supported_extensions=supported_training_extensions(),
         recursive=config.get("TRAINING_RECURSIVE", True),
@@ -338,11 +313,42 @@ def prune_training_files_from_state(rel_paths):
     state.set_image_captions(image_captions)
     state.set_image_page_text(image_page_text)
     state.set_image_id_list([])
-    state.set_image_embeddings(None)
 
     trace_logger.info(
         f"🧹 Pruned {removed_chunks} chunks and removed OCR/image state for "
         f"{len(rel_paths)} changed/removed training files."
+    )
+
+
+def load_db_image_state():
+    image_data, captions, page_text = image_store.load_state_payload()
+    state.set_image_store(image_data)
+    state.set_image_captions(captions)
+    state.set_image_page_text(page_text)
+    builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
+    return builder.build_image_index()
+
+
+def persist_db_image_state(file_records):
+    image_text = state.get_image_page_text()
+    image_ids = state.get_image_id_list()
+    image_embeddings = {}
+    if image_ids:
+        encoded = embedder.encode(
+            [image_text[key] for key in image_ids],
+            batch_size=config.get("EMBED_BATCH_SIZE", 32),
+            convert_to_numpy=True,
+        ).astype("float32")
+        image_embeddings = {key: encoded[idx] for idx, key in enumerate(image_ids)}
+
+    image_store.replace_catalog(
+        file_records=file_records,
+        image_store=state.get_image_store(),
+        image_captions=state.get_image_captions(),
+        image_page_text=state.get_image_page_text(),
+        image_embeddings=image_embeddings,
+        embedding_model=EMBED_MODEL_NAME,
+        metadata=state.get_metadata(),
     )
 
 
@@ -838,190 +844,94 @@ def get_or_build_index():
     manifest = build_ingest_manifest()
     current_manifest = manifest.scan()
 
-    if USE_DB_VECTOR_STORE and vector_store.available():
-        previous_manifest = vector_store.load_document_records()
+    previous_manifest = vector_store.load_document_records()
 
-        if previous_manifest:
-            try:
-                chunks, sources, metadata, embeddings = vector_store.load_state_payload()
-                state.set_chunks(chunks)
-                state.set_sources(sources)
-                state.set_metadata(metadata)
-                state.set_embeddings(embeddings)
-                state.set_index(None)
-
-                if not chunks or not embeddings:
-                    raise ValueError("DB vector catalog is incomplete.")
-
-                changes = manifest.diff(previous_manifest, current_manifest)
-                if not changes.has_changes:
-                    duration = time.time() - start_time
-                    SystemInit.log_build_info(trace_logger, chunks, embeddings, state.get_image_id_list(), duration)
-                    trace_logger.info(f"✅ DB vector catalog loaded in {duration:.2f} sec")
-                    return
-
-                trace_logger.info(
-                    f"🔁 Training changes detected in DB catalog. Added: {len(changes.added)}, "
-                    f"modified: {len(changes.modified)}, removed: {len(changes.removed)}, "
-                    f"unchanged: {len(changes.unchanged)}"
-                )
-                prune_training_files_from_state(changes.changed_or_removed)
-                if changes.changed_or_added:
-                    load_documents_parallel(
-                        folder=TRAINING_DIR,
-                        files_selected=changes.changed_or_added,
-                        clear_existing=False,
-                    )
-
-                builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
-                build_result = builder.build()
-                vector_store.replace_catalog(
-                    file_records=current_manifest,
-                    chunks=state.get_chunks(),
-                    sources=state.get_sources(),
-                    metadata=state.get_metadata(),
-                    embeddings=np.asarray(state.get_embeddings(), dtype="float32"),
-                )
-
-                duration = time.time() - start_time
-                SystemInit.log_build_info(
-                    trace_logger,
-                    state.get_chunks(),
-                    state.get_embeddings(),
-                    state.get_image_id_list(),
-                    duration
-                )
-                trace_logger.info(
-                    f"📊 DB vector rebuild complete. Chunks: {build_result.chunks}, "
-                    f"Embeddings: {len(state.get_embeddings())}, Images: {build_result.images}, "
-                    f"Dropped chunks: {build_result.dropped_chunks}"
-                )
-                trace_logger.info(f"✅ Incremental DB vector rebuild completed in {duration:.2f} sec")
-                return
-            except Exception as e:
-                trace_logger.warning(f"🧹 DB vector load failed, rebuilding from scratch: {e}")
-
-        load_documents_parallel(folder=TRAINING_DIR, files_selected=None)
-
-        builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
+    if previous_manifest:
         try:
+            chunks, sources, metadata, embeddings = vector_store.load_state_payload()
+            state.set_chunks(chunks)
+            state.set_sources(sources)
+            state.set_metadata(metadata)
+            state.set_embeddings(embeddings)
+            state.set_index(None)
+            image_count = load_db_image_state()
+
+            if not chunks or not embeddings:
+                raise ValueError("DB vector catalog is incomplete.")
+
+            changes = manifest.diff(previous_manifest, current_manifest)
+            if not changes.has_changes:
+                image_counts = image_store.counts()
+                if image_counts["referenced"] > image_counts["stored"]:
+                    raise ValueError("DB image catalog is incomplete; rebuilding document ingestion.")
+                if image_counts["stored"] > image_counts["embeddings"]:
+                    trace_logger.info("🖼️ Backfilling DB image embeddings from stored OCR text.")
+                    persist_db_image_state(current_manifest)
+                    image_count = load_db_image_state()
+                duration = time.time() - start_time
+                SystemInit.log_build_info(trace_logger, chunks, embeddings, state.get_image_id_list(), duration)
+                trace_logger.info(f"✅ DB catalog loaded in {duration:.2f} sec with {image_count} image entries")
+                return
+
+            trace_logger.info(
+                f"🔁 Training changes detected in DB catalog. Added: {len(changes.added)}, "
+                f"modified: {len(changes.modified)}, removed: {len(changes.removed)}, "
+                f"unchanged: {len(changes.unchanged)}"
+            )
+            prune_training_files_from_state(changes.changed_or_removed)
+            if changes.changed_or_added:
+                load_documents_parallel(
+                    folder=TRAINING_DIR,
+                    files_selected=changes.changed_or_added,
+                    clear_existing=False,
+                )
+
+            builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
             build_result = builder.build()
-        except ValueError as e:
-            trace_logger.error(f"❌ DB vector index build failed: {e}")
-            return
+            vector_store.replace_catalog(
+                file_records=current_manifest,
+                chunks=state.get_chunks(),
+                sources=state.get_sources(),
+                metadata=state.get_metadata(),
+                embeddings=np.asarray(state.get_embeddings(), dtype="float32"),
+            )
+            persist_db_image_state(current_manifest)
 
-        vector_store.replace_catalog(
-            file_records=current_manifest,
-            chunks=state.get_chunks(),
-            sources=state.get_sources(),
-            metadata=state.get_metadata(),
-            embeddings=np.asarray(state.get_embeddings(), dtype="float32"),
-        )
-
-        duration = time.time() - start_time
-        SystemInit.log_build_info(
-            trace_logger,
-            state.get_chunks(),
-            state.get_embeddings(),
-            state.get_image_id_list(),
-            duration
-        )
-        trace_logger.info(
-            f"📊 DB vector catalog built. Chunks: {build_result.chunks}, "
-            f"Embeddings: {len(state.get_embeddings())}, Images: {build_result.images}, "
-            f"Dropped chunks: {build_result.dropped_chunks}"
-        )
-        trace_logger.info(f"✅ DB vector rebuild completed in {duration:.2f} sec")
-        return
-
-    files_exist = all(os.path.exists(f) for f in files_to_check)
-
-    if files_exist:
-        try:
-            persistence.load_all()
-            chunks = state.get_chunks()
-            embeddings = state.get_embeddings()
-            index = state.get_index()
-
-            if not chunks or not embeddings or index is None:
-                raise ValueError("Incomplete state loaded — triggering rebuild.")
-
-            if index.ntotal != len(embeddings):
-                trace_logger.warning(f"⚠️ FAISS index count ({index.ntotal}) != embedding count ({len(embeddings)})")
-                raise ValueError("Corrupted index")
-
-            previous_manifest = manifest.load()
-            if previous_manifest:
-                changes = manifest.diff(previous_manifest, current_manifest)
-                if not changes.has_changes:
-                    duration = time.time() - start_time
-                    SystemInit.log_build_info(trace_logger,chunks,embeddings,state.get_image_id_list(),
-                        duration)
-
-                    trace_logger.info(f"✅ Index loaded in {duration:.2f} sec")
-                    return
-
-                trace_logger.info(
-                    f"🔁 Training changes detected. Added: {len(changes.added)}, "
-                    f"modified: {len(changes.modified)}, removed: {len(changes.removed)}, "
-                    f"unchanged: {len(changes.unchanged)}"
-                )
-                prune_training_files_from_state(changes.changed_or_removed)
-                if changes.changed_or_added:
-                    load_documents_parallel(
-                        folder=TRAINING_DIR,
-                        files_selected=changes.changed_or_added,
-                        clear_existing=False,
-                    )
-
-                builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
-                build_result = builder.build()
-                persistence.save_all()
-                manifest.save(current_manifest)
-
-                duration = time.time() - start_time
-                SystemInit.log_build_info(
-                    trace_logger,
-                    state.get_chunks(),
-                    state.get_embeddings(),
-                    state.get_image_id_list(),
-                    duration
-                )
-                trace_logger.info(
-                    f"📊 Incremental rebuild complete. Chunks: {build_result.chunks}, "
-                    f"Embeddings: {len(state.get_embeddings())}, Images: {build_result.images}, "
-                    f"Dropped chunks: {build_result.dropped_chunks}"
-                )
-                trace_logger.info(f"✅ Incremental rebuild completed in {duration:.2f} sec")
-                return
-
-            manifest.save(current_manifest)
-            trace_logger.info("🧾 No ingest manifest existed. Saved current training manifest as baseline.")
             duration = time.time() - start_time
-            SystemInit.log_build_info(trace_logger,chunks,embeddings,state.get_image_id_list(),
-                duration)
-            
-            trace_logger.info(f"✅ Index loaded in {duration:.2f} sec")
+            SystemInit.log_build_info(
+                trace_logger,
+                state.get_chunks(),
+                state.get_embeddings(),
+                state.get_image_id_list(),
+                duration
+            )
+            trace_logger.info(
+                f"📊 DB catalog rebuild complete. Chunks: {build_result.chunks}, "
+                f"Embeddings: {len(state.get_embeddings())}, Images: {build_result.images}, "
+                f"Dropped chunks: {build_result.dropped_chunks}"
+            )
+            trace_logger.info(f"✅ Incremental DB rebuild completed in {duration:.2f} sec")
             return
-
         except Exception as e:
-            trace_logger.warning(f"🧹 Load failed, rebuilding from scratch: {e}")
+            trace_logger.warning(f"🧹 DB catalog load failed, rebuilding from source documents: {e}")
 
-    # === Data Load or build ===
     load_documents_parallel(folder=TRAINING_DIR, files_selected=None)
-
-    
 
     builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
     try:
         build_result = builder.build()
     except ValueError as e:
-        trace_logger.error(f"❌ Index build failed: {e}")
+        trace_logger.error(f"❌ DB catalog build failed: {e}")
         return
 
-    persistence.save_all()
-    manifest.save(current_manifest)
-
+    vector_store.replace_catalog(
+        file_records=current_manifest,
+        chunks=state.get_chunks(),
+        sources=state.get_sources(),
+        metadata=state.get_metadata(),
+        embeddings=np.asarray(state.get_embeddings(), dtype="float32"),
+    )
+    persist_db_image_state(current_manifest)
 
     duration = time.time() - start_time
     SystemInit.log_build_info(
@@ -1031,43 +941,27 @@ def get_or_build_index():
         state.get_image_id_list(),
         duration
     )
-
     trace_logger.info(
-        f"📊 Chunk count: {build_result.chunks}, "
-        f"Embeddings: {len(state.get_embeddings())}, "
-        f"Images: {build_result.images}, "
+        f"📊 DB catalog built. Chunks: {build_result.chunks}, "
+        f"Embeddings: {len(state.get_embeddings())}, Images: {build_result.images}, "
         f"Dropped chunks: {build_result.dropped_chunks}"
     )
-    trace_logger.info(f"✅ Rebuild completed in {duration:.2f} sec")
+    trace_logger.info(f"✅ DB rebuild completed in {duration:.2f} sec")
 
 
 @trace_timer("search_top_images")
 def search_top_images(question, top_n=4):
-
-    image_ids = state.get_image_id_list()
-    if not state.image_embeddings or not image_ids:
-        return []
-
     action_keywords = ["click", "enter", "select", "choose", "screen", "dashboard", "button", "setting"]
-
-    # Embed the user's question
     query_emb = embedder.encode([question], convert_to_numpy=True).astype("float32")
-
-    # Search FAISS image index
-    distances, indices = state.image_embeddings.search(query_emb, top_n * 2)
     results = []
 
-    for idx, dist in zip(indices[0], distances[0]):
-        
-        if idx < len(image_ids):
-            img_id = image_ids[idx]
-            score_boost = 0.0
-            ocr_text = state.image_page_text.get(img_id, "").lower()
-
-            if any(kw in ocr_text for kw in action_keywords):
-                score_boost += 0.05
-
-            results.append((img_id, dist - score_boost))
+    for row in image_store.search_images(query_emb[0], top_k=top_n * 2):
+        img_id = row["image_key"]
+        score_boost = 0.0
+        ocr_text = str(row.get("ocr_text") or "").lower()
+        if any(kw in ocr_text for kw in action_keywords):
+            score_boost += 0.05
+        results.append((img_id, float(row["distance"]) - score_boost))
 
     return sorted(results, key=lambda x: x[1])[:top_n]
 
@@ -1172,7 +1066,7 @@ def vector_results_to_hits(results):
 
 
 #Prompt file processing        
-@trace_timer("load_prompt_template")    
+@trace_timer("load_prompt_template")
 def load_prompt_template(path: str, context: str, question: str) -> str:
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -1183,6 +1077,14 @@ def load_prompt_template(path: str, context: str, question: str) -> str:
         return f"[Prompt load error: {e}]"
 
 def build_prompt(context: str, question: str, is_math: bool = False) -> str:
+    db_template_key = "PROMPT_TEMPLATE_MATH" if is_math else "PROMPT_TEMPLATE_GENERAL"
+    db_template = config.get(db_template_key)
+    if db_template:
+        try:
+            return db_template.format(context=context, question=question)
+        except Exception as e:
+            trace_logger.error(f"❌ Failed to format DB prompt template {db_template_key}: {e}")
+
     prompt_file = os.path.join(PROMPT_DIR, "math_prompt.txt" if is_math else "general_prompt.txt")
 
     return load_prompt_template(prompt_file, context, question)
@@ -1202,40 +1104,6 @@ def trim_chunks_to_token_budget(selected_chunks, max_tokens):
         token_total += chunk_tokens
 
     return trimmed
-
-def fuse_scores_with_ranks(faiss_hits, rerank_scores, question):
-    q_lower = question.lower()
-    selected_profile = "default"
-
-    # Match profile based on keywords
-    for profile_name, profile_data in RERANK_PROFILES.items():
-        keywords = [str(kw).lower() for kw in profile_data.get("keywords", [])]
-        if any(kw in q_lower for kw in keywords):
-            selected_profile = profile_name
-            break
-
-    if selected_profile == "default":
-        trace_logger.debug(f"No RERANK_PROFILE matched for question: '{question}'. Using default.")
-    else:
-        trace_logger.debug(f"Matched RERANK_PROFILE: {selected_profile}")
-
-    profile_weights = RERANK_PROFILES.get(selected_profile, RERANK_PROFILES["default"])
-    w_faiss = profile_weights.get("weight_faiss", 0.4)
-    w_rerank = profile_weights.get("weight_rerank", 0.6)
-
-    # Normalize FAISS distances to [0, 1]
-    faiss_scores = [1.0 - min(d / 15.0, 1.0) for _, d in faiss_hits]
-    rerank_scores = rerank_scores[:len(faiss_scores)]  # ensure alignment
-
-    fused_results = []
-    for (i, dist), faiss_score, rerank_score in zip(faiss_hits, faiss_scores, rerank_scores):
-        fused = w_faiss * faiss_score + w_rerank * rerank_score
-        fused_results.append((i, dist, rerank_score, fused))
-
-    fused_results.sort(key=lambda x: x[3], reverse=True)  # sort by fused score
-    return fused_results, selected_profile
-
-
 
 def get_average_query_time():
     if not query_timings:
@@ -1325,7 +1193,7 @@ def get_rag_response(
     dist_thresh=4.0,
     max_tokens=1800,
     bypass_cache=True,
-    strategy="FAISS + CrossEncoder",
+    strategy="Vector + CrossEncoder",
     model_name=LLM_MODEL_OPTIONS[0]
 ):
     start_time = time.time()
@@ -1352,6 +1220,16 @@ def get_rag_response(
             query_timings.append(time.time() - start_time)
             chat_history = [list(turn) for turn in cached.chat_history]
             confidence = cached.confidence
+            query_log_store.log_query(
+                model_name=model_name,
+                retrieval_strategy=strategy,
+                question=norm_q,
+                retrieval_query=retrieval_q,
+                elapsed_ms=int((time.time() - start_time) * 1000),
+                cache_hit=True,
+                confidence_score=confidence,
+                selected_chunks=[],
+            )
             return norm_q, cached.answer, chat_history, cached.sources, response_cache.stats(), confidence, get_average_query_time()
     else:
         if bypass_cache:
@@ -1364,24 +1242,16 @@ def get_rag_response(
     if not cache_enabled:
         response_cache.misses += 1
 
-    # === Vector Retrieval ===
     all_hits = []
-    faiss_start = time.time()
+    vector_start = time.time()
     for syn in synonyms:
         emb = embedder.encode([syn], convert_to_numpy=True).astype("float32")
-        if USE_DB_VECTOR_STORE and vector_store.available():
-            vector_results = vector_store.search_chunks(emb[0], top_k=top_k)
-            for i, dist in vector_results_to_hits(vector_results):
-                adjusted = dist * (1 + 0.1 * (1 - len(state.chunks[i]) / 500))
-                if adjusted < dist_thresh:
-                    all_hits.append((i, adjusted))
-        elif state.index is not None:
-            distances, indices = state.index.search(emb, top_k)
-            for i, dist in zip(indices[0], distances[0]):
-                adjusted = dist * (1 + 0.1 * (1 - len(state.chunks[i]) / 500))
-                if adjusted < dist_thresh:
-                    all_hits.append((i, adjusted))
-    faiss_duration = time.time() - faiss_start
+        vector_results = vector_store.search_chunks(emb[0], top_k=top_k)
+        for i, dist in vector_results_to_hits(vector_results):
+            adjusted = dist * (1 + 0.1 * (1 - len(state.chunks[i]) / 500))
+            if adjusted < dist_thresh:
+                all_hits.append((i, adjusted))
+    vector_duration = time.time() - vector_start
 
     if not all_hits:
         response = f"No relevant documents found for: {norm_q}"
@@ -1398,10 +1268,10 @@ def get_rag_response(
     dedup_hits = deduplicate_hits_by_index(all_hits)
     rerank_duration = None
 
-    if strategy in {"FAISS only", "Vector only"}:
+    if strategy == "Vector only":
         selected = sorted(dedup_hits, key=lambda x: x[1])[:top_k]
         selected_chunks = reranker_engine.build_chunk_payload(selected)
-        confidence = chunker.compute_faiss_confidence(selected, dist_thresh)
+        confidence = chunker.compute_vector_confidence(selected, dist_thresh)
         profile = "N/A"
     else:
         rerank_start = time.time()
@@ -1409,11 +1279,11 @@ def get_rag_response(
         rerank_duration = time.time() - rerank_start
         selected_chunks = reranked_chunks
         if not selected_chunks:
-            trace_logger.warning("⚠️ Reranker returned no chunks; falling back to top FAISS hits.")
+            trace_logger.warning("⚠️ Reranker returned no chunks; falling back to top vector hits.")
             selected = sorted(dedup_hits, key=lambda x: x[1])[:top_k]
             selected_chunks = reranker_engine.build_chunk_payload(selected)
-            confidence = chunker.compute_faiss_confidence(selected, dist_thresh)
-            profile = f"{profile} (FAISS fallback)"
+            confidence = chunker.compute_vector_confidence(selected, dist_thresh)
+            profile = f"{profile} (vector fallback)"
 
     selected_chunks = trim_chunks_to_token_budget(selected_chunks, max_tokens)
 
@@ -1437,7 +1307,6 @@ def get_rag_response(
     )
 
     source_payload = build_source_payload(selected_chunks)
-    source_text = "\n".join([c["source"] for c in selected_chunks])
     if cache_enabled:
         response_cache.put_response(
             cache_key,
@@ -1462,24 +1331,23 @@ def get_rag_response(
         "model": model_name,
         "confidence": confidence,
         "weighting_profile": profile,
-        "faiss_duration": f"{faiss_duration:.2f}s",
+        "vector_duration": f"{vector_duration:.2f}s",
         "rerank_duration": "N/A" if rerank_duration is None else f"{rerank_duration:.2f}s",
         "total_duration": f"{time.time() - start_time:.2f}s",
         "top_chunks": selected_chunks,
     })
 
-    try:
-        training_logger.log(
-            question=norm_q,
-            context=context,
-            llm_response=response,
-            model=model_name,
-            sources=source_text,
-            confidence=confidence,
-            rerank_strategy=strategy
-        )
-    except Exception as e:
-        trace_logger.warning(f"⚠️ Failed to log training sample: {e}")
+    elapsed_ms = int((time.time() - start_time) * 1000)
+    query_log_store.log_query(
+        model_name=model_name,
+        retrieval_strategy=strategy,
+        question=norm_q,
+        retrieval_query=retrieval_q,
+        elapsed_ms=elapsed_ms,
+        cache_hit=False,
+        confidence_score=confidence,
+        selected_chunks=selected_chunks,
+    )
 
     return norm_q, final_answer, chat_history, source_payload, response_cache.stats(), confidence, get_average_query_time()
 
@@ -1641,18 +1509,11 @@ def build_source_payload(selected_chunks):
 
 
 def get_response_cache():
-    return state.get_cache()
+    return db_response_cache
 
 
 def current_index_fingerprint():
-    index = state.get_index()
-    vector_counts = vector_store.counts() if USE_DB_VECTOR_STORE and vector_store.available() else {}
-    return build_index_fingerprint(
-        manifest_path=INGEST_MANIFEST_FILE,
-        chunks_count=len(state.get_chunks()),
-        embeddings_count=vector_counts.get("embeddings", len(state.get_embeddings())),
-        faiss_total=vector_counts.get("chunks", index.ntotal if index else 0),
-    )
+    return vector_store.catalog_fingerprint()
 
 
 def build_response_cache_key(
@@ -1680,27 +1541,17 @@ def build_response_cache_key(
 
 
 def build_runtime_status():
-    index = state.get_index()
-    image_index = state.get_image_embeddings()
-    vector_counts = vector_store.counts() if USE_DB_VECTOR_STORE and vector_store.available() else {}
-    chunks = state.get_chunks()
-    sources = state.get_sources()
-    metadata = state.get_metadata()
-    embeddings = state.get_embeddings()
+    vector_counts = vector_store.counts()
+    image_counts = image_store.counts()
     image_ids = state.get_image_id_list()
-    document_sources = {
-        document_source_from_metadata(source, metadata[idx] if idx < len(metadata) else {})
-        for idx, source in enumerate(sources)
-    }
     return {
-        "chunks": vector_counts.get("chunks", len(chunks)),
-        "sources": vector_counts.get("documents", len(document_sources)),
-        "embeddings": vector_counts.get("embeddings", len(embeddings)),
-        "faissTotal": index.ntotal if index else 0,
+        "chunks": vector_counts.get("chunks", 0),
+        "sources": vector_counts.get("documents", 0),
+        "embeddings": vector_counts.get("embeddings", 0),
         "vectorChunks": vector_counts.get("chunks", 0),
         "vectorEmbeddings": vector_counts.get("embeddings", 0),
         "imageIds": len(image_ids),
-        "imageFaissTotal": image_index.ntotal if image_index else 0,
+        "imageEmbeddings": image_counts.get("embeddings", 0),
         "cacheStats": get_response_cache().stats(),
     }
 
@@ -1711,7 +1562,7 @@ def build_readiness_status():
         "modelConfigured": bool(LLM_MODEL_NAME),
         "embeddingModelConfigured": bool(EMBED_MODEL_NAME),
         "textChunksLoaded": runtime["chunks"] > 0,
-        "textIndexLoaded": runtime["faissTotal"] > 0 or runtime["vectorEmbeddings"] > 0,
+        "textIndexLoaded": runtime["vectorEmbeddings"] > 0,
         "embeddingsLoaded": runtime["embeddings"] > 0,
         "databaseConfigured": database.configured,
         "databaseReachable": database.health_check(),
@@ -1899,14 +1750,6 @@ def mount_react_app():
             return {"error": "Not found"}
         return FileResponse(index_html)
 
-
-# Shutdown Registration
-def save_on_exit():
-    if USE_DB_VECTOR_STORE and vector_store.available():
-        trace_logger.info("DB vector store enabled; skipping legacy pickle/FAISS save on shutdown.")
-        return
-    persistence.save_all()
-
 def flush_trace_log():
     for handler in trace_logger.handlers:
         if hasattr(handler, 'flush'):
@@ -1927,9 +1770,6 @@ if __name__ == "__main__":
     app_port = config.get("APP_PORT", config.get("API_PORT", 1964))
 
     get_or_build_index()
- 
-    atexit.register(save_on_exit)
-    atexit.register(SystemInit.flush_logger, trace_logger)
 
     mount_react_app()
     trace_logger.info(f"🌐 CircuitShelf available at http://{app_host}:{app_port}")

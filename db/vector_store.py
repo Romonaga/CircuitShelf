@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,14 @@ class VectorStore:
             "chunks": int(row["chunks"] or 0),
             "embeddings": int(row["embeddings"] or 0),
         }
+
+    def catalog_fingerprint(self) -> str:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("vector_catalog_fingerprint.sql")).fetchone()
+        payload = row["fingerprint_source"] or ""
+        digest = hashlib.sha256()
+        digest.update(payload.encode("utf-8"))
+        return digest.hexdigest()
 
     def clear(self) -> None:
         with self.database.connection() as conn:

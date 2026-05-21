@@ -1,4 +1,4 @@
-export type RetrievalStrategy = "FAISS only" | "FAISS + CrossEncoder" | string;
+export type RetrievalStrategy = "Vector only" | "Vector + CrossEncoder" | string;
 export type View = "ask" | "documents" | "trace" | "status";
 
 export interface AppConfig {
@@ -77,10 +77,9 @@ export interface StatusPayload {
   chunks: number;
   sources: number;
   embeddings: number;
-  faissTotal: number;
   vectorChunks?: number;
   vectorEmbeddings?: number;
   imageIds: number;
-  imageFaissTotal: number;
+  imageEmbeddings: number;
   cacheStats: unknown;
 }

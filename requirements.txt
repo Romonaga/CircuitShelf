@@ -1,5 +1,4 @@
 bcrypt
-faiss-cpu
 fastapi
 lxml
 nltk

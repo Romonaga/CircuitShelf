@@ -24,7 +24,7 @@ class Reranker:
         raw_scores = self.cross_encoder.predict(combined_inputs).tolist()
         scores = self.normalize_rerank_scores(raw_scores)
 
-        # Fuse FAISS + reranker scores
+        # Fuse vector-distance and reranker scores.
         fused, profile = self.fuse_scores_with_ranks(dedup_hits, scores, question)
 
         # Filter by minimum accepted score
@@ -67,7 +67,7 @@ class Reranker:
             return [0.5 for _ in scores]
         return [(score - low) / (high - low) for score in scores]
 
-    def fuse_scores_with_ranks(self, faiss_hits, rerank_scores, question):
+    def fuse_scores_with_ranks(self, vector_hits, rerank_scores, question):
         q_lower = str(question).lower()
         profile = "default"
         for pname, pdata in self.rerank_profiles.items():
@@ -77,14 +77,13 @@ class Reranker:
                 break
 
         weights = self.rerank_profiles.get(profile, self.rerank_profiles["default"])
-        w_faiss = weights.get("weight_faiss", 0.4)
+        w_vector = weights.get("weight_vector", 0.4)
         w_rerank = weights.get("weight_rerank", 0.6)
 
-        # Normalize FAISS distances to scores in [0, 1]
-        faiss_scores = [1.0 - min(d / 15.0, 1.0) for _, d in faiss_hits]
+        vector_scores = [1.0 - min(d / 15.0, 1.0) for _, d in vector_hits]
         fused = []
-        for (i, dist), f_score, r_score in zip(faiss_hits, faiss_scores, rerank_scores):
-            combined = w_faiss * f_score + w_rerank * r_score
+        for (i, dist), vector_score, r_score in zip(vector_hits, vector_scores, rerank_scores):
+            combined = w_vector * vector_score + w_rerank * r_score
             fused.append((i, dist, r_score, combined))
 
         fused.sort(key=lambda x: x[3], reverse=True)

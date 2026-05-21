@@ -1,12 +1,9 @@
-import os
-import tempfile
 import unittest
 
 from response_cache import (
     ResponseCache,
     ResponseCacheEntry,
     ResponseCacheKey,
-    build_index_fingerprint,
     should_cache_response,
 )
 
@@ -16,7 +13,7 @@ class ResponseCacheTests(unittest.TestCase):
         values = {
             "index_fingerprint": "index-a",
             "model": "electronics-helper:latest",
-            "strategy": "FAISS + CrossEncoder",
+            "strategy": "Vector + CrossEncoder",
             "question": "what is pin 1?",
             "retrieval_query": "what is pin 1?",
             "top_k": 15,
@@ -59,30 +56,6 @@ class ResponseCacheTests(unittest.TestCase):
         self.assertTrue(should_cache_response([], bypass_cache=False))
         self.assertFalse(should_cache_response([["prior", "answer"]], bypass_cache=False))
         self.assertFalse(should_cache_response([], bypass_cache=True))
-
-    def test_index_fingerprint_uses_manifest_content(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            manifest_path = os.path.join(tmpdir, "manifest.json")
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                f.write('{"files":{"a.pdf":{"size":1}}}')
-            first = build_index_fingerprint(
-                manifest_path=manifest_path,
-                chunks_count=1,
-                embeddings_count=1,
-                faiss_total=1,
-            )
-
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                f.write('{"files":{"b.pdf":{"size":1}}}')
-            second = build_index_fingerprint(
-                manifest_path=manifest_path,
-                chunks_count=1,
-                embeddings_count=1,
-                faiss_total=1,
-            )
-
-        self.assertNotEqual(first, second)
-
 
 if __name__ == "__main__":
     unittest.main()

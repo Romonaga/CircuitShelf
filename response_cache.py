@@ -1,8 +1,4 @@
-"""Structured response caching for RAG answers.
-
-The cache is intentionally shaped like something that can move to Postgres later:
-stable key fields, a serialized key hash, and structured response entries.
-"""
+"""Structured response cache key and entry types."""
 
 from __future__ import annotations
 
@@ -108,24 +104,3 @@ def has_chat_history(chat_history: Any) -> bool:
 
 def should_cache_response(chat_history: Any, bypass_cache: bool) -> bool:
     return not bypass_cache and not has_chat_history(chat_history)
-
-
-def build_index_fingerprint(
-    *,
-    manifest_path: str,
-    chunks_count: int,
-    embeddings_count: int,
-    faiss_total: int,
-) -> str:
-    digest = hashlib.sha256()
-    digest.update(f"schema:{CACHE_SCHEMA_VERSION}".encode("utf-8"))
-    digest.update(f"|chunks:{chunks_count}|embeddings:{embeddings_count}|faiss:{faiss_total}".encode("utf-8"))
-
-    try:
-        with open(manifest_path, "rb") as f:
-            for block in iter(lambda: f.read(1024 * 1024), b""):
-                digest.update(block)
-    except FileNotFoundError:
-        digest.update(b"|manifest-missing")
-
-    return digest.hexdigest()

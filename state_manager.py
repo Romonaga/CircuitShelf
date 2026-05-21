@@ -7,7 +7,6 @@
 import threading
 from collections import deque
 from response_cache import ResponseCache
-import faiss
 
 class StateManager:
     def __init__(self, use_lock=True, cache_capacity=200, trace_logger=None):
@@ -26,7 +25,6 @@ class StateManager:
         self.image_captions = {}
         self.image_page_text = {}
         self.image_id_list = []
-        self.image_embeddings = None
 
         # === Query/Debug State ===
         self.query_timings = deque(maxlen=100)
@@ -70,7 +68,6 @@ class StateManager:
             self.image_id_list.clear()
             self.last_trace_data.clear()
             self.index = None
-            self.image_embeddings = None
         self._safe(_clear)
 
     # === Embeddings ===
@@ -78,17 +75,6 @@ class StateManager:
     def set_embeddings(self, data): self._safe(lambda: self._replace(self.embeddings, data))
     def add_embedding(self, emb): self._safe(lambda: self.embeddings.append(emb))
 
-
-    # === Image Embeddings ===
-    def get_image_embeddings(self): return self._safe(lambda: self.image_embeddings)
-    def set_image_embeddings(self, index): self._safe(lambda: self._set_attr("image_embeddings", index))
-    def add_image_embedding(self, vectors):
-        def _add():
-            if self.image_embeddings is not None:
-                self.image_embeddings.add(vectors)
-            else:
-                raise ValueError("Image embeddings index is not initialized.")
-        self._safe(_add)
 
     # === Index ===
     def get_index(self): return self._safe(lambda: self.index)

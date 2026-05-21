@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS prompt_security_banned_phrases (
 CREATE TABLE IF NOT EXISTS rerank_profiles (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name text NOT NULL UNIQUE,
-    weight_faiss numeric(5, 4) NOT NULL,
+    weight_vector numeric(5, 4) NOT NULL,
     weight_rerank numeric(5, 4) NOT NULL,
     is_default boolean NOT NULL DEFAULT false,
     created_at timestamptz NOT NULL DEFAULT now(),

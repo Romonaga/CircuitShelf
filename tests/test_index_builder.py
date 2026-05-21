@@ -44,7 +44,7 @@ class IndexBuilderTests(unittest.TestCase):
             "IMAGE_INDEX_MIN_CHARS": 5,
         }
 
-    def test_build_filters_chunks_and_indexes_images(self):
+    def test_build_filters_chunks_and_prepares_image_catalog(self):
         state = StateManager(use_lock=False)
         state.extend_chunks(
             ["Pin 1 goes to ground", "DROP bad chunk", "Pin 8 goes to VCC"],
@@ -63,9 +63,8 @@ class IndexBuilderTests(unittest.TestCase):
         self.assertEqual(state.get_sources(), ["timer.pdf", "timer.pdf"])
         self.assertEqual(state.get_metadata(), [{"page": 1}, {"page": 3}])
         self.assertEqual(len(state.get_embeddings()), 2)
-        self.assertEqual(state.get_index().ntotal, 2)
+        self.assertIsNone(state.get_index())
         self.assertEqual(state.get_image_id_list(), ["b-image"])
-        self.assertEqual(state.get_image_embeddings().ntotal, 1)
 
     def test_build_rejects_empty_chunk_state(self):
         state = StateManager(use_lock=False)

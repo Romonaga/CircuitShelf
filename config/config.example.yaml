@@ -14,7 +14,7 @@ MAX_DOCUMENT_WORKERS: 4
 USE_ADAPTIVE_CHUNKING: false
 ENABLE_MATH_HEAVY_CHUNKING: false
 ENABLE_TOKEN_NORMALIZATION: false
-SAVE_EXTRACTED_IMAGES: true
+SAVE_EXTRACTED_IMAGES: false
 INDEX_IMAGE_OCR_AS_TEXT: true
 
 MAX_CHAT_HISTORY_TURNS: 10
@@ -41,31 +41,16 @@ LLM_NUM_CTX: 8192
 TRAINING_DIR: "training"
 TRAINING_RECURSIVE: false
 TRAINING_EXCLUDE_DIRS: []
-INGEST_MANIFEST_FILE: "data/ingest_manifest.json"
 INGEST_HASH_FILES: false
 
 # Prefer DATABASE_URL from the environment. Do not commit real credentials.
 DATABASE_URL: ""
 DB_MIGRATIONS_DIR: "db/migrations"
 DB_SCHEMA_VERSION_TABLE: "schema_migrations"
-USE_DB_VECTOR_STORE: true
 VECTOR_EMBEDDING_DIM: 768
 
-INDEX_FILE: "data/index.faiss"
-CHUNKS_FILE: "data/chunks.pkl"
-SOURCES_FILE: "data/sources.pkl"
-METADATA_FILE: "data/metadata.pkl"
-EMBEDDINGS_FILE: "data/embeddings.pkl"
-IMAGE_STORE_FILE: "data/image_store.pkl"
-IMAGE_CAPTIONS_FILE: "data/image_captions.pkl"
-IMAGE_PAGE_TEXT_FILE: "data/image_page_text.pkl"
-IMAGE_EMBEDDINGS_FILE: "data/image_embeddings.faiss"
-IMAGE_IDS_FILE: "data/image_ids.pkl"
-TRAINING_OUTPUT_FILE: "trainingdata/training_output.jsonl"
 BUILD_INDEX_LOG_FILE: "data/index_build.log"
-CACHE_FILE: "cache/cache.pkl"
 TRACE_LOG_FILE: "logs/trace.log"
-IMAGE_BLOCK_HTML_FILE: "config/image_html_block.html"
 
 TRACE_ROTATE: time
 TRACE_MAX_BYTES: 10485760
@@ -132,7 +117,7 @@ QUERY_SYNONYMS:
 
 RERANK_PROFILES:
   default:
-    weight_faiss: 0.4
+    weight_vector: 0.4
     weight_rerank: 0.8
     keywords:
       - pin
@@ -148,7 +133,7 @@ RERANK_PROFILES:
       - 555
       - timer
   technical:
-    weight_faiss: 0.6
+    weight_vector: 0.6
     weight_rerank: 0.4
     keywords:
       - pinout
@@ -165,7 +150,7 @@ RERANK_PROFILES:
       - formula
       - timing
   summary:
-    weight_faiss: 0.3
+    weight_vector: 0.3
     weight_rerank: 0.7
     keywords:
       - overview
