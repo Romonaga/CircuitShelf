@@ -4,6 +4,7 @@ import { AskView } from "./components/AskView";
 import { DocumentsView } from "./components/DocumentsView";
 import { LoginView } from "./components/LoginView";
 import { StatusView } from "./components/StatusView";
+import { SettingsView } from "./components/SettingsView";
 import { TraceView } from "./components/TraceView";
 import { useAppConfig } from "./hooks/useAppConfig";
 import { useSession } from "./hooks/useSession";
@@ -36,7 +37,8 @@ export default function App() {
       activeView={activeView}
       setActiveView={setActiveView}
       siteName={config.siteName}
-      user={user || "local"}
+      user={user?.username || "local"}
+      isAdmin={Boolean(user?.isAdmin)}
       status={status}
       onRefresh={refreshStatus}
       onLogout={logout}
@@ -54,6 +56,11 @@ export default function App() {
       <div hidden={activeView !== "status"}>
         <StatusView status={status} refresh={refreshStatus} />
       </div>
+      {user?.isAdmin ? (
+        <div hidden={activeView !== "settings"}>
+          <SettingsView />
+        </div>
+      ) : null}
     </AppShell>
   );
 }

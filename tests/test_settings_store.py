@@ -19,6 +19,17 @@ class AppSettingsStoreTests(unittest.TestCase):
         self.assertFalse(store._should_store("QUERY_SYNONYMS", []))
         self.assertTrue(store._should_store("CHUNK_SIZE", 500))
 
+    def test_coerce_value_validates_booleans_and_numbers(self):
+        store = AppSettingsStore(None)
+
+        self.assertTrue(store._coerce_value("boolean", "yes"))
+        self.assertFalse(store._coerce_value("boolean", "off"))
+        self.assertEqual(store._coerce_value("integer", "42"), 42)
+        self.assertEqual(store._coerce_value("numeric", "0.25"), 0.25)
+
+        with self.assertRaises(ValueError):
+            store._coerce_value("boolean", "maybe")
+
 
 if __name__ == "__main__":
     unittest.main()

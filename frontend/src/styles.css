@@ -264,6 +264,10 @@ nav {
   grid-template-columns: 360px minmax(0, 1fr);
 }
 
+.settings-grid {
+  grid-template-columns: 360px minmax(0, 1fr);
+}
+
 .query-panel {
   grid-area: query;
 }
@@ -290,6 +294,8 @@ nav {
 .history-panel,
 .sources-panel,
 .document-list-panel,
+.settings-list-panel,
+.settings-editor-panel,
 .chunk-panel,
 .single-panel {
   min-width: 0;
@@ -560,6 +566,7 @@ nav {
 
 .source-list,
 .document-list,
+.settings-list,
 .chunk-table {
   display: grid;
   gap: 10px;
@@ -693,7 +700,15 @@ nav {
   max-height: calc(100vh - 48px);
 }
 
+.settings-list-panel {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 14px;
+  max-height: calc(100vh - 48px);
+}
+
 .document-list,
+.settings-list,
 .chunk-table {
   min-height: 0;
   overflow: auto;
@@ -727,6 +742,62 @@ nav {
 
 .document-row small {
   color: var(--muted);
+}
+
+.settings-row {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 12px;
+  color: var(--text);
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.settings-row:hover,
+.settings-row.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.settings-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 750;
+}
+
+.settings-row small,
+.setting-meta,
+.setting-description {
+  color: var(--muted);
+}
+
+.settings-editor-panel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.setting-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.84rem;
+}
+
+.setting-description {
+  line-height: 1.45;
+}
+
+.success-message {
+  color: #087443;
+  border: 1px solid #abefc6;
+  border-radius: 8px;
+  background: #ecfdf3;
+  padding: 10px 12px;
 }
 
 .chunk-panel {
@@ -794,7 +865,8 @@ nav {
 
 @media (max-width: 1120px) {
   .ask-grid,
-  .docs-grid {
+  .docs-grid,
+  .settings-grid {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "query"
@@ -805,6 +877,7 @@ nav {
   }
 
   .document-list-panel,
+  .settings-list-panel,
   .chunk-panel {
     max-height: none;
   }
@@ -823,7 +896,7 @@ nav {
   }
 
   nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
   }
 
   .nav-item {
@@ -846,6 +919,8 @@ nav {
   .history-panel,
   .sources-panel,
   .document-list-panel,
+  .settings-list-panel,
+  .settings-editor-panel,
   .chunk-panel,
   .single-panel {
     padding: 14px;

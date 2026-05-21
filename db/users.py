@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
 from dataclasses import dataclass
 
 import bcrypt
@@ -11,6 +13,13 @@ from db.sql import load_query
 
 @dataclass(frozen=True)
 class AuthenticatedUser:
+    username: str
+    is_admin: bool
+
+
+@dataclass(frozen=True)
+class UserSession:
+    token: str
     username: str
     is_admin: bool
 
@@ -79,3 +88,37 @@ class UserStore:
         with self.database.connection() as conn:
             rows = conn.execute(load_query("users_list.sql")).fetchall()
         return [dict(row) for row in rows]
+
+    def create_session(self, user: AuthenticatedUser, ttl_seconds: int = 604800) -> UserSession:
+        token = secrets.token_urlsafe(32)
+        token_hash = self._token_hash(token)
+        with self.database.connection() as conn:
+            conn.execute(load_query("user_sessions_prune.sql"))
+            conn.execute(load_query("user_sessions_insert.sql"), (user.username, token_hash, int(ttl_seconds)))
+        return UserSession(token=token, username=user.username, is_admin=user.is_admin)
+
+    def get_session(self, token: str) -> AuthenticatedUser | None:
+        if not token:
+            return None
+        token_hash = self._token_hash(token)
+        try:
+            with self.database.connection() as conn:
+                row = conn.execute(load_query("user_sessions_find.sql"), (token_hash,)).fetchone()
+                if not row:
+                    return None
+                conn.execute(load_query("user_sessions_touch.sql"), (token_hash,))
+            return AuthenticatedUser(username=str(row["username"]), is_admin=bool(row["is_admin"]))
+        except Exception as exc:
+            if self.logger:
+                self.logger.warning(f"Session lookup failed: {exc}")
+            return None
+
+    def delete_session(self, token: str) -> None:
+        if not token:
+            return
+        with self.database.connection() as conn:
+            conn.execute(load_query("user_sessions_delete.sql"), (self._token_hash(token),))
+
+    @staticmethod
+    def _token_hash(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()

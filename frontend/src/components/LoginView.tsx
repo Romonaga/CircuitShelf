@@ -1,9 +1,10 @@
 import { FormEvent, useState } from "react";
 import { login } from "../api";
+import type { SessionUser } from "../types";
 import { errorMessage } from "../lib/errors";
 import { ErrorMessage } from "./ErrorMessage";
 
-export function LoginView({ siteName, onLogin }: { siteName: string; onLogin: (name: string) => void }) {
+export function LoginView({ siteName, onLogin }: { siteName: string; onLogin: (session: SessionUser) => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -19,7 +20,11 @@ export function LoginView({ siteName, onLogin }: { siteName: string; onLogin: (n
         setError(result.error || "Invalid credentials");
         return;
       }
-      onLogin(result.username || username);
+      onLogin({
+        username: result.username || username,
+        isAdmin: Boolean(result.isAdmin),
+        token: result.token || ""
+      });
     } catch (err) {
       setError(errorMessage(err, "Login failed"));
     } finally {

@@ -8,6 +8,7 @@ export function AppShell({
   setActiveView,
   siteName,
   user,
+  isAdmin,
   status,
   onRefresh,
   onLogout,
@@ -17,6 +18,7 @@ export function AppShell({
   setActiveView: (view: View) => void;
   siteName: string;
   user: string;
+  isAdmin: boolean;
   status: StatusPayload | null;
   onRefresh: () => void;
   onLogout: () => void;
@@ -26,7 +28,8 @@ export function AppShell({
     { id: "ask", label: "Ask" },
     { id: "documents", label: "Documents" },
     { id: "trace", label: "Trace" },
-    { id: "status", label: "Status" }
+    { id: "status", label: "Status" },
+    ...(isAdmin ? [{ id: "settings" as View, label: "Settings" }] : [])
   ];
 
   return (

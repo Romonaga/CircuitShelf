@@ -4,13 +4,18 @@ import type {
   DocumentSummary,
   QueryRequest,
   QueryResponse,
+  AppSetting,
   StatusPayload
 } from "./types";
 
+const sessionStorageKey = "circuitshelf-session";
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const session = readSessionToken();
   const response = await fetch(path, {
     headers: {
       "Content-Type": "application/json",
+      ...(session ? { Authorization: `Bearer ${session}` } : {}),
       ...(init?.headers ?? {})
     },
     ...init
@@ -31,15 +36,32 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+function readSessionToken(): string {
+  try {
+    const raw = window.localStorage.getItem(sessionStorageKey);
+    if (!raw) {
+      return "";
+    }
+    const session = JSON.parse(raw) as { token?: string };
+    return session.token || "";
+  } catch {
+    return "";
+  }
+}
+
 export function getAppConfig(): Promise<AppConfig> {
   return requestJson<AppConfig>("/api/app-config");
 }
 
-export function login(username: string, password: string): Promise<{ ok: boolean; username?: string; isAdmin?: boolean; error?: string }> {
+export function login(username: string, password: string): Promise<{ ok: boolean; username?: string; isAdmin?: boolean; token?: string; error?: string }> {
   return requestJson("/api/login", {
     method: "POST",
     body: JSON.stringify({ username, password })
   });
+}
+
+export function logout(): Promise<{ ok: boolean }> {
+  return requestJson("/api/logout", { method: "POST" });
 }
 
 export function runQuery(payload: QueryRequest): Promise<QueryResponse> {
@@ -64,3 +86,16 @@ export function getTrace(): Promise<Record<string, unknown>> {
 export function getStatus(): Promise<StatusPayload> {
   return requestJson<StatusPayload>("/api/status");
 }
+
+export function getSettings(): Promise<{ settings: AppSetting[] }> {
+  return requestJson<{ settings: AppSetting[] }>("/api/settings");
+}
+
+export function updateSetting(key: string, value: AppSetting["value"]): Promise<{ setting: AppSetting }> {
+  return requestJson<{ setting: AppSetting }>(`/api/settings/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify({ value })
+  });
+}
+
+export { sessionStorageKey };

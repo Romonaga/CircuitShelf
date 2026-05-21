@@ -1591,6 +1591,23 @@ def verify_user(username, password):
     return user_store.verify_user(username, password)
 
 
+def bearer_token_from_request(req: Request) -> str:
+    header = req.headers.get("authorization", "")
+    prefix = "Bearer "
+    if header.startswith(prefix):
+        return header[len(prefix):].strip()
+    return ""
+
+
+def require_admin_user(req: Request):
+    user = user_store.get_session(bearer_token_from_request(req))
+    if not user:
+        return None, JSONResponse({"error": "Authentication required."}, status_code=401)
+    if not user.is_admin:
+        return None, JSONResponse({"error": "Admin access required."}, status_code=403)
+    return user, None
+
+
 @app.post("/api/login")
 async def login(req: Request):
     data = await req.json()
@@ -1598,8 +1615,16 @@ async def login(req: Request):
     password = data.get("password", "")
     user = verify_user(username, password)
     if user:
-        return {"ok": True, "username": user.username, "isAdmin": user.is_admin}
+        session = user_store.create_session(user, ttl_seconds=int(config.get("SESSION_TTL_SECONDS", 604800)))
+        return {"ok": True, "username": session.username, "isAdmin": session.is_admin, "token": session.token}
     return {"ok": False, "error": "Invalid credentials"}
+
+
+@app.post("/api/logout")
+async def logout(req: Request):
+    user_store.delete_session(bearer_token_from_request(req))
+    return {"ok": True}
+
 
 @app.get("/api/app-config")
 async def app_config():
@@ -1618,6 +1643,30 @@ async def app_config():
             "strategy": "Vector + CrossEncoder",
         },
     }
+
+
+@app.get("/api/settings")
+async def settings_list(req: Request):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+    return {"settings": settings_store.list_editable()}
+
+
+@app.put("/api/settings/{key}")
+async def settings_update(key: str, req: Request):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+    try:
+        data = await req.json()
+        updated = settings_store.update_setting(key, data.get("value"))
+        config.config[key] = updated["value"]
+        return {"setting": updated}
+    except KeyError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    except (PermissionError, ValueError, TypeError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
 
 @app.post("/api/query")

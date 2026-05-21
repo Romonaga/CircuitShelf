@@ -42,6 +42,38 @@ class AppSettingsStore:
             return {}
         return {row["key"]: self._row_value(row) for row in rows}
 
+    def list_editable(self) -> list[dict[str, Any]]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("settings_admin_list.sql")).fetchall()
+        return [self._api_row(row) for row in rows if row["key"] not in BOOTSTRAP_KEYS]
+
+    def update_setting(self, key: str, value: Any) -> dict[str, Any]:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("settings_get_one.sql"), (key,)).fetchone()
+            if not row:
+                raise KeyError(f"Unknown setting: {key}")
+            if row["is_sensitive"] or row["key"] in BOOTSTRAP_KEYS:
+                raise PermissionError(f"Setting cannot be edited from the UI: {key}")
+
+            value_type = row["value_type"]
+            typed = self._coerce_value(value_type, value)
+            text_value, integer_value, numeric_value, boolean_value = self._storage_values(value_type, typed)
+            conn.execute(
+                load_query("settings_upsert.sql"),
+                (
+                    key,
+                    value_type,
+                    text_value,
+                    integer_value,
+                    numeric_value,
+                    boolean_value,
+                    row["description"],
+                    False,
+                ),
+            )
+            updated_row = conn.execute(load_query("settings_get_one.sql"), (key,)).fetchone()
+        return self._api_row(updated_row)
+
     def seed_from_config(self, config: dict[str, Any]) -> int:
         if not self.database.configured:
             return 0
@@ -103,6 +135,31 @@ class AppSettingsStore:
             return "numeric", None, None, Decimal(str(value)), None
         return "text", str(value), None, None, None
 
+    def _storage_values(self, value_type: str, value: Any) -> tuple[str | None, int | None, Decimal | None, bool | None]:
+        if value_type == "boolean":
+            return None, None, None, bool(value)
+        if value_type == "integer":
+            return None, int(value), None, None
+        if value_type == "numeric":
+            return None, None, Decimal(str(value)), None
+        return str(value), None, None, None
+
+    def _coerce_value(self, value_type: str, value: Any) -> Any:
+        if value_type == "boolean":
+            if isinstance(value, bool):
+                return value
+            normalized = str(value).strip().lower()
+            if normalized in {"true", "1", "yes", "y", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "n", "off"}:
+                return False
+            raise ValueError("Expected a boolean value.")
+        if value_type == "integer":
+            return int(value)
+        if value_type == "numeric":
+            return float(value)
+        return str(value)
+
     @staticmethod
     def _row_value(row) -> Any:
         value_type = row["value_type"]
@@ -113,3 +170,13 @@ class AppSettingsStore:
         if value_type == "numeric":
             return float(row["numeric_value"])
         return row["text_value"]
+
+    def _api_row(self, row) -> dict[str, Any]:
+        return {
+            "key": row["key"],
+            "value": self._row_value(row),
+            "valueType": row["value_type"],
+            "description": row["description"] or "",
+            "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
+            "restartRequired": True,
+        }

@@ -1,5 +1,11 @@
 export type RetrievalStrategy = "Vector only" | "Vector + CrossEncoder" | string;
-export type View = "ask" | "documents" | "trace" | "status";
+export type View = "ask" | "documents" | "trace" | "status" | "settings";
+
+export interface SessionUser {
+  username: string;
+  isAdmin: boolean;
+  token: string;
+}
 
 export interface AppConfig {
   siteName: string;
@@ -82,4 +88,16 @@ export interface StatusPayload {
   imageIds: number;
   imageEmbeddings: number;
   cacheStats: unknown;
+}
+
+export type SettingValueType = "text" | "integer" | "numeric" | "boolean";
+export type SettingValue = string | number | boolean;
+
+export interface AppSetting {
+  key: string;
+  value: SettingValue;
+  valueType: SettingValueType;
+  description: string;
+  updatedAt?: string | null;
+  restartRequired: boolean;
 }
