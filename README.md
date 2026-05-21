@@ -25,23 +25,105 @@ The following are intentionally ignored because this is planned as a public repo
 
 ## Setup
 
-For a guided local install, run:
+### Linux
 
 ```bash
 ./install.sh
 ```
 
-The installer creates `.venv`, installs Python and frontend dependencies, creates `config/config.yaml` if needed, prompts for `DATABASE_URL`, applies migrations, optionally creates an admin user, and builds the React frontend.
+Install system prerequisites first. On Ubuntu/Debian:
 
-You still need these system-level prerequisites installed first:
+```bash
+sudo apt update
+sudo apt install python3 python3-venv nodejs npm postgresql postgresql-client tesseract-ocr
+```
 
-- Python 3.12 or newer
-- Node.js and npm
-- PostgreSQL server and client tools
-- Tesseract OCR for OCR support
-- Ollama for local model inference
+Install Ollama from `https://ollama.com`, then run the guided installer:
 
-Manual setup is:
+```bash
+./install.sh
+```
+
+### macOS
+
+Install system prerequisites with Homebrew:
+
+```bash
+brew install python node postgresql@16 tesseract ollama
+brew services start postgresql@16
+```
+
+Then run:
+
+```bash
+./install.sh
+```
+
+If `psql` is not in PATH after installing Postgres with Homebrew, add the Homebrew message's `postgresql@16/bin` path to your shell profile.
+
+### Windows
+
+Install these first:
+
+- Python 3.12 or newer from `https://www.python.org`
+- Node.js LTS from `https://nodejs.org`
+- PostgreSQL from `https://www.postgresql.org/download/windows/`
+- Tesseract OCR from `https://github.com/UB-Mannheim/tesseract/wiki`
+- Ollama from `https://ollama.com`
+
+Make sure `python`, `node`, `npm`, `psql`, and `tesseract` are available in PATH. Then open PowerShell in the repo folder and run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\install.ps1
+```
+
+The Windows installer creates `.venv`, installs dependencies, creates `config/config.yaml` if needed, records the discovered `tesseract.exe` path, prompts for `DATABASE_URL`, applies migrations, optionally creates an admin user, and builds the React frontend.
+
+### Postgres Database
+
+The installer expects a working Postgres `DATABASE_URL`. If you need to create the database first, run these commands as a Postgres admin.
+
+Linux/macOS:
+
+```bash
+sudo -u postgres psql
+```
+
+Windows: open SQL Shell or pgAdmin as the `postgres` admin user.
+
+Then run:
+
+```sql
+CREATE USER circuitshelf_app WITH PASSWORD 'choose-a-real-password';
+CREATE DATABASE circuitshelf OWNER circuitshelf_app;
+GRANT ALL PRIVILEGES ON DATABASE circuitshelf TO circuitshelf_app;
+\c circuitshelf
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS citext;
+```
+
+Use this shape when the installer asks for `DATABASE_URL`:
+
+```text
+postgresql://circuitshelf_app:choose-a-real-password@localhost:5432/circuitshelf
+```
+
+### What The Installer Does
+
+The guided installer:
+
+- creates `.venv`
+- installs Python dependencies
+- installs frontend dependencies
+- creates `config/config.yaml` from `config/config.example.yaml` if needed
+- prompts for and verifies `DATABASE_URL`
+- applies DB migrations
+- optionally creates an admin login user
+- builds the React frontend
+- runs basic backend syntax checks
+
+### Manual Setup
 
 1. Create and activate a virtual environment.
 2. Install Python dependencies:
