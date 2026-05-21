@@ -48,7 +48,7 @@ from tokenize_util import TokenUtils
 from system_init import SystemInit
 from reranker_module import Reranker
 from ocr_utils import run_ocr
-from pdf_visuals import render_pdf_visual_pages
+from pdf_visuals import link_chunks_to_rendered_pages, render_pdf_visual_pages
 from index_builder import IndexBuilder
 from ingest_manifest import IngestManifest
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
@@ -846,6 +846,15 @@ def process_pdf_file(fpath, state, trace_logger, chunker, token_utils):
         chunks, meta = chunker.adaptive_chunk_pages(page_texts, fpath)
     else:
         chunks, meta = chunker.smart_chunk_pages(page_texts, fpath)
+
+    linked_visuals = link_chunks_to_rendered_pages(
+        chunks,
+        meta,
+        fpath,
+        state.get_image_store().keys(),
+    )
+    if linked_visuals:
+        trace_logger.info(f"🔗 Linked {linked_visuals} text chunks to rendered PDF page images for {os.path.basename(fpath)}")
 
     state.extend_chunks(chunks + img_chunks, [fpath] * len(chunks) + img_sources, meta + img_meta)
 
@@ -1714,7 +1723,7 @@ def get_rag_response(
     response = query_ollama_chat_with_retry(prompt, model_name, chat_history=chat_history)
 
     # === Format Output
-    image_md_blocks = build_image_markdown_blocks(retrieval_q) if show_full_text else []
+    image_md_blocks = build_image_markdown_blocks(retrieval_q, selected_chunks) if show_full_text else []
     final_answer = _assemble_final_markdown(response, image_md_blocks)
 
     chat_history = append_chat_turn(
@@ -1779,8 +1788,23 @@ def extract_doc_and_page(img_id):
     return img_id, -1
 
 @trace_timer("build_image_markdown_blocks")
-def build_image_markdown_blocks(question):
-    matched_images = search_top_images(question, top_n=10)
+def build_image_markdown_blocks(question, selected_chunks=None):
+    linked_images = []
+    seen_images = set()
+    for chunk in selected_chunks or []:
+        image_id = chunk.get("source_image_id")
+        if image_id and image_id not in seen_images:
+            linked_images.append((image_id, -1.0))
+            seen_images.add(image_id)
+
+    matched_images = linked_images
+    for img_id, score in search_top_images(question, top_n=10):
+        if img_id in seen_images:
+            continue
+        matched_images.append((img_id, score))
+        seen_images.add(img_id)
+        if len(matched_images) >= 10:
+            break
     
     # Group images by (doc_name, page_number)
     image_entries = []

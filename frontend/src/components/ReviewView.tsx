@@ -230,6 +230,7 @@ export function ReviewView({
                 <span>{formatInteger(chunk.tokens)} tokens</span>
                 <span>Quality {chunk.quality.toFixed(2)}</span>
                 {chunk.page ? <span>Page {chunk.page}</span> : null}
+                {chunk.sourceImageId ? <span>Image {chunk.sourceImageId}</span> : null}
                 {chunk.isOcr ? <span>OCR</span> : null}
                 {chunk.hasMath ? <span>Math</span> : null}
               </div>

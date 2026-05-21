@@ -4,7 +4,13 @@ import unittest
 
 import fitz
 
-from pdf_visuals import render_pdf_visual_pages, should_render_visual_page
+from pdf_visuals import (
+    link_chunks_to_rendered_pages,
+    render_pdf_visual_pages,
+    rendered_page_image_key,
+    should_render_visual_page,
+    visual_references,
+)
 
 
 class PdfVisualTests(unittest.TestCase):
@@ -59,6 +65,34 @@ class PdfVisualTests(unittest.TestCase):
         self.assertEqual(rendered[0].page_number, 1)
         self.assertIn("Package Dimensions", rendered[0].searchable_text)
         self.assertTrue(rendered[0].image_bytes.startswith(b"\x89PNG"))
+
+    def test_visual_references_detects_figure_and_package_terms(self):
+        references = visual_references("See Fig. 3 for the graph and Package Dimensions for pin layout.")
+
+        self.assertEqual(references, ["Fig. 3", "graph", "Package Dimensions", "pin layout"])
+
+    def test_link_chunks_to_rendered_pages_uses_same_page_render(self):
+        chunks = [
+            "Fig. 3 shows normalized CTR over LED current.",
+            "Plain description with no visual reference.",
+            "Package Dimensions define the pin spacing.",
+        ]
+        metadata = [
+            {"page": 5, "section": "Typical Characteristics"},
+            {"page": 5, "section": "Description"},
+            {"page": 8, "section": "Untitled Section"},
+        ]
+        available = {
+            rendered_page_image_key("training/4n35.pdf", 5),
+            rendered_page_image_key("training/4n35.pdf", 8),
+        }
+
+        linked = link_chunks_to_rendered_pages(chunks, metadata, "training/4n35.pdf", available)
+
+        self.assertEqual(linked, 2)
+        self.assertEqual(metadata[0]["source_image_id"], "4n35.pdf_page5_render")
+        self.assertNotIn("source_image_id", metadata[1])
+        self.assertEqual(metadata[2]["source_image_id"], "4n35.pdf_page8_render")
 
 
 if __name__ == "__main__":

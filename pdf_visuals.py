@@ -28,6 +28,12 @@ VISUAL_PAGE_KEYWORDS = (
     "timing",
 )
 
+VISUAL_REFERENCE_PATTERN = re.compile(
+    r"\b(?:fig(?:ure)?\.?\s*\d+[a-z]?|table\s*\d+[a-z]?|pinout|pin configuration|pin layout|"
+    r"package dimensions?|schematic|diagram|graph|chart|timing diagram|layout)\b",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class RenderedPdfPage:
@@ -41,6 +47,61 @@ class RenderedPdfPage:
 def visual_keyword_hits(text: str, keywords: Iterable[str] = VISUAL_PAGE_KEYWORDS) -> list[str]:
     normalized = re.sub(r"\s+", " ", text).lower()
     return [keyword for keyword in keywords if keyword in normalized]
+
+
+def visual_references(text: str) -> list[str]:
+    seen = []
+    for match in VISUAL_REFERENCE_PATTERN.finditer(text or ""):
+        value = re.sub(r"\s+", " ", match.group(0)).strip()
+        if value and value.lower() not in {item.lower() for item in seen}:
+            seen.append(value)
+    return seen
+
+
+def rendered_page_image_key(source_path: str, page_number: int) -> str:
+    return f"{os.path.basename(source_path)}_page{int(page_number)}_render"
+
+
+def link_chunks_to_rendered_pages(
+    chunks: list[str],
+    metadata: list[dict],
+    source_path: str,
+    available_image_ids: Iterable[str],
+) -> int:
+    available = set(available_image_ids)
+    linked = 0
+
+    for chunk, meta in zip(chunks, metadata):
+        if meta.get("source_image_id"):
+            continue
+        try:
+            page_number = int(meta.get("page") or 0)
+        except (TypeError, ValueError):
+            continue
+        if page_number <= 0:
+            continue
+
+        image_key = rendered_page_image_key(source_path, page_number)
+        if image_key not in available:
+            continue
+
+        references = visual_references(
+            "\n".join(
+                [
+                    str(meta.get("section") or ""),
+                    str(meta.get("category") or ""),
+                    chunk or "",
+                ]
+            )
+        )
+        if not references:
+            continue
+
+        meta["source_image_id"] = image_key
+        meta["visual_references"] = references
+        linked += 1
+
+    return linked
 
 
 def should_render_visual_page(
@@ -103,9 +164,10 @@ def render_pdf_visual_pages(
             hit_summary = ", ".join(hits[:5]) if hits else "dense vector drawing"
             caption = f"Rendered page {page_number} from {base_name} ({hit_summary})"
             searchable_text = f"{caption}\n{text}".strip()
+            image_key = rendered_page_image_key(path, page_number)
             rendered_pages.append(
                 RenderedPdfPage(
-                    image_key=f"{base_name}_page{page_number}_render",
+                    image_key=image_key,
                     page_number=page_number,
                     caption=caption,
                     searchable_text=searchable_text,
