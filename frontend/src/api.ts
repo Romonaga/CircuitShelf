@@ -35,7 +35,7 @@ export function getAppConfig(): Promise<AppConfig> {
   return requestJson<AppConfig>("/api/app-config");
 }
 
-export function login(username: string, password: string): Promise<{ ok: boolean; username?: string; error?: string }> {
+export function login(username: string, password: string): Promise<{ ok: boolean; username?: string; isAdmin?: boolean; error?: string }> {
   return requestJson("/api/login", {
     method: "POST",
     body: JSON.stringify({ username, password })

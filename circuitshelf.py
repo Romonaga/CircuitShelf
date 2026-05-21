@@ -14,7 +14,6 @@ import pickle
 import requests
 import time
 import base64
-import bcrypt
 import zipfile
 import atexit
 import fitz  # PyMuPDF
@@ -54,6 +53,8 @@ from ocr_utils import run_ocr
 from index_builder import IndexBuilder
 from ingest_manifest import IngestManifest
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
+from db.connection import Database, database_url_from_config
+from db.users import UserStore
 from response_cache import (
     ResponseCacheEntry,
     ResponseCacheKey,
@@ -64,6 +65,8 @@ from response_cache import (
 #Inits the logger as well as the configuraqtion system
 config, trace_logger = SystemInit.load_config_and_logger()
 state = StateManager(use_lock=True, cache_capacity=200, trace_logger=trace_logger)
+database = Database(database_url_from_config(config), trace_logger)
+user_store = UserStore(database, trace_logger)
 trace_logger.info("🛠️ Configuration and logger successfully initialized.")
 
 # === Decorators ===
@@ -1569,6 +1572,8 @@ def build_readiness_status():
         "textChunksLoaded": runtime["chunks"] > 0,
         "textIndexLoaded": runtime["faissTotal"] > 0,
         "embeddingsLoaded": runtime["embeddings"] > 0,
+        "databaseConfigured": database.configured,
+        "databaseReachable": database.health_check(),
     }
     ready = all(checks.values())
     return ready, {
@@ -1591,11 +1596,7 @@ async def readyz():
 
 
 def verify_user(username, password):
-    users = config.get("USERS", {})
-    if username in users:
-        stored_hash = users[username].get("hashed_password", "")
-        return bool(stored_hash and bcrypt.checkpw(password.encode(), stored_hash.encode()))
-    return False
+    return user_store.verify_user(username, password)
 
 
 @app.post("/api/login")
@@ -1603,8 +1604,9 @@ async def login(req: Request):
     data = await req.json()
     username = data.get("username", "")
     password = data.get("password", "")
-    if verify_user(username, password):
-        return {"ok": True, "username": username}
+    user = verify_user(username, password)
+    if user:
+        return {"ok": True, "username": user.username, "isAdmin": user.is_admin}
     return {"ok": False, "error": "Invalid credentials"}
 
 @app.get("/api/app-config")
@@ -1613,7 +1615,7 @@ async def app_config():
         "siteName": config.get("SITE_NAME", "CircuitShelf"),
         "models": LLM_MODEL_OPTIONS,
         "defaultModel": LLM_MODEL_NAME,
-        "authConfigured": bool(config.get("USERS", {})),
+        "authConfigured": database.configured and user_store.has_active_users(),
         "retrievalStrategies": ["FAISS only", "FAISS + CrossEncoder"],
         "defaults": {
             "topK": 15,

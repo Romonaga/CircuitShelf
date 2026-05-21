@@ -144,6 +144,8 @@ class SystemInit:
 
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
+        if os.environ.get("DATABASE_URL"):
+            config["DATABASE_URL"] = os.environ["DATABASE_URL"]
 
         logfile = config.get("TRACE_LOG_FILE", "logs/trace.log")
         rotate = config.get("TRACE_ROTATE", "time")
@@ -168,4 +170,3 @@ class SystemInit:
         )
 
         return ConfigWrapper(config), trace_logger.get_logger()
-

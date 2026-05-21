@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Apply SQL migrations through psql.
-
-This intentionally uses the local psql client instead of a Python database
-driver so the project can track schema versions before choosing its final DB
-library.
-"""
+"""Apply SQL migrations through psql."""
 
 from __future__ import annotations
 
@@ -20,6 +15,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
+QUERY_DIR = PROJECT_ROOT / "db" / "queries"
 
 
 def load_config() -> dict:
@@ -34,18 +30,20 @@ def migration_version(path: Path) -> int:
     return int(match.group(1))
 
 
-def applied_versions(database_url: str, table: str) -> set[int]:
-    sql = (
-        f"CREATE TABLE IF NOT EXISTS {table} "
-        "(version integer PRIMARY KEY, name text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now()); "
-        f"SELECT version FROM {table} ORDER BY version;"
-    )
+def run_query_file(database_url: str, query_name: str, *, capture: bool = False) -> subprocess.CompletedProcess:
+    query_path = QUERY_DIR / query_name
     result = subprocess.run(
-        ["psql", database_url, "-At", "-c", sql],
+        ["psql", database_url, "-v", "ON_ERROR_STOP=1", "-At", "-f", str(query_path)],
         check=True,
         text=True,
-        capture_output=True,
+        capture_output=capture,
     )
+    return result
+
+
+def applied_versions(database_url: str) -> set[int]:
+    run_query_file(database_url, "schema_migrations_ensure.sql")
+    result = run_query_file(database_url, "schema_migrations_list.sql", capture=True)
     versions = set()
     for line in result.stdout.splitlines():
         line = line.strip()
@@ -63,7 +61,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Apply database migrations.")
     parser.add_argument("--database-url", default=os.environ.get("DATABASE_URL") or config.get("DATABASE_URL"))
     parser.add_argument("--migrations-dir", default=config.get("DB_MIGRATIONS_DIR", "db/migrations"))
-    parser.add_argument("--schema-table", default=config.get("DB_SCHEMA_VERSION_TABLE", "schema_migrations"))
     args = parser.parse_args()
 
     if not args.database_url:
@@ -72,7 +69,7 @@ def main() -> int:
 
     migrations_dir = PROJECT_ROOT / args.migrations_dir
     migrations = sorted(migrations_dir.glob("*.sql"), key=migration_version)
-    applied = applied_versions(args.database_url, args.schema_table)
+    applied = applied_versions(args.database_url)
 
     pending = [path for path in migrations if migration_version(path) not in applied]
     if not pending:

@@ -9,7 +9,7 @@ Local electronics-focused RAG for querying datasheets, electronics books, OCR ou
 - A sanitized example config at `config/config.example.yaml`.
 - FAISS-based local vector indexing.
 - Local manifest-based change detection for training files.
-- Database migration scaffolding under `db/migrations/`.
+- Database migrations under `db/migrations/` and named SQL query files under `db/queries/`.
 - Audit tools under `tools/`.
 
 ## What This Repo Does Not Contain
@@ -21,7 +21,7 @@ The following are intentionally ignored because this is planned as a public repo
 - `data/` generated FAISS indexes and pickle state
 - `extracted_images/` OCR sidecars
 - `logs/`, `cache/`, and local runtime output
-- `config/config.yaml` with local hosts, users, passwords, and database URLs
+- `config/config.yaml` with local hosts, passwords, and database URLs
 
 ## Setup
 
@@ -45,7 +45,7 @@ cd frontend
 npm install
 ```
 
-5. Edit `config/config.yaml` for local models, hosts, users, and training paths.
+5. Edit `config/config.yaml` for local models, hosts, database URL, and training paths.
 
 ## Running
 
@@ -94,12 +94,28 @@ The ingest manifest (`INGEST_MANIFEST_FILE`) records training-file size and mtim
 
 ## Database Migrations
 
-SQL migrations live in `db/migrations/` and are tracked by the `schema_migrations` table.
+Postgres is the canonical application store for users, settings, ingest metadata, source catalog data, and response-cache records. Generated FAISS/vector artifacts may still live on disk while indexing is being migrated.
+
+Schema changes are versioned as numbered SQL migrations in `db/migrations/` and tracked by the `schema_migrations` table. Once a migration has been applied in a shared database, add a new numbered migration instead of editing the old one.
 
 Apply migrations with:
 
 ```bash
 DATABASE_URL="postgresql://user:password@localhost:5432/circuitshelf" python tools/db_migrate.py
+```
+
+Application SQL queries live as named files in `db/queries/`; Python code loads those files instead of embedding SQL strings inline.
+
+Create or update login users with:
+
+```bash
+python tools/db_user.py upsert hellweek --admin
+```
+
+List DB-backed users with:
+
+```bash
+python tools/db_user.py list
 ```
 
 Do not commit real database credentials.

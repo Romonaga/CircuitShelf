@@ -26,9 +26,6 @@ APP_HOST: 127.0.0.1
 APP_PORT: 1964
 SITE_NAME: "CircuitShelf"
 
-# Replace with your own bcrypt hashes. Keep config/config.yaml private.
-USERS: {}
-
 EMBED_MODEL_NAME: "sentence-transformers/all-mpnet-base-v2"
 CROSS_ENCODER_MODEL: "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
