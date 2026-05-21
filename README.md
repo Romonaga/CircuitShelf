@@ -195,6 +195,8 @@ The `documents` table records training-file size, mtime, and optional hashes. St
 
 Admins can upload supported documents from the Documents page. Uploaded files are written to `TRAINING_DIR` and an incremental index check is started automatically.
 
+New and changed documents are held in `needs_review` status. They are chunked and embedded so an admin can inspect them, but retrieval ignores them until they are approved from the Review page. Removing a document from Review deletes its catalog rows and the uploaded training file.
+
 Relevant settings:
 
 ```yaml

@@ -27,6 +27,7 @@ export function AppShell({
   const nav: Array<{ id: View; label: string }> = [
     { id: "ask", label: "Ask" },
     { id: "documents", label: "Documents" },
+    ...(isAdmin ? [{ id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` }] : []),
     { id: "trace", label: "Trace" },
     { id: "status", label: "Status" },
     ...(isAdmin ? [{ id: "settings" as View, label: "Settings" }] : [])

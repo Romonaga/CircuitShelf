@@ -3,5 +3,5 @@ SELECT source_path AS path,
        mtime_ns,
        sha256
 FROM documents
-WHERE status = 'indexed'
+WHERE status IN ('indexed', 'needs_review')
 ORDER BY source_path;

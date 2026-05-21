@@ -54,7 +54,7 @@ export function DocumentsView({ isAdmin, onStatusChange }: { isAdmin: boolean; o
     setMessage("");
     try {
       const response = await uploadDocument(uploadFile, overwrite);
-      setMessage(`${response.filename} uploaded. Incremental indexing ${response.indexing.started ? "started" : "is already running"}.`);
+      setMessage(`${response.filename} uploaded. Incremental indexing ${response.indexing.started ? "started" : "is already running"}; it will appear in Review before retrieval.`);
       setUploadFile(null);
       onStatusChange();
     } catch (err) {

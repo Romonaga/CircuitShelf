@@ -79,6 +79,11 @@ class VectorStore:
             "embeddings": int(row["embeddings"] or 0),
         }
 
+    def pending_review_count(self) -> int:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("review_pending_count.sql")).fetchone()
+        return int(row["pending"] or 0)
+
     def catalog_fingerprint(self) -> str:
         with self.database.connection() as conn:
             row = conn.execute(load_query("vector_catalog_fingerprint.sql")).fetchone()
@@ -105,13 +110,14 @@ class VectorStore:
         sources: list[str],
         metadata: list[dict],
         embeddings: np.ndarray,
+        status: str = "indexed",
     ) -> None:
         if len(chunks) != len(sources) or len(chunks) != len(metadata) or len(chunks) != len(embeddings):
             raise ValueError("Chunk, source, metadata, and embedding counts must match before DB persistence.")
 
         with self.database.connection() as conn:
             conn.execute(load_query("vector_catalog_clear.sql"))
-            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings)
+            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings, status)
 
     def replace_sources(
         self,
@@ -122,6 +128,7 @@ class VectorStore:
         sources: list[str],
         metadata: list[dict],
         embeddings: np.ndarray,
+        status: str = "needs_review",
     ) -> None:
         if len(chunks) != len(sources) or len(chunks) != len(metadata) or len(chunks) != len(embeddings):
             raise ValueError("Chunk, source, metadata, and embedding counts must match before DB persistence.")
@@ -129,7 +136,7 @@ class VectorStore:
         with self.database.connection() as conn:
             if delete_rel_paths:
                 conn.execute(load_query("vector_document_delete_by_sources.sql"), (delete_rel_paths,))
-            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings)
+            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings, status)
 
     def _insert_catalog_rows(
         self,
@@ -139,6 +146,7 @@ class VectorStore:
         sources: list[str],
         metadata: list[dict],
         embeddings: np.ndarray,
+        status: str,
     ) -> None:
         document_ids: dict[str, str] = {}
         page_ids: dict[tuple[str, int], str] = {}
@@ -158,6 +166,7 @@ class VectorStore:
                         record.size,
                         record.mtime_ns,
                         record.sha256,
+                        status,
                     ),
                 ).fetchone()["id"]
                 document_ids[rel_path] = document_id
@@ -254,6 +263,26 @@ class VectorStore:
                 "source_image_id": row["source_image_key"],
             })
         return results
+
+    def list_review_documents(self) -> list[dict]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("review_documents_list.sql")).fetchall()
+        return [dict(row) for row in rows]
+
+    def review_document_chunks(self, source_path: str, *, limit: int = 50) -> list[dict]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("review_document_chunks.sql"), (source_path, int(limit))).fetchall()
+        return [dict(row) for row in rows]
+
+    def set_document_status(self, source_path: str, status: str, reviewed_by: str | None) -> dict | None:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("review_document_status_update.sql"), (status, reviewed_by, source_path)).fetchone()
+        return dict(row) if row else None
+
+    def delete_document(self, source_path: str) -> dict | None:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("review_document_delete.sql"), (source_path,)).fetchone()
+        return dict(row) if row else None
 
     def rel_path_for_source(self, source: str, meta: dict | None = None) -> str:
         meta = meta or {}

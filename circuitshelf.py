@@ -389,6 +389,21 @@ def load_db_image_state():
     return builder.build_image_index()
 
 
+def refresh_active_state_from_db():
+    chunks, sources, metadata, embeddings = vector_store.load_state_payload()
+    state.replace_catalog(
+        chunks=chunks,
+        sources=sources,
+        metadata=metadata,
+        embeddings=embeddings,
+        image_store={},
+        image_captions={},
+        image_page_text={},
+        image_id_list=[],
+    )
+    return load_db_image_state()
+
+
 def persist_db_image_state(file_records, target_state=None, rel_paths=None):
     target_state = target_state or state
     image_text = target_state.get_image_page_text()
@@ -908,32 +923,6 @@ def load_documents_parallel(
 
 
 
-def merge_ingested_state(ingested_state):
-    chunks = state.get_chunks() + ingested_state.get_chunks()
-    sources = state.get_sources() + ingested_state.get_sources()
-    metadata = state.get_metadata() + ingested_state.get_metadata()
-    embeddings = state.get_embeddings() + ingested_state.get_embeddings()
-
-    image_data = state.get_image_store()
-    image_data.update(ingested_state.get_image_store())
-    captions = state.get_image_captions()
-    captions.update(ingested_state.get_image_captions())
-    page_text = state.get_image_page_text()
-    page_text.update(ingested_state.get_image_page_text())
-    image_ids = list(OrderedDict.fromkeys(state.get_image_id_list() + ingested_state.get_image_id_list()))
-
-    state.replace_catalog(
-        chunks=chunks,
-        sources=sources,
-        metadata=metadata,
-        embeddings=embeddings,
-        image_store=image_data,
-        image_captions=captions,
-        image_page_text=page_text,
-        image_id_list=image_ids,
-    )
-
-
 def run_incremental_ingest(changes, current_manifest):
     delete_rel_paths = changes.changed_or_removed
     changed_rel_paths = changes.changed_or_added
@@ -971,12 +960,43 @@ def run_incremental_ingest(changes, current_manifest):
             sources=ingested_state.get_sources(),
             metadata=ingested_state.get_metadata(),
             embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
+            status="needs_review",
         )
         persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=changed_rel_paths)
-        merge_ingested_state(ingested_state)
     elif delete_rel_paths:
         vector_store.delete_sources(delete_rel_paths)
 
+    return build_result
+
+
+def reindex_review_source(source):
+    manifest = build_ingest_manifest()
+    current_manifest = manifest.scan()
+    if source not in current_manifest:
+        raise FileNotFoundError(f"Training file not found: {source}")
+
+    prune_training_files_from_state([source])
+    ingested_state, ingest_token_utils, ingest_chunker = build_ingest_context()
+    load_documents_parallel(
+        folder=TRAINING_DIR,
+        files_selected=[source],
+        clear_existing=True,
+        target_state=ingested_state,
+        target_chunker=ingest_chunker,
+        target_token_utils=ingest_token_utils,
+    )
+    builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
+    build_result = builder.build()
+    vector_store.replace_sources(
+        delete_rel_paths=[source],
+        file_records=current_manifest,
+        chunks=ingested_state.get_chunks(),
+        sources=ingested_state.get_sources(),
+        metadata=ingested_state.get_metadata(),
+        embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
+        status="needs_review",
+    )
+    persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=[source])
     return build_result
 
 
@@ -1013,9 +1033,11 @@ def check_for_training_changes(reason="watch"):
             f"✅ Incremental index check completed in {duration:.2f} sec. "
             f"Chunks: {len(state.get_chunks())}, embeddings: {len(state.get_embeddings())}"
         )
-        result = "indexed"
+        result = "updated"
         if build_result:
-            result = f"indexed {build_result.chunks} changed chunks"
+            result = f"review_ready {build_result.chunks} changed chunks"
+        elif changes.removed and not changes.changed_or_added:
+            result = f"removed {len(changes.removed)} documents"
         return set_index_status(
             running=False,
             lastFinishedAt=utc_now_iso(),
@@ -1784,6 +1806,7 @@ def build_runtime_status():
         "vectorEmbeddings": vector_counts.get("embeddings", 0),
         "imageIds": len(image_ids),
         "imageEmbeddings": image_counts.get("embeddings", 0),
+        "pendingReview": vector_store.pending_review_count(),
         "cacheStats": get_response_cache().stats(),
         "ingest": dict(index_status),
     }
@@ -1854,6 +1877,39 @@ def safe_upload_filename(filename: str) -> str:
     return name
 
 
+def review_document_payload(row):
+    return {
+        "source": row["source_path"],
+        "displayName": row["display_name"],
+        "status": row["status"],
+        "sizeBytes": int(row["size_bytes"] or 0),
+        "fileExtension": row["file_extension"],
+        "chunkCount": int(row["chunk_count"] or 0),
+        "imageCount": int(row["image_count"] or 0),
+        "avgQuality": float(row["avg_quality"] or 0.0),
+        "lowQualityCount": int(row["low_quality_count"] or 0),
+        "lastIngestedAt": row["last_ingested_at"].isoformat() if row["last_ingested_at"] else None,
+        "lastError": row["last_error"],
+        "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
+    }
+
+
+def review_chunk_payload(row):
+    return {
+        "index": int(row["chunk_index"]),
+        "section": row["section_title"] or "Unknown",
+        "category": row["category"] or "Uncategorized",
+        "page": row["page_number"],
+        "tokens": int(row["token_count"] or 0),
+        "quality": float(row["quality_score"] or 0.0),
+        "isOcr": bool(row["is_ocr"]),
+        "hasMath": bool(row["has_math"]),
+        "sourceImageId": row["source_image_key"],
+        "qualityFlags": list(row["quality_flags"] or []),
+        "preview": row["chunk_text"][:700],
+    }
+
+
 @app.post("/api/login")
 async def login(req: Request):
     data = await req.json()
@@ -1922,6 +1978,80 @@ async def index_check(req: Request):
         return error
     result = start_index_check("manual")
     return {"ok": True, **result}
+
+
+@app.get("/api/review/documents")
+async def review_documents(req: Request):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+    return {"documents": [review_document_payload(row) for row in vector_store.list_review_documents()]}
+
+
+@app.get("/api/review/document")
+async def review_document(req: Request, source: str, limit: int = 50):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+    rows = vector_store.review_document_chunks(source, limit=max(1, min(int(limit), 200)))
+    if not rows:
+        return {"document": source, "chunks": []}
+    return {
+        "document": source,
+        "displayName": rows[0]["display_name"],
+        "status": rows[0]["status"],
+        "chunks": [review_chunk_payload(row) for row in rows],
+    }
+
+
+@app.post("/api/review/document/approve")
+async def review_document_approve(req: Request):
+    user, error = require_admin_user(req)
+    if error:
+        return error
+    data = await req.json()
+    source = data.get("source", "")
+    row = vector_store.set_document_status(source, "indexed", user.username)
+    if not row:
+        return JSONResponse({"error": "Document not found."}, status_code=404)
+    image_count = refresh_active_state_from_db()
+    return {"ok": True, "document": dict(row), "imageCount": image_count}
+
+
+@app.post("/api/review/document/reindex")
+async def review_document_reindex(req: Request):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+    data = await req.json()
+    source = data.get("source", "")
+    try:
+        result = reindex_review_source(source)
+    except FileNotFoundError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"ok": True, "chunks": result.chunks, "droppedChunks": result.dropped_chunks, "images": result.images}
+
+
+@app.post("/api/review/document/remove")
+async def review_document_remove(req: Request):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+    data = await req.json()
+    source = data.get("source", "")
+    delete_file = bool(data.get("deleteFile", True))
+    row = vector_store.delete_document(source)
+    if not row:
+        return JSONResponse({"error": "Document not found."}, status_code=404)
+    prune_training_files_from_state([source])
+    if delete_file:
+        target = os.path.abspath(os.path.join(TRAINING_DIR, source))
+        training_root = os.path.abspath(TRAINING_DIR)
+        if target.startswith(training_root + os.sep) and os.path.exists(target):
+            os.remove(target)
+    return {"ok": True, "document": dict(row)}
 
 
 @app.post("/api/query")

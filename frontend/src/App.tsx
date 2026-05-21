@@ -3,6 +3,7 @@ import { AppShell } from "./components/AppShell";
 import { AskView } from "./components/AskView";
 import { DocumentsView } from "./components/DocumentsView";
 import { LoginView } from "./components/LoginView";
+import { ReviewView } from "./components/ReviewView";
 import { StatusView } from "./components/StatusView";
 import { SettingsView } from "./components/SettingsView";
 import { TraceView } from "./components/TraceView";
@@ -50,6 +51,11 @@ export default function App() {
       <div hidden={activeView !== "documents"}>
         <DocumentsView isAdmin={Boolean(user?.isAdmin)} onStatusChange={refreshStatus} />
       </div>
+      {user?.isAdmin ? (
+        <div hidden={activeView !== "review"}>
+          <ReviewView onStatusChange={refreshStatus} />
+        </div>
+      ) : null}
       <div hidden={activeView !== "trace"}>
         <TraceView />
       </div>

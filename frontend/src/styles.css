@@ -361,6 +361,18 @@ nav {
   background: var(--panel-soft);
 }
 
+.danger-button {
+  border-color: #fecaca;
+  color: #991b1b;
+  background: #fff5f5;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .sidebar .ghost-button {
   color: #f6fbff;
   border-color: rgba(188, 200, 216, 0.34);
@@ -838,6 +850,11 @@ nav {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
+}
+
+.warning-row {
+  border-color: #fed7aa;
+  background: #fff7ed;
 }
 
 .chunk-meta {

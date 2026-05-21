@@ -5,6 +5,8 @@ import type {
   QueryRequest,
   QueryResponse,
   AppSetting,
+  ReviewChunk,
+  ReviewDocument,
   StatusPayload
 } from "./types";
 
@@ -87,6 +89,37 @@ export function uploadDocument(file: File, overwrite: boolean): Promise<{ ok: bo
       headers: {}
     }
   );
+}
+
+export function getReviewDocuments(): Promise<{ documents: ReviewDocument[] }> {
+  return requestJson<{ documents: ReviewDocument[] }>("/api/review/documents");
+}
+
+export function getReviewDocument(source: string): Promise<{ document: string; displayName?: string; status?: string; chunks: ReviewChunk[] }> {
+  return requestJson<{ document: string; displayName?: string; status?: string; chunks: ReviewChunk[] }>(
+    `/api/review/document?source=${encodeURIComponent(source)}`
+  );
+}
+
+export function approveReviewDocument(source: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/api/review/document/approve", {
+    method: "POST",
+    body: JSON.stringify({ source })
+  });
+}
+
+export function reindexReviewDocument(source: string): Promise<{ ok: boolean; chunks: number; droppedChunks: number; images: number }> {
+  return requestJson<{ ok: boolean; chunks: number; droppedChunks: number; images: number }>("/api/review/document/reindex", {
+    method: "POST",
+    body: JSON.stringify({ source })
+  });
+}
+
+export function removeReviewDocument(source: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/api/review/document/remove", {
+    method: "POST",
+    body: JSON.stringify({ source, deleteFile: true })
+  });
 }
 
 export function triggerIndexCheck(): Promise<{ ok: boolean; started: boolean; status: unknown }> {

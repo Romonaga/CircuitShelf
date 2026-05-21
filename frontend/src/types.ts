@@ -1,5 +1,5 @@
 export type RetrievalStrategy = "Vector only" | "Vector + CrossEncoder" | string;
-export type View = "ask" | "documents" | "trace" | "status" | "settings";
+export type View = "ask" | "documents" | "review" | "trace" | "status" | "settings";
 
 export interface SessionUser {
   username: string;
@@ -87,6 +87,7 @@ export interface StatusPayload {
   vectorEmbeddings?: number;
   imageIds: number;
   imageEmbeddings: number;
+  pendingReview?: number;
   cacheStats: unknown;
   ingest?: IngestStatus;
 }
@@ -121,4 +122,33 @@ export interface IngestStatus {
     removedFiles?: string[];
   } | null;
   nextCheckAt?: string | null;
+}
+
+export interface ReviewDocument {
+  source: string;
+  displayName: string;
+  status: string;
+  sizeBytes: number;
+  fileExtension: string;
+  chunkCount: number;
+  imageCount: number;
+  avgQuality: number;
+  lowQualityCount: number;
+  lastIngestedAt?: string | null;
+  lastError?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ReviewChunk {
+  index: number;
+  section: string;
+  category: string;
+  page?: number | string | null;
+  tokens: number;
+  quality: number;
+  isOcr: boolean;
+  hasMath: boolean;
+  sourceImageId?: string | null;
+  qualityFlags: string[];
+  preview: string;
 }
