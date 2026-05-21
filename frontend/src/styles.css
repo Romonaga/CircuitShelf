@@ -921,6 +921,7 @@ nav {
 .ingest-status-heading p,
 .ingest-status-grid,
 .ingest-change-list,
+.ingest-current-files,
 .ingest-error {
   color: var(--muted);
   font-size: 0.82rem;
@@ -932,9 +933,28 @@ nav {
 }
 
 .ingest-status-grid,
-.ingest-change-list {
+.ingest-change-list,
+.ingest-current-files {
   display: grid;
   gap: 5px;
+}
+
+.ingest-current-files {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ingest-current-files strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.ingest-current-files span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ingest-change-list {

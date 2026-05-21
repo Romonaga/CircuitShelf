@@ -132,6 +132,10 @@ export interface AppSetting {
 export interface IngestStatus {
   enabled: boolean;
   running: boolean;
+  stage?: string | null;
+  currentFiles?: string[];
+  processedFiles?: number;
+  totalFiles?: number;
   lastStartedAt?: string | null;
   lastFinishedAt?: string | null;
   lastReason?: string | null;

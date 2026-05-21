@@ -153,6 +153,8 @@ if os.name == 'nt':
 SAVE_EXTRACTED_IMAGES = config.get("SAVE_EXTRACTED_IMAGES", False)
 INDEX_IMAGE_OCR_AS_TEXT = config.get("INDEX_IMAGE_OCR_AS_TEXT", False)
 OCR_INDEX_TEXT_MIN_CHARS = config.get("OCR_INDEX_TEXT_MIN_CHARS", 80)
+USE_MULTITHREAD_OCR = config.get("USE_MULTITHREAD_OCR", False)
+MAX_OCR_THREADS = config.get("MAX_OCR_THREADS", 1)
 POST_TIMEOUT = config.get("POST_TIMEOUT", 60)
 REACT_DIST_DIR = config.get("REACT_DIST_DIR", "frontend/dist")
 QUERY_RETRIES = config.get("QUERY_RETRIES", 3)
@@ -226,11 +228,16 @@ embedder = SentenceTransformer(EMBED_MODEL_NAME)
 reranker_engine = Reranker(config, state, chunker, trace_logger)
 query_timings = deque(maxlen=100)
 INDEX_JOB_LOCK = threading.Lock()
+INDEX_PROGRESS_LOCK = threading.Lock()
 INGEST_WATCH_STOP = threading.Event()
 INGEST_WATCH_THREAD = None
 index_status = {
     "enabled": bool(config.get("INGEST_WATCH_ENABLED", True)),
     "running": False,
+    "stage": "idle",
+    "currentFiles": [],
+    "processedFiles": 0,
+    "totalFiles": 0,
     "lastStartedAt": None,
     "lastFinishedAt": None,
     "lastReason": None,
@@ -267,8 +274,25 @@ def utc_now_iso():
 
 
 def set_index_status(**updates):
-    index_status.update(updates)
-    return dict(index_status)
+    with INDEX_PROGRESS_LOCK:
+        index_status.update(updates)
+        return dict(index_status)
+
+
+def update_index_progress(*, stage=None, current_file=None, finished_file=None, total_files=None):
+    with INDEX_PROGRESS_LOCK:
+        active_files = list(index_status.get("currentFiles") or [])
+        if total_files is not None:
+            index_status["totalFiles"] = int(total_files)
+        if stage is not None:
+            index_status["stage"] = stage
+        if current_file and current_file not in active_files:
+            active_files.append(current_file)
+        if finished_file:
+            active_files = [name for name in active_files if name != finished_file]
+            index_status["processedFiles"] = int(index_status.get("processedFiles") or 0) + 1
+        index_status["currentFiles"] = active_files[:10]
+        return dict(index_status)
 
 
 def file_changes_payload(changes):
@@ -478,6 +502,53 @@ def image_bytes_to_png_bytes(image_bytes, image_id="image"):
         trace_logger.warning(f"⚠️ Could not normalize {image_id} to PNG for web display: {e}")
         return image_bytes
 
+
+def get_ocr_worker_count(item_count):
+    if not USE_MULTITHREAD_OCR or item_count <= 1:
+        return 1
+    configured_threads = max(1, int(MAX_OCR_THREADS or 1))
+    cpu_threads = max(1, multiprocessing.cpu_count())
+    return max(1, min(configured_threads, cpu_threads, item_count))
+
+
+def ocr_pdf_image_job(job):
+    order, page_num, img_index, image_bytes, img_name = job
+    ocr_result = ocr_image_bytes(image_bytes, img_name)
+    web_image_bytes = image_bytes_to_png_bytes(image_bytes, img_name) if ocr_result["accepted"] else None
+    return {
+        "order": order,
+        "page_num": page_num,
+        "img_index": img_index,
+        "image_bytes": image_bytes,
+        "img_name": img_name,
+        "ocr_result": ocr_result,
+        "web_image_bytes": web_image_bytes,
+    }
+
+
+def run_pdf_image_ocr_jobs(image_jobs):
+    if not image_jobs:
+        return []
+
+    worker_count = get_ocr_worker_count(len(image_jobs))
+    if worker_count == 1:
+        return [ocr_pdf_image_job(job) for job in image_jobs]
+
+    trace_logger.info(f"🧵 OCR processing {len(image_jobs)} PDF images with {worker_count} workers")
+    results = []
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = {executor.submit(ocr_pdf_image_job, job): job for job in image_jobs}
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception as ex:
+                job = futures[future]
+                trace_logger.warning(f"❌ OCR worker failed for {job[4]}: {ex}")
+
+    results.sort(key=lambda item: item["order"])
+    return results
+
+
 @trace_timer("save_image_text")
 def save_image_text(image_data, image_text, base_name, output_dir, img_extension="png", txt_extension="txt") -> str:
    
@@ -512,14 +583,16 @@ def save_image_text(image_data, image_text, base_name, output_dir, img_extension
     return img_file_name
 
 @trace_timer("load_pdf_text")
-def load_pdf_text(path):
+def load_pdf_text(path, target_state=None):
     """
     Extract text and images from a PDF file, perform OCR on images, and save images to a folder.
     """
+    target_state = target_state or state
     trace_logger.info(f"📅 Loading PDF: {path}")
     pdf = fitz.open(path)
     page_texts = []
     extra_chunks, extra_sources, extra_meta = [], [], []
+    image_jobs = []
 
     for page_num in range(len(pdf)):
         page = pdf[page_num]
@@ -532,46 +605,50 @@ def load_pdf_text(path):
                 base_image = pdf.extract_image(xref)
                 image_bytes = base_image["image"]
                 img_name = f"{os.path.basename(path)}_page{page_num+1}_img{img_index+1}"
-
-                ocr_result = ocr_image_bytes(image_bytes, img_name)
-                if not ocr_result["accepted"]:
-                    log_fn = trace_logger.debug if ocr_result["skipped"] else trace_logger.warning
-                    score = ocr_result["score"]
-                    reason = ocr_result["reason"]
-                    log_fn(f"⚠️ Dropped {img_name} — OCR score: {score:.2f}, reason: {reason}")
-                    continue
-
-                ocr_text = ocr_result["text"]
-                score = ocr_result["score"]
-                confidence = ocr_result["confidence"]
-                web_image_bytes = image_bytes_to_png_bytes(image_bytes, img_name)
-
-                trace_logger.info(f"🧠 OCR accepted for {img_name}: {len(ocr_text)} chars | score: {score:.2f}{format_confidence(confidence)}")
-
-                state.add_image_store(img_name, base64.b64encode(web_image_bytes).decode("utf-8"))
-                state.add_image_caption(img_name, f"Image from {os.path.basename(path)}, page {page_num+1}")
-                
-                # Save the image using the save_image helper
-                if SAVE_EXTRACTED_IMAGES:
-                    _ = save_image_text(web_image_bytes, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
-
-                state.add_image_page_text(img_name, ocr_text)
-                if INDEX_IMAGE_OCR_AS_TEXT and len(ocr_text) >= OCR_INDEX_TEXT_MIN_CHARS:
-                    extra_chunks.append(ocr_text)
-                    extra_sources.append(path)
-                    ocr_meta = chunker.make_chunk_meta(ocr_text, path, "Image OCR", "ocr")
-                    ocr_meta.update({
-                        "page": page_num + 1,
-                        "parent_source": path,
-                        "source_image_id": img_name,
-                        "ocr_score": score,
-                        "ocr_confidence": confidence,
-                    })
-                    extra_meta.append(ocr_meta)
+                image_jobs.append((len(image_jobs), page_num, img_index, image_bytes, img_name))
 
             except Exception as ex:
                 trace_logger.warning(f"❌ Failed to process image on page {page_num+1}: {ex}")
                 continue
+
+    for result in run_pdf_image_ocr_jobs(image_jobs):
+        page_num = result["page_num"]
+        img_name = result["img_name"]
+        ocr_result = result["ocr_result"]
+        if not ocr_result["accepted"]:
+            log_fn = trace_logger.debug if ocr_result["skipped"] else trace_logger.warning
+            score = ocr_result["score"]
+            reason = ocr_result["reason"]
+            log_fn(f"⚠️ Dropped {img_name} — OCR score: {score:.2f}, reason: {reason}")
+            continue
+
+        ocr_text = ocr_result["text"]
+        score = ocr_result["score"]
+        confidence = ocr_result["confidence"]
+        web_image_bytes = result["web_image_bytes"]
+
+        trace_logger.info(f"🧠 OCR accepted for {img_name}: {len(ocr_text)} chars | score: {score:.2f}{format_confidence(confidence)}")
+
+        target_state.add_image_store(img_name, base64.b64encode(web_image_bytes).decode("utf-8"))
+        target_state.add_image_caption(img_name, f"Image from {os.path.basename(path)}, page {page_num+1}")
+
+        # Save the image using the save_image helper
+        if SAVE_EXTRACTED_IMAGES:
+            _ = save_image_text(web_image_bytes, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
+
+        target_state.add_image_page_text(img_name, ocr_text)
+        if INDEX_IMAGE_OCR_AS_TEXT and len(ocr_text) >= OCR_INDEX_TEXT_MIN_CHARS:
+            extra_chunks.append(ocr_text)
+            extra_sources.append(path)
+            ocr_meta = chunker.make_chunk_meta(ocr_text, path, "Image OCR", "ocr")
+            ocr_meta.update({
+                "page": page_num + 1,
+                "parent_source": path,
+                "source_image_id": img_name,
+                "ocr_score": score,
+                "ocr_confidence": confidence,
+            })
+            extra_meta.append(ocr_meta)
 
     return page_texts, extra_chunks, extra_sources, extra_meta
 
@@ -712,7 +789,7 @@ def process_docx_file(fpath, state, trace_logger, chunker, token_utils):
 
 @trace_timer("process_pdf_file")
 def process_pdf_file(fpath, state, trace_logger, chunker, token_utils):
-    page_texts, img_chunks, img_sources, img_meta = load_pdf_text(fpath)
+    page_texts, img_chunks, img_sources, img_meta = load_pdf_text(fpath, state)
     text = "\n\n".join(page_texts)
     density = token_utils.estimate_token_density(text)
     if density > 40:
@@ -851,6 +928,7 @@ def load_documents_parallel(
     target_state=None,
     target_chunker=None,
     target_token_utils=None,
+    progress_callback=None,
 ):
     target_state = target_state or state
     target_chunker = target_chunker or chunker
@@ -887,6 +965,8 @@ def load_documents_parallel(
             ]
 
     file_list.sort(key=extract_first_number)
+    if progress_callback:
+        progress_callback(stage="processing_documents", total_files=len(file_list))
     if clear_existing:
         target_state.clear_all()
 
@@ -898,6 +978,8 @@ def load_documents_parallel(
     def process_file(fname):
         fpath = fname if os.path.isabs(fname) else os.path.join(folder, fname)
         try:
+            if progress_callback:
+                progress_callback(stage="processing_documents", current_file=fname)
             thread_id = threading.get_ident()
             trace_logger.info(f"🛠️ Thread-{thread_id} started for {fname}")
             start = time.time()
@@ -909,6 +991,9 @@ def load_documents_parallel(
 
         except Exception as e:
             trace_logger.error(f"❌ Error processing {fname}: {e}")
+        finally:
+            if progress_callback:
+                progress_callback(stage="processing_documents", finished_file=fname)
 
     configured_workers = config.get("MAX_DOCUMENT_WORKERS", multiprocessing.cpu_count())
     max_workers = max(1, min(configured_workers, multiprocessing.cpu_count(), len(file_list)))
@@ -947,7 +1032,9 @@ def run_incremental_ingest(changes, current_manifest):
             target_state=ingested_state,
             target_chunker=ingest_chunker,
             target_token_utils=ingest_token_utils,
+            progress_callback=update_index_progress,
         )
+        update_index_progress(stage="embedding_chunks")
         builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
         try:
             build_result = builder.build()
@@ -965,6 +1052,7 @@ def run_incremental_ingest(changes, current_manifest):
             embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
             status="needs_review",
         )
+        update_index_progress(stage="persisting_images")
         persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=changed_rel_paths)
     elif delete_rel_paths:
         vector_store.delete_sources(delete_rel_paths)
@@ -987,7 +1075,9 @@ def reindex_review_source(source):
         target_state=ingested_state,
         target_chunker=ingest_chunker,
         target_token_utils=ingest_token_utils,
+        progress_callback=update_index_progress,
     )
+    update_index_progress(stage="embedding_chunks")
     builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
     build_result = builder.build()
     vector_store.replace_sources(
@@ -1010,6 +1100,10 @@ def check_for_training_changes(reason="watch"):
 
     set_index_status(
         running=True,
+        stage="scanning",
+        currentFiles=[],
+        processedFiles=0,
+        totalFiles=0,
         lastStartedAt=utc_now_iso(),
         lastReason=reason,
         lastError=None,
@@ -1025,11 +1119,21 @@ def check_for_training_changes(reason="watch"):
             trace_logger.info(f"✅ Index check found no training changes for {reason}.")
             return set_index_status(
                 running=False,
+                stage="idle",
+                currentFiles=[],
+                processedFiles=0,
+                totalFiles=0,
                 lastFinishedAt=utc_now_iso(),
                 lastResult="no_changes",
                 lastChanges=file_changes_payload(changes),
             )
 
+        set_index_status(
+            stage="processing_documents",
+            processedFiles=0,
+            totalFiles=len(changes.changed_or_added),
+            currentFiles=[],
+        )
         build_result = run_incremental_ingest(changes, current_manifest)
         duration = time.time() - start_time
         trace_logger.info(
@@ -1043,6 +1147,10 @@ def check_for_training_changes(reason="watch"):
             result = f"removed {len(changes.removed)} documents"
         return set_index_status(
             running=False,
+            stage="idle",
+            currentFiles=[],
+            processedFiles=len(changes.changed_or_added),
+            totalFiles=len(changes.changed_or_added),
             lastFinishedAt=utc_now_iso(),
             lastResult=result,
             lastChanges=file_changes_payload(changes),
@@ -1051,6 +1159,8 @@ def check_for_training_changes(reason="watch"):
         trace_logger.error(f"❌ Incremental index check failed for {reason}: {exc}")
         return set_index_status(
             running=False,
+            stage="failed",
+            currentFiles=[],
             lastFinishedAt=utc_now_iso(),
             lastResult="failed",
             lastError=str(exc),
