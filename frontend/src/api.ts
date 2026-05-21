@@ -15,13 +15,14 @@ const sessionStorageKey = "circuitshelf-session";
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const session = readSessionToken();
   const isFormData = init?.body instanceof FormData;
+  const { headers: initHeaders, ...requestInit } = init ?? {};
   const response = await fetch(path, {
+    ...requestInit,
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(session ? { Authorization: `Bearer ${session}` } : {}),
-      ...(init?.headers ?? {})
-    },
-    ...init
+      ...(initHeaders ?? {})
+    }
   });
 
   const raw = await response.text();
