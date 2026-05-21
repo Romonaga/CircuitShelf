@@ -111,66 +111,94 @@ class VectorStore:
 
         with self.database.connection() as conn:
             conn.execute(load_query("vector_catalog_clear.sql"))
+            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings)
 
-            document_ids: dict[str, str] = {}
-            page_ids: dict[tuple[str, int], str] = {}
-            next_chunk_index: dict[str, int] = {}
+    def replace_sources(
+        self,
+        *,
+        delete_rel_paths: list[str],
+        file_records: dict[str, FileRecord],
+        chunks: list[str],
+        sources: list[str],
+        metadata: list[dict],
+        embeddings: np.ndarray,
+    ) -> None:
+        if len(chunks) != len(sources) or len(chunks) != len(metadata) or len(chunks) != len(embeddings):
+            raise ValueError("Chunk, source, metadata, and embedding counts must match before DB persistence.")
 
-            for chunk, source, meta, embedding in zip(chunks, sources, metadata, embeddings):
-                rel_path = self.rel_path_for_source(source, meta)
-                record = file_records.get(rel_path) or self.record_from_source(rel_path)
-                document_id = document_ids.get(rel_path)
-                if not document_id:
-                    document_id = conn.execute(
-                        load_query("vector_document_upsert.sql"),
-                        (
-                            rel_path,
-                            os.path.basename(rel_path),
-                            Path(rel_path).suffix.lower(),
-                            record.size,
-                            record.mtime_ns,
-                            record.sha256,
-                        ),
-                    ).fetchone()["id"]
-                    document_ids[rel_path] = document_id
+        with self.database.connection() as conn:
+            if delete_rel_paths:
+                conn.execute(load_query("vector_document_delete_by_sources.sql"), (delete_rel_paths,))
+            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings)
 
-                page_number = self.page_number(meta)
-                page_id = None
-                if page_number is not None:
-                    page_key = (rel_path, page_number)
-                    page_id = page_ids.get(page_key)
-                    if not page_id:
-                        page_id = conn.execute(
-                            load_query("vector_page_upsert.sql"),
-                            (document_id, page_number),
-                        ).fetchone()["id"]
-                        page_ids[page_key] = page_id
+    def _insert_catalog_rows(
+        self,
+        conn,
+        file_records: dict[str, FileRecord],
+        chunks: list[str],
+        sources: list[str],
+        metadata: list[dict],
+        embeddings: np.ndarray,
+    ) -> None:
+        document_ids: dict[str, str] = {}
+        page_ids: dict[tuple[str, int], str] = {}
+        next_chunk_index: dict[str, int] = {}
 
-                chunk_index = next_chunk_index.get(rel_path, 0)
-                next_chunk_index[rel_path] = chunk_index + 1
-                meta["db_source_path"] = rel_path
-                meta["db_chunk_index"] = chunk_index
-                chunk_id = conn.execute(
-                    load_query("vector_chunk_insert.sql"),
+        for chunk, source, meta, embedding in zip(chunks, sources, metadata, embeddings):
+            rel_path = self.rel_path_for_source(source, meta)
+            record = file_records.get(rel_path) or self.record_from_source(rel_path)
+            document_id = document_ids.get(rel_path)
+            if not document_id:
+                document_id = conn.execute(
+                    load_query("vector_document_upsert.sql"),
                     (
-                        document_id,
-                        page_id,
-                        chunk_index,
-                        chunk,
-                        int(meta.get("token_count") or 0),
-                        meta.get("section") or "Unknown",
-                        meta.get("category") or "Uncategorized",
-                        float(meta.get("quality_score", 0.0) or 0.0),
-                        bool_from_meta(meta.get("chunk_type") == "ocr" or meta.get("is_ocr")),
-                        bool_from_meta(meta.get("has_math")),
-                        meta.get("source_image_id"),
-                        self.embedding_model,
-                        vector_to_sql(embedding),
+                        rel_path,
+                        os.path.basename(rel_path),
+                        Path(rel_path).suffix.lower(),
+                        record.size,
+                        record.mtime_ns,
+                        record.sha256,
                     ),
                 ).fetchone()["id"]
+                document_ids[rel_path] = document_id
 
-                for flag in meta.get("quality_flags") or []:
-                    conn.execute(load_query("vector_quality_flag_insert.sql"), (chunk_id, str(flag)))
+            page_number = self.page_number(meta)
+            page_id = None
+            if page_number is not None:
+                page_key = (rel_path, page_number)
+                page_id = page_ids.get(page_key)
+                if not page_id:
+                    page_id = conn.execute(
+                        load_query("vector_page_upsert.sql"),
+                        (document_id, page_number),
+                    ).fetchone()["id"]
+                    page_ids[page_key] = page_id
+
+            chunk_index = next_chunk_index.get(rel_path, 0)
+            next_chunk_index[rel_path] = chunk_index + 1
+            meta["db_source_path"] = rel_path
+            meta["db_chunk_index"] = chunk_index
+            chunk_id = conn.execute(
+                load_query("vector_chunk_insert.sql"),
+                (
+                    document_id,
+                    page_id,
+                    chunk_index,
+                    chunk,
+                    int(meta.get("token_count") or 0),
+                    meta.get("section") or "Unknown",
+                    meta.get("category") or "Uncategorized",
+                    float(meta.get("quality_score", 0.0) or 0.0),
+                    bool_from_meta(meta.get("chunk_type") == "ocr" or meta.get("is_ocr")),
+                    bool_from_meta(meta.get("has_math")),
+                    meta.get("source_image_id"),
+                    self.embedding_model,
+                    vector_to_sql(embedding),
+                ),
+            ).fetchone()["id"]
+
+            for flag in meta.get("quality_flags") or []:
+                conn.execute(load_query("vector_quality_flag_insert.sql"), (chunk_id, str(flag)))
 
     def load_state_payload(self) -> tuple[list[str], list[str], list[dict], list[np.ndarray]]:
         with self.database.connection() as conn:

@@ -14,6 +14,7 @@ import requests
 import time
 import base64
 import zipfile
+import uuid
 import fitz  # PyMuPDF
 import pytesseract
 import nltk
@@ -24,8 +25,10 @@ import threading
 import uvicorn
 import nltk
 from lxml import etree
-from fastapi import Request
+from datetime import datetime, timezone
+from fastapi import FastAPI, File, Query, Request, UploadFile
 from collections import deque, OrderedDict
+from contextlib import asynccontextmanager
 from docx import Document
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from io import BytesIO
@@ -33,7 +36,6 @@ from PIL import Image
 from nltk.tokenize import sent_tokenize
 from requests.exceptions import RequestException
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -220,6 +222,20 @@ embedder = SentenceTransformer(EMBED_MODEL_NAME)
 
 reranker_engine = Reranker(config, state, chunker, trace_logger)
 query_timings = deque(maxlen=100)
+INDEX_JOB_LOCK = threading.Lock()
+INGEST_WATCH_STOP = threading.Event()
+INGEST_WATCH_THREAD = None
+index_status = {
+    "enabled": bool(config.get("INGEST_WATCH_ENABLED", True)),
+    "running": False,
+    "lastStartedAt": None,
+    "lastFinishedAt": None,
+    "lastReason": None,
+    "lastResult": "idle",
+    "lastError": None,
+    "lastChanges": None,
+    "nextCheckAt": None,
+}
 
 
 def supported_training_extensions():
@@ -241,6 +257,41 @@ def build_ingest_manifest():
         excluded_dirs=config.get("TRAINING_EXCLUDE_DIRS", []),
         hash_files=config.get("INGEST_HASH_FILES", False),
     )
+
+
+def utc_now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def set_index_status(**updates):
+    index_status.update(updates)
+    return dict(index_status)
+
+
+def file_changes_payload(changes):
+    if not changes:
+        return None
+    return {
+        "added": len(changes.added),
+        "modified": len(changes.modified),
+        "removed": len(changes.removed),
+        "unchanged": len(changes.unchanged),
+        "addedFiles": changes.added[:20],
+        "modifiedFiles": changes.modified[:20],
+        "removedFiles": changes.removed[:20],
+    }
+
+
+def build_ingest_context():
+    ingest_state = StateManager(use_lock=True, cache_capacity=0, trace_logger=trace_logger)
+    ingest_token_utils = TokenUtils(state=ingest_state, trace_logger=trace_logger)
+    ingest_chunker = ChunkingUtils(
+        state=ingest_state,
+        token_utils=ingest_token_utils,
+        config=config,
+        trace_logger=trace_logger,
+    )
+    return ingest_state, ingest_token_utils, ingest_chunker
 
 
 def source_matches_training_file(candidate, rel_path):
@@ -272,8 +323,10 @@ def prune_training_files_from_state(rel_paths):
         return any(source_matches_training_file(candidate, rel_path) for rel_path in rel_paths)
 
     kept_chunks, kept_sources, kept_metadata = [], [], []
+    kept_embeddings = []
+    embeddings = state.get_embeddings()
     removed_chunks = 0
-    for chunk, source, meta in zip(state.get_chunks(), state.get_sources(), state.get_metadata()):
+    for idx, (chunk, source, meta) in enumerate(zip(state.get_chunks(), state.get_sources(), state.get_metadata())):
         meta = meta or {}
         candidates = [
             source,
@@ -287,6 +340,8 @@ def prune_training_files_from_state(rel_paths):
         kept_chunks.append(chunk)
         kept_sources.append(source)
         kept_metadata.append(meta)
+        if idx < len(embeddings):
+            kept_embeddings.append(embeddings[idx])
 
     image_store = {
         key: value
@@ -303,16 +358,21 @@ def prune_training_files_from_state(rel_paths):
         for key, value in state.get_image_page_text().items()
         if not matches_any(key)
     }
+    image_id_list = [
+        img_id for img_id in state.get_image_id_list()
+        if not matches_any(img_id)
+    ]
 
-    state.set_chunks(kept_chunks)
-    state.set_sources(kept_sources)
-    state.set_metadata(kept_metadata)
-    state.set_embeddings([])
-    state.set_index(None)
-    state.set_image_store(image_store)
-    state.set_image_captions(image_captions)
-    state.set_image_page_text(image_page_text)
-    state.set_image_id_list([])
+    state.replace_catalog(
+        chunks=kept_chunks,
+        sources=kept_sources,
+        metadata=kept_metadata,
+        embeddings=kept_embeddings,
+        image_store=image_store,
+        image_captions=image_captions,
+        image_page_text=image_page_text,
+        image_id_list=image_id_list,
+    )
 
     trace_logger.info(
         f"🧹 Pruned {removed_chunks} chunks and removed OCR/image state for "
@@ -329,9 +389,10 @@ def load_db_image_state():
     return builder.build_image_index()
 
 
-def persist_db_image_state(file_records):
-    image_text = state.get_image_page_text()
-    image_ids = state.get_image_id_list()
+def persist_db_image_state(file_records, target_state=None, rel_paths=None):
+    target_state = target_state or state
+    image_text = target_state.get_image_page_text()
+    image_ids = target_state.get_image_id_list()
     image_embeddings = {}
     if image_ids:
         encoded = embedder.encode(
@@ -341,15 +402,19 @@ def persist_db_image_state(file_records):
         ).astype("float32")
         image_embeddings = {key: encoded[idx] for idx, key in enumerate(image_ids)}
 
-    image_store.replace_catalog(
-        file_records=file_records,
-        image_store=state.get_image_store(),
-        image_captions=state.get_image_captions(),
-        image_page_text=state.get_image_page_text(),
-        image_embeddings=image_embeddings,
-        embedding_model=EMBED_MODEL_NAME,
-        metadata=state.get_metadata(),
-    )
+    payload = {
+        "file_records": file_records,
+        "image_store": target_state.get_image_store(),
+        "image_captions": target_state.get_image_captions(),
+        "image_page_text": target_state.get_image_page_text(),
+        "image_embeddings": image_embeddings,
+        "embedding_model": EMBED_MODEL_NAME,
+        "metadata": target_state.get_metadata(),
+    }
+    if rel_paths is None:
+        image_store.replace_catalog(**payload)
+    else:
+        image_store.upsert_sources(**payload, rel_paths=set(rel_paths))
 
 
 def ocr_image_bytes(image_bytes, image_id):
@@ -761,7 +826,17 @@ def process_file_by_type(fpath, state, trace_logger, chunker, token_utils):
 
 
 @trace_timer("load_documents_parallel")
-def load_documents_parallel(folder, files_selected, clear_existing=True):
+def load_documents_parallel(
+    folder,
+    files_selected,
+    clear_existing=True,
+    target_state=None,
+    target_chunker=None,
+    target_token_utils=None,
+):
+    target_state = target_state or state
+    target_chunker = target_chunker or chunker
+    target_token_utils = target_token_utils or token_utils
     trace_logger.info(f"⚡ Starting threaded document loading from '{folder}'")
     
     if not os.path.exists(folder):
@@ -795,7 +870,7 @@ def load_documents_parallel(folder, files_selected, clear_existing=True):
 
     file_list.sort(key=extract_first_number)
     if clear_existing:
-        state.clear_all()
+        target_state.clear_all()
 
     if not file_list:
         trace_logger.warning(f"⚠️ No supported documents found in '{folder}'.")
@@ -809,7 +884,7 @@ def load_documents_parallel(folder, files_selected, clear_existing=True):
             trace_logger.info(f"🛠️ Thread-{thread_id} started for {fname}")
             start = time.time()
 
-            process_file_by_type(fpath, state, trace_logger, chunker, token_utils)
+            process_file_by_type(fpath, target_state, trace_logger, target_chunker, target_token_utils)
 
             elapsed = time.time() - start
             trace_logger.info(f"✅ Thread-{thread_id} finished {fname} in {elapsed:.2f}s")
@@ -825,12 +900,178 @@ def load_documents_parallel(folder, files_selected, clear_existing=True):
             future.result()
 
     if config.get("ENABLE_TOKEN_NORMALIZATION", False):
-        token_utils.normalize_token_distribution()
+        target_token_utils.normalize_token_distribution()
     trace_logger.info(
-        f"🚀 Finished loading. {len(state.get_chunks())} chunks, "
-        f"{len(state.get_image_page_text())} accepted image OCR texts."
+        f"🚀 Finished loading. {len(target_state.get_chunks())} chunks, "
+        f"{len(target_state.get_image_page_text())} accepted image OCR texts."
     )
 
+
+
+def merge_ingested_state(ingested_state):
+    chunks = state.get_chunks() + ingested_state.get_chunks()
+    sources = state.get_sources() + ingested_state.get_sources()
+    metadata = state.get_metadata() + ingested_state.get_metadata()
+    embeddings = state.get_embeddings() + ingested_state.get_embeddings()
+
+    image_data = state.get_image_store()
+    image_data.update(ingested_state.get_image_store())
+    captions = state.get_image_captions()
+    captions.update(ingested_state.get_image_captions())
+    page_text = state.get_image_page_text()
+    page_text.update(ingested_state.get_image_page_text())
+    image_ids = list(OrderedDict.fromkeys(state.get_image_id_list() + ingested_state.get_image_id_list()))
+
+    state.replace_catalog(
+        chunks=chunks,
+        sources=sources,
+        metadata=metadata,
+        embeddings=embeddings,
+        image_store=image_data,
+        image_captions=captions,
+        image_page_text=page_text,
+        image_id_list=image_ids,
+    )
+
+
+def run_incremental_ingest(changes, current_manifest):
+    delete_rel_paths = changes.changed_or_removed
+    changed_rel_paths = changes.changed_or_added
+
+    trace_logger.info(
+        f"🔁 Incremental ingest. Added: {len(changes.added)}, modified: {len(changes.modified)}, "
+        f"removed: {len(changes.removed)}"
+    )
+    prune_training_files_from_state(delete_rel_paths)
+
+    ingested_state = None
+    build_result = None
+    if changed_rel_paths:
+        ingested_state, ingest_token_utils, ingest_chunker = build_ingest_context()
+        load_documents_parallel(
+            folder=TRAINING_DIR,
+            files_selected=changed_rel_paths,
+            clear_existing=True,
+            target_state=ingested_state,
+            target_chunker=ingest_chunker,
+            target_token_utils=ingest_token_utils,
+        )
+        builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
+        try:
+            build_result = builder.build()
+        except ValueError as exc:
+            trace_logger.warning(f"⚠️ Changed documents produced no valid chunks: {exc}")
+            if delete_rel_paths:
+                vector_store.delete_sources(delete_rel_paths)
+            return None
+        vector_store.replace_sources(
+            delete_rel_paths=delete_rel_paths,
+            file_records=current_manifest,
+            chunks=ingested_state.get_chunks(),
+            sources=ingested_state.get_sources(),
+            metadata=ingested_state.get_metadata(),
+            embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
+        )
+        persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=changed_rel_paths)
+        merge_ingested_state(ingested_state)
+    elif delete_rel_paths:
+        vector_store.delete_sources(delete_rel_paths)
+
+    return build_result
+
+
+def check_for_training_changes(reason="watch"):
+    if not INDEX_JOB_LOCK.acquire(blocking=False):
+        trace_logger.info(f"⏳ Index check skipped for {reason}; another index job is running.")
+        return set_index_status(lastResult="already_running")
+
+    set_index_status(
+        running=True,
+        lastStartedAt=utc_now_iso(),
+        lastReason=reason,
+        lastError=None,
+        lastResult="running",
+    )
+    start_time = time.time()
+    try:
+        manifest = build_ingest_manifest()
+        current_manifest = manifest.scan()
+        previous_manifest = vector_store.load_document_records()
+        changes = manifest.diff(previous_manifest, current_manifest)
+        if not changes.has_changes:
+            trace_logger.info(f"✅ Index check found no training changes for {reason}.")
+            return set_index_status(
+                running=False,
+                lastFinishedAt=utc_now_iso(),
+                lastResult="no_changes",
+                lastChanges=file_changes_payload(changes),
+            )
+
+        build_result = run_incremental_ingest(changes, current_manifest)
+        duration = time.time() - start_time
+        trace_logger.info(
+            f"✅ Incremental index check completed in {duration:.2f} sec. "
+            f"Chunks: {len(state.get_chunks())}, embeddings: {len(state.get_embeddings())}"
+        )
+        result = "indexed"
+        if build_result:
+            result = f"indexed {build_result.chunks} changed chunks"
+        return set_index_status(
+            running=False,
+            lastFinishedAt=utc_now_iso(),
+            lastResult=result,
+            lastChanges=file_changes_payload(changes),
+        )
+    except Exception as exc:
+        trace_logger.error(f"❌ Incremental index check failed for {reason}: {exc}")
+        return set_index_status(
+            running=False,
+            lastFinishedAt=utc_now_iso(),
+            lastResult="failed",
+            lastError=str(exc),
+        )
+    finally:
+        INDEX_JOB_LOCK.release()
+
+
+def start_index_check(reason="manual"):
+    if INDEX_JOB_LOCK.locked():
+        return {"started": False, "status": dict(index_status)}
+
+    thread = threading.Thread(
+        target=check_for_training_changes,
+        kwargs={"reason": reason},
+        name=f"circuitshelf-index-{reason}",
+        daemon=True,
+    )
+    thread.start()
+    return {"started": True, "status": dict(index_status)}
+
+
+def ingest_watch_loop():
+    interval = max(30, int(config.get("INGEST_WATCH_INTERVAL_SECONDS", 300)))
+    set_index_status(nextCheckAt=datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() + interval, timezone.utc).isoformat())
+    trace_logger.info(f"👁️ Training watcher enabled. Checking every {interval} seconds.")
+    while not INGEST_WATCH_STOP.wait(interval):
+        next_check = datetime.now(timezone.utc).timestamp() + interval
+        set_index_status(nextCheckAt=datetime.fromtimestamp(next_check, timezone.utc).isoformat())
+        start_index_check("watch")
+
+
+def start_ingest_watcher():
+    global INGEST_WATCH_THREAD
+    if not config.get("INGEST_WATCH_ENABLED", True):
+        set_index_status(enabled=False)
+        return
+    if INGEST_WATCH_THREAD and INGEST_WATCH_THREAD.is_alive():
+        return
+    INGEST_WATCH_STOP.clear()
+    INGEST_WATCH_THREAD = threading.Thread(target=ingest_watch_loop, name="circuitshelf-ingest-watch", daemon=True)
+    INGEST_WATCH_THREAD.start()
+
+
+def stop_ingest_watcher():
+    INGEST_WATCH_STOP.set()
 
 
 @trace_timer("get_or_build_index")
@@ -878,24 +1119,7 @@ def get_or_build_index():
                 f"modified: {len(changes.modified)}, removed: {len(changes.removed)}, "
                 f"unchanged: {len(changes.unchanged)}"
             )
-            prune_training_files_from_state(changes.changed_or_removed)
-            if changes.changed_or_added:
-                load_documents_parallel(
-                    folder=TRAINING_DIR,
-                    files_selected=changes.changed_or_added,
-                    clear_existing=False,
-                )
-
-            builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
-            build_result = builder.build()
-            vector_store.replace_catalog(
-                file_records=current_manifest,
-                chunks=state.get_chunks(),
-                sources=state.get_sources(),
-                metadata=state.get_metadata(),
-                embeddings=np.asarray(state.get_embeddings(), dtype="float32"),
-            )
-            persist_db_image_state(current_manifest)
+            build_result = run_incremental_ingest(changes, current_manifest)
 
             duration = time.time() - start_time
             SystemInit.log_build_info(
@@ -906,11 +1130,11 @@ def get_or_build_index():
                 duration
             )
             trace_logger.info(
-                f"📊 DB catalog rebuild complete. Chunks: {build_result.chunks}, "
-                f"Embeddings: {len(state.get_embeddings())}, Images: {build_result.images}, "
-                f"Dropped chunks: {build_result.dropped_chunks}"
+                f"📊 DB incremental ingest complete. Chunks: {len(state.get_chunks())}, "
+                f"Embeddings: {len(state.get_embeddings())}, Images: {len(state.get_image_id_list())}, "
+                f"Dropped changed chunks: {build_result.dropped_chunks if build_result else 0}"
             )
-            trace_logger.info(f"✅ Incremental DB rebuild completed in {duration:.2f} sec")
+            trace_logger.info(f"✅ Incremental DB ingest completed in {duration:.2f} sec")
             return
         except Exception as e:
             trace_logger.warning(f"🧹 DB catalog load failed, rebuilding from source documents: {e}")
@@ -1437,8 +1661,16 @@ def _assemble_final_markdown(response, image_blocks):
     return f"{answer_md}\n\n---\n\n{image_md}" if image_md else answer_md
 
 
+@asynccontextmanager
+async def lifespan(_app):
+    start_ingest_watcher()
+    try:
+        yield
+    finally:
+        stop_ingest_watcher()
 
-app = FastAPI()
+
+app = FastAPI(lifespan=lifespan)
 
 
 def sanitize_for_json(value):
@@ -1553,6 +1785,7 @@ def build_runtime_status():
         "imageIds": len(image_ids),
         "imageEmbeddings": image_counts.get("embeddings", 0),
         "cacheStats": get_response_cache().stats(),
+        "ingest": dict(index_status),
     }
 
 
@@ -1606,6 +1839,19 @@ def require_admin_user(req: Request):
     if not user.is_admin:
         return None, JSONResponse({"error": "Admin access required."}, status_code=403)
     return user, None
+
+
+def safe_upload_filename(filename: str) -> str:
+    name = os.path.basename(str(filename or "")).strip()
+    if not name or name in {".", ".."}:
+        raise ValueError("Upload must include a file name.")
+    if name.startswith(".") or any(char in name for char in ("/", "\\")):
+        raise ValueError("Upload file name is not allowed.")
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in supported_training_extensions():
+        allowed = ", ".join(sorted(supported_training_extensions()))
+        raise ValueError(f"Unsupported file type. Allowed: {allowed}")
+    return name
 
 
 @app.post("/api/login")
@@ -1667,6 +1913,15 @@ async def settings_update(key: str, req: Request):
         return JSONResponse({"error": str(exc)}, status_code=404)
     except (PermissionError, ValueError, TypeError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+@app.post("/api/index/check")
+async def index_check(req: Request):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+    result = start_index_check("manual")
+    return {"ok": True, **result}
 
 
 @app.post("/api/query")
@@ -1734,6 +1989,60 @@ async def documents():
         })
     docs.sort(key=lambda item: item["displayName"].lower())
     return {"documents": docs}
+
+
+@app.post("/api/documents/upload")
+async def upload_document(
+    req: Request,
+    file: UploadFile = File(...),
+    overwrite: bool = Query(False),
+):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+
+    try:
+        filename = safe_upload_filename(file.filename or "")
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    os.makedirs(TRAINING_DIR, exist_ok=True)
+    destination = os.path.abspath(os.path.join(TRAINING_DIR, filename))
+    training_root = os.path.abspath(TRAINING_DIR)
+    if not destination.startswith(training_root + os.sep):
+        return JSONResponse({"error": "Upload destination is outside the training directory."}, status_code=400)
+    if os.path.exists(destination) and not overwrite:
+        return JSONResponse({"error": "A document with that name already exists."}, status_code=409)
+
+    tmp_path = os.path.join(TRAINING_DIR, f".{filename}.{uuid.uuid4().hex}.upload")
+    bytes_written = 0
+    try:
+        with open(tmp_path, "wb") as out_file:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                out_file.write(chunk)
+        if bytes_written <= 0:
+            os.remove(tmp_path)
+            return JSONResponse({"error": "Uploaded file was empty."}, status_code=400)
+        os.replace(tmp_path, destination)
+    except Exception as exc:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        trace_logger.error(f"❌ Document upload failed for {filename}: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+    finally:
+        await file.close()
+
+    index_job = start_index_check(f"upload:{filename}")
+    return {
+        "ok": True,
+        "filename": filename,
+        "bytes": bytes_written,
+        "indexing": index_job,
+    }
 
 
 def build_document_detail(doc_name):

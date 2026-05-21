@@ -48,7 +48,7 @@ export default function App() {
         <AskView config={config} />
       </div>
       <div hidden={activeView !== "documents"}>
-        <DocumentsView />
+        <DocumentsView isAdmin={Boolean(user?.isAdmin)} onStatusChange={refreshStatus} />
       </div>
       <div hidden={activeView !== "trace"}>
         <TraceView />

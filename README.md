@@ -191,7 +191,16 @@ curl -fsS http://127.0.0.1:1964/healthz
 
 The indexer scans `TRAINING_DIR`, extracts text/OCR, chunks content, embeds text and accepted images, and stores the catalog in Postgres.
 
-The `documents` table records training-file size, mtime, and optional hashes. Future runs detect added, modified, and removed files from that catalog, re-ingest changed source documents, and refresh pgvector embeddings.
+The `documents` table records training-file size, mtime, and optional hashes. Startup and the background watcher detect added, modified, and removed files from that catalog. Added and modified files are re-ingested incrementally; removed files are deleted from the catalog. Unchanged documents keep their existing rows and embeddings.
+
+Admins can upload supported documents from the Documents page. Uploaded files are written to `TRAINING_DIR` and an incremental index check is started automatically.
+
+Relevant settings:
+
+```yaml
+INGEST_WATCH_ENABLED: true
+INGEST_WATCH_INTERVAL_SECONDS: 300
+```
 
 ## Database Migrations
 

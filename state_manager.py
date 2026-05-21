@@ -70,6 +70,36 @@ class StateManager:
             self.index = None
         self._safe(_clear)
 
+    def replace_catalog(
+        self,
+        *,
+        chunks,
+        sources,
+        metadata,
+        embeddings,
+        image_store=None,
+        image_captions=None,
+        image_page_text=None,
+        image_id_list=None,
+        index=None,
+    ):
+        def _replace_catalog():
+            self._replace(self.chunks, chunks)
+            self._replace(self.sources, sources)
+            self._replace(self.chunk_metadata, metadata)
+            self._replace(self.embeddings, embeddings)
+            if image_store is not None:
+                self._replace(self.image_store, image_store)
+            if image_captions is not None:
+                self._replace(self.image_captions, image_captions)
+            if image_page_text is not None:
+                self._replace(self.image_page_text, image_page_text)
+            if image_id_list is not None:
+                self._replace(self.image_id_list, image_id_list)
+            self.index = index
+
+        self._safe(_replace_catalog)
+
     # === Embeddings ===
     def get_embeddings(self): return self._safe(lambda: list(self.embeddings))
     def set_embeddings(self, data): self._safe(lambda: self._replace(self.embeddings, data))

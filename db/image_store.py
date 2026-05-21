@@ -57,49 +57,103 @@ class ImageStore:
 
         with self.database.connection() as conn:
             conn.execute(load_query("image_catalog_clear.sql"))
-            doc_rows = conn.execute(load_query("image_document_map.sql")).fetchall()
-            documents = self._document_lookup(doc_rows)
-            ordinals: dict[str, int] = defaultdict(int)
+            self._upsert_image_rows(
+                conn,
+                file_records=file_records,
+                image_store=image_store,
+                image_captions=image_captions,
+                image_page_text=image_page_text,
+                image_embeddings=image_embeddings,
+                embedding_model=embedding_model,
+                metadata=metadata,
+            )
 
-            for image_key, image_base64 in sorted(image_store.items()):
-                rel_path, page_number, score, confidence = self._resolve_image_document(
+    def upsert_sources(
+        self,
+        *,
+        file_records: dict[str, FileRecord],
+        image_store: dict[str, str],
+        image_captions: dict[str, str],
+        image_page_text: dict[str, str],
+        image_embeddings: dict[str, Any],
+        embedding_model: str,
+        metadata: list[dict],
+        rel_paths: set[str],
+    ) -> None:
+        if not image_store:
+            return
+        with self.database.connection() as conn:
+            self._upsert_image_rows(
+                conn,
+                file_records=file_records,
+                image_store=image_store,
+                image_captions=image_captions,
+                image_page_text=image_page_text,
+                image_embeddings=image_embeddings,
+                embedding_model=embedding_model,
+                metadata=metadata,
+                rel_paths=rel_paths,
+            )
+
+    def _upsert_image_rows(
+        self,
+        conn,
+        *,
+        file_records: dict[str, FileRecord],
+        image_store: dict[str, str],
+        image_captions: dict[str, str],
+        image_page_text: dict[str, str],
+        image_embeddings: dict[str, Any],
+        embedding_model: str,
+        metadata: list[dict],
+        rel_paths: set[str] | None = None,
+    ) -> None:
+        image_meta = self._metadata_by_image_key(metadata)
+        doc_rows = conn.execute(load_query("image_document_map.sql")).fetchall()
+        documents = self._document_lookup(doc_rows)
+        ordinals: dict[str, int] = defaultdict(int)
+
+        for image_key, image_base64 in sorted(image_store.items()):
+            rel_path, page_number, score, confidence = self._resolve_image_document(
+                image_key,
+                image_meta.get(image_key, {}),
+                file_records,
+                documents,
+            )
+            if rel_paths is not None and rel_path not in rel_paths:
+                continue
+            doc_row = documents.get(rel_path)
+            if not doc_row:
+                if self.logger:
+                    self.logger.warning(f"Skipping image without indexed document: {image_key}")
+                continue
+
+            image_bytes = base64.b64decode(image_base64)
+            width, height = self._image_size(image_bytes)
+            ordinals[rel_path] += 1
+            ordinal = ordinals[rel_path]
+
+            conn.execute(
+                load_query("image_insert.sql"),
+                (
+                    doc_row["id"],
+                    doc_row["id"],
+                    page_number,
                     image_key,
-                    image_meta.get(image_key, {}),
-                    file_records,
-                    documents,
-                )
-                doc_row = documents.get(rel_path)
-                if not doc_row:
-                    if self.logger:
-                        self.logger.warning(f"Skipping image without indexed document: {image_key}")
-                    continue
-
-                image_bytes = base64.b64decode(image_base64)
-                width, height = self._image_size(image_bytes)
-                ordinals[rel_path] += 1
-                ordinal = ordinals[rel_path]
-
-                conn.execute(
-                    load_query("image_insert.sql"),
-                    (
-                        doc_row["id"],
-                        doc_row["id"],
-                        page_number,
-                        image_key,
-                        ordinal,
-                        image_bytes,
-                        "image/png",
-                        width,
-                        height,
-                        image_captions.get(image_key, image_key),
-                        image_page_text.get(image_key, ""),
-                        score,
-                        confidence,
-                        hashlib.sha256(image_bytes).hexdigest(),
-                        embedding_model,
-                        vector_to_sql(image_embeddings[image_key]) if image_key in image_embeddings else None,
-                    ),
-                )
+                    ordinal,
+                    image_bytes,
+                    "image/png",
+                    width,
+                    height,
+                    image_captions.get(image_key, image_key),
+                    image_page_text.get(image_key, ""),
+                    score,
+                    confidence,
+                    hashlib.sha256(image_bytes).hexdigest(),
+                    embedding_model,
+                    vector_to_sql(image_embeddings[image_key]) if image_key in image_embeddings else None,
+                ),
+            )
 
     def counts(self) -> dict[str, int]:
         with self.database.connection() as conn:

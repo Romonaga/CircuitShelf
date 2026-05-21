@@ -25,6 +25,8 @@ export function StatusView({ status, refresh }: { status: StatusPayload | null; 
       </div>
       <h3>Cache</h3>
       <pre className="json-view">{formatObject(status?.cacheStats)}</pre>
+      <h3>Ingestion</h3>
+      <pre className="json-view">{formatObject(status?.ingest)}</pre>
     </section>
   );
 }

@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getDocument, getDocuments } from "../api";
+import { getDocument, getDocuments, triggerIndexCheck, uploadDocument } from "../api";
 import type { DocumentChunk, DocumentSummary } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 
-export function DocumentsView() {
+export function DocumentsView({ isAdmin, onStatusChange }: { isAdmin: boolean; onStatusChange: () => void }) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selected, setSelected] = useState("");
   const [chunks, setChunks] = useState<DocumentChunk[]>([]);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [overwrite, setOverwrite] = useState(false);
 
   const filteredDocuments = useMemo(() => {
     const needle = filter.toLowerCase();
@@ -41,6 +45,40 @@ export function DocumentsView() {
     void loadDocuments();
   }, [loadDocuments]);
 
+  async function submitUpload() {
+    if (!uploadFile) {
+      return;
+    }
+    setUploading(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await uploadDocument(uploadFile, overwrite);
+      setMessage(`${response.filename} uploaded. Incremental indexing ${response.indexing.started ? "started" : "is already running"}.`);
+      setUploadFile(null);
+      onStatusChange();
+    } catch (err) {
+      setError(errorMessage(err, "Upload failed"));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function runIndexCheck() {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await triggerIndexCheck();
+      setMessage(response.started ? "Incremental index check started." : "An index job is already running.");
+      onStatusChange();
+    } catch (err) {
+      setError(errorMessage(err, "Could not start index check"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (!selected) {
       setChunks([]);
@@ -62,8 +100,35 @@ export function DocumentsView() {
   return (
     <section className="view-grid docs-grid">
       <div className="document-list-panel">
-        <SectionHeader title="Documents" description={busy ? "Loading..." : `${formatInteger(documents.length)} indexed sources`} />
+        <SectionHeader
+          title="Documents"
+          description={busy ? "Loading..." : `${formatInteger(documents.length)} indexed sources`}
+          actions={
+            isAdmin ? (
+              <button className="ghost-button" onClick={runIndexCheck} disabled={busy || uploading}>
+                Check now
+              </button>
+            ) : null
+          }
+        />
+        {isAdmin ? (
+          <div className="upload-panel">
+            <input
+              type="file"
+              onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+              disabled={uploading}
+            />
+            <label className="checkbox-label">
+              <input type="checkbox" checked={overwrite} onChange={(event) => setOverwrite(event.target.checked)} />
+              Replace existing
+            </label>
+            <button className="primary-button" onClick={submitUpload} disabled={!uploadFile || uploading}>
+              {uploading ? "Uploading..." : "Upload"}
+            </button>
+          </div>
+        ) : null}
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter documents" />
+        {message ? <p className="success-message">{message}</p> : null}
         <ErrorMessage message={error} />
         <div className="document-list">
           {filteredDocuments.map((document) => (

@@ -12,9 +12,10 @@ const sessionStorageKey = "circuitshelf-session";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const session = readSessionToken();
+  const isFormData = init?.body instanceof FormData;
   const response = await fetch(path, {
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(session ? { Authorization: `Bearer ${session}` } : {}),
       ...(init?.headers ?? {})
     },
@@ -73,6 +74,23 @@ export function runQuery(payload: QueryRequest): Promise<QueryResponse> {
 
 export function getDocuments(): Promise<{ documents: DocumentSummary[] }> {
   return requestJson<{ documents: DocumentSummary[] }>("/api/documents");
+}
+
+export function uploadDocument(file: File, overwrite: boolean): Promise<{ ok: boolean; filename: string; bytes: number; indexing: { started: boolean } }> {
+  const body = new FormData();
+  body.append("file", file);
+  return requestJson<{ ok: boolean; filename: string; bytes: number; indexing: { started: boolean } }>(
+    `/api/documents/upload?overwrite=${overwrite ? "true" : "false"}`,
+    {
+      method: "POST",
+      body,
+      headers: {}
+    }
+  );
+}
+
+export function triggerIndexCheck(): Promise<{ ok: boolean; started: boolean; status: unknown }> {
+  return requestJson<{ ok: boolean; started: boolean; status: unknown }>("/api/index/check", { method: "POST" });
 }
 
 export function getDocument(source: string): Promise<{ document: string; chunks: DocumentChunk[] }> {

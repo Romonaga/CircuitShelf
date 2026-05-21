@@ -88,6 +88,7 @@ export interface StatusPayload {
   imageIds: number;
   imageEmbeddings: number;
   cacheStats: unknown;
+  ingest?: IngestStatus;
 }
 
 export type SettingValueType = "text" | "integer" | "numeric" | "boolean";
@@ -100,4 +101,24 @@ export interface AppSetting {
   description: string;
   updatedAt?: string | null;
   restartRequired: boolean;
+}
+
+export interface IngestStatus {
+  enabled: boolean;
+  running: boolean;
+  lastStartedAt?: string | null;
+  lastFinishedAt?: string | null;
+  lastReason?: string | null;
+  lastResult?: string | null;
+  lastError?: string | null;
+  lastChanges?: {
+    added: number;
+    modified: number;
+    removed: number;
+    unchanged: number;
+    addedFiles?: string[];
+    modifiedFiles?: string[];
+    removedFiles?: string[];
+  } | null;
+  nextCheckAt?: string | null;
 }
