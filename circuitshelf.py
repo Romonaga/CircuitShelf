@@ -48,6 +48,7 @@ from tokenize_util import TokenUtils
 from system_init import SystemInit
 from reranker_module import Reranker
 from ocr_utils import run_ocr
+from pdf_visuals import render_pdf_visual_pages
 from index_builder import IndexBuilder
 from ingest_manifest import IngestManifest
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
@@ -86,6 +87,10 @@ for prompt_key, prompt_path in prompt_files.items():
 settings_store.seed_setting("STATUS_POLL_INTERVAL_SECONDS", 15, "Browser status refresh interval while indexing is idle.")
 settings_store.seed_setting("STATUS_POLL_ACTIVE_INTERVAL_SECONDS", 3, "Browser status refresh interval while indexing is running.")
 settings_store.seed_setting("INGEST_WATCH_INTERVAL_SECONDS", 300, "Seconds between automatic document-change checks.")
+settings_store.seed_setting("PDF_RENDER_VECTOR_PAGES", True, "Render vector-heavy PDF pages as searchable images.")
+settings_store.seed_setting("PDF_RENDER_MAX_PAGES_PER_DOC", 8, "Maximum rendered visual PDF pages stored per document.")
+settings_store.seed_setting("PDF_RENDER_MIN_DRAWINGS", 100, "Minimum vector drawing count before a PDF page is considered visual.")
+settings_store.seed_setting("PDF_RENDER_ZOOM", 1.5, "Scale used when rendering visual PDF pages.")
 applied_settings = settings_store.apply_to_config(config)
 if seeded_settings or applied_settings:
     trace_logger.info(
@@ -155,6 +160,10 @@ INDEX_IMAGE_OCR_AS_TEXT = config.get("INDEX_IMAGE_OCR_AS_TEXT", False)
 OCR_INDEX_TEXT_MIN_CHARS = config.get("OCR_INDEX_TEXT_MIN_CHARS", 80)
 USE_MULTITHREAD_OCR = config.get("USE_MULTITHREAD_OCR", False)
 MAX_OCR_THREADS = config.get("MAX_OCR_THREADS", 1)
+PDF_RENDER_VECTOR_PAGES = config.get("PDF_RENDER_VECTOR_PAGES", True)
+PDF_RENDER_MAX_PAGES_PER_DOC = config.get("PDF_RENDER_MAX_PAGES_PER_DOC", 8)
+PDF_RENDER_MIN_DRAWINGS = config.get("PDF_RENDER_MIN_DRAWINGS", 100)
+PDF_RENDER_ZOOM = config.get("PDF_RENDER_ZOOM", 1.5)
 POST_TIMEOUT = config.get("POST_TIMEOUT", 60)
 REACT_DIST_DIR = config.get("REACT_DIST_DIR", "frontend/dist")
 QUERY_RETRIES = config.get("QUERY_RETRIES", 3)
@@ -549,6 +558,41 @@ def run_pdf_image_ocr_jobs(image_jobs):
     return results
 
 
+def add_pdf_rendered_pages(path, target_state):
+    if not PDF_RENDER_VECTOR_PAGES:
+        return 0
+
+    try:
+        rendered_pages = render_pdf_visual_pages(
+            path,
+            max_pages=int(PDF_RENDER_MAX_PAGES_PER_DOC or 0),
+            min_drawings=int(PDF_RENDER_MIN_DRAWINGS or 100),
+            zoom=float(PDF_RENDER_ZOOM or 1.5),
+        )
+    except Exception as exc:
+        trace_logger.warning(f"⚠️ Could not render vector PDF pages for {path}: {exc}")
+        return 0
+
+    for rendered_page in rendered_pages:
+        target_state.add_image_store(
+            rendered_page.image_key,
+            base64.b64encode(rendered_page.image_bytes).decode("utf-8"),
+        )
+        target_state.add_image_caption(rendered_page.image_key, rendered_page.caption)
+        target_state.add_image_page_text(rendered_page.image_key, rendered_page.searchable_text)
+        if SAVE_EXTRACTED_IMAGES:
+            _ = save_image_text(
+                rendered_page.image_bytes,
+                rendered_page.searchable_text,
+                rendered_page.image_key,
+                EXTRACTED_IMAGES_DIR,
+            )
+
+    if rendered_pages:
+        trace_logger.info(f"🖼️ Rendered {len(rendered_pages)} vector-heavy PDF pages for {os.path.basename(path)}")
+    return len(rendered_pages)
+
+
 @trace_timer("save_image_text")
 def save_image_text(image_data, image_text, base_name, output_dir, img_extension="png", txt_extension="txt") -> str:
    
@@ -649,6 +693,8 @@ def load_pdf_text(path, target_state=None):
                 "ocr_confidence": confidence,
             })
             extra_meta.append(ocr_meta)
+
+    add_pdf_rendered_pages(path, target_state)
 
     return page_texts, extra_chunks, extra_sources, extra_meta
 
@@ -1708,7 +1754,7 @@ def get_rag_response(
 
 @trace_timer("extract_doc_and_page")
 def extract_doc_and_page(img_id):
-    match = re.search(r"(.+?)_page(\d+)_img\d+", img_id)
+    match = re.search(r"(.+?)_page(\d+)_(?:img\d+|render)$", img_id)
     if match:
         doc_name, page_str = match.groups()
         return doc_name, int(page_str)
