@@ -1,0 +1,251 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from psycopg.errors import UndefinedColumn, UndefinedTable
+
+from db.connection import Database
+from db.sql import load_query
+from ingest_manifest import FileRecord
+
+
+def vector_to_sql(value: Any) -> str:
+    array = np.asarray(value, dtype="float32").reshape(-1)
+    return "[" + ",".join(f"{float(item):.8g}" for item in array.tolist()) + "]"
+
+
+def vector_from_sql(value: str | None) -> np.ndarray | None:
+    if not value:
+        return None
+    stripped = value.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        stripped = stripped[1:-1]
+    if not stripped:
+        return None
+    return np.asarray([float(item) for item in stripped.split(",")], dtype="float32")
+
+
+def bool_from_meta(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
+
+
+class VectorStore:
+    def __init__(self, database: Database, training_dir: str, embedding_model: str, logger=None):
+        self.database = database
+        self.training_dir = training_dir
+        self.embedding_model = embedding_model
+        self.logger = logger
+
+    def available(self) -> bool:
+        if not self.database.configured:
+            return False
+        try:
+            self.counts()
+            return True
+        except (UndefinedTable, UndefinedColumn):
+            return False
+        except Exception as exc:
+            if self.logger:
+                self.logger.warning(f"Vector store is not available: {exc}")
+            return False
+
+    def load_document_records(self) -> dict[str, FileRecord]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("vector_catalog_document_records.sql")).fetchall()
+        return {
+            row["path"]: FileRecord(
+                path=row["path"],
+                size=int(row["size"]),
+                mtime_ns=int(row["mtime_ns"]),
+                sha256=row["sha256"],
+            )
+            for row in rows
+        }
+
+    def counts(self) -> dict[str, int]:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("vector_catalog_counts.sql")).fetchone()
+        return {
+            "documents": int(row["documents"] or 0),
+            "chunks": int(row["chunks"] or 0),
+            "embeddings": int(row["embeddings"] or 0),
+        }
+
+    def clear(self) -> None:
+        with self.database.connection() as conn:
+            conn.execute(load_query("vector_catalog_clear.sql"))
+
+    def delete_sources(self, rel_paths: list[str]) -> None:
+        if not rel_paths:
+            return
+        with self.database.connection() as conn:
+            conn.execute(load_query("vector_document_delete_by_sources.sql"), (rel_paths,))
+
+    def replace_catalog(
+        self,
+        *,
+        file_records: dict[str, FileRecord],
+        chunks: list[str],
+        sources: list[str],
+        metadata: list[dict],
+        embeddings: np.ndarray,
+    ) -> None:
+        if len(chunks) != len(sources) or len(chunks) != len(metadata) or len(chunks) != len(embeddings):
+            raise ValueError("Chunk, source, metadata, and embedding counts must match before DB persistence.")
+
+        with self.database.connection() as conn:
+            conn.execute(load_query("vector_catalog_clear.sql"))
+
+            document_ids: dict[str, str] = {}
+            page_ids: dict[tuple[str, int], str] = {}
+            next_chunk_index: dict[str, int] = {}
+
+            for chunk, source, meta, embedding in zip(chunks, sources, metadata, embeddings):
+                rel_path = self.rel_path_for_source(source, meta)
+                record = file_records.get(rel_path) or self.record_from_source(rel_path)
+                document_id = document_ids.get(rel_path)
+                if not document_id:
+                    document_id = conn.execute(
+                        load_query("vector_document_upsert.sql"),
+                        (
+                            rel_path,
+                            os.path.basename(rel_path),
+                            Path(rel_path).suffix.lower(),
+                            record.size,
+                            record.mtime_ns,
+                            record.sha256,
+                        ),
+                    ).fetchone()["id"]
+                    document_ids[rel_path] = document_id
+
+                page_number = self.page_number(meta)
+                page_id = None
+                if page_number is not None:
+                    page_key = (rel_path, page_number)
+                    page_id = page_ids.get(page_key)
+                    if not page_id:
+                        page_id = conn.execute(
+                            load_query("vector_page_upsert.sql"),
+                            (document_id, page_number),
+                        ).fetchone()["id"]
+                        page_ids[page_key] = page_id
+
+                chunk_index = next_chunk_index.get(rel_path, 0)
+                next_chunk_index[rel_path] = chunk_index + 1
+                meta["db_source_path"] = rel_path
+                meta["db_chunk_index"] = chunk_index
+                chunk_id = conn.execute(
+                    load_query("vector_chunk_insert.sql"),
+                    (
+                        document_id,
+                        page_id,
+                        chunk_index,
+                        chunk,
+                        int(meta.get("token_count") or 0),
+                        meta.get("section") or "Unknown",
+                        meta.get("category") or "Uncategorized",
+                        float(meta.get("quality_score", 0.0) or 0.0),
+                        bool_from_meta(meta.get("chunk_type") == "ocr" or meta.get("is_ocr")),
+                        bool_from_meta(meta.get("has_math")),
+                        meta.get("source_image_id"),
+                        self.embedding_model,
+                        vector_to_sql(embedding),
+                    ),
+                ).fetchone()["id"]
+
+                for flag in meta.get("quality_flags") or []:
+                    conn.execute(load_query("vector_quality_flag_insert.sql"), (chunk_id, str(flag)))
+
+    def load_state_payload(self) -> tuple[list[str], list[str], list[dict], list[np.ndarray]]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("vector_chunks_load.sql")).fetchall()
+
+        chunks: list[str] = []
+        sources: list[str] = []
+        metadata: list[dict] = []
+        embeddings: list[np.ndarray] = []
+        for row in rows:
+            source = os.path.join(self.training_dir, row["source_path"])
+            chunks.append(row["chunk_text"])
+            sources.append(source)
+            meta = {
+                "section": row["section_title"] or "Unknown",
+                "page": row["page_number"] or 1,
+                "source": source,
+                "parent_source": source,
+                "category": row["category"] or "Uncategorized",
+                "chunk_type": "ocr" if row["is_ocr"] else "paragraph",
+                "token_count": int(row["token_count"] or 0),
+                "quality_score": float(row["quality_score"] or 0.0),
+                "quality_flags": list(row["quality_flags"] or []),
+                "has_math": bool(row["has_math"]),
+                "db_source_path": row["source_path"],
+                "db_chunk_index": int(row["chunk_index"]),
+            }
+            if row["source_image_key"]:
+                meta["source_image_id"] = row["source_image_key"]
+            metadata.append(meta)
+            embedding = vector_from_sql(row["embedding"])
+            if embedding is not None:
+                embeddings.append(embedding)
+
+        return chunks, sources, metadata, embeddings
+
+    def search_chunks(self, query_embedding: np.ndarray, *, top_k: int) -> list[dict]:
+        vector = vector_to_sql(query_embedding)
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("vector_search_chunks.sql"), (vector, vector, int(top_k))).fetchall()
+
+        results = []
+        for row in rows:
+            source = os.path.join(self.training_dir, row["source_path"])
+            results.append({
+                "source": source,
+                "chunk_index": int(row["chunk_index"]),
+                "text": row["chunk_text"],
+                "distance": float(row["distance"]),
+                "section": row["section_title"] or "Unknown",
+                "page": row["page_number"],
+                "category": row["category"] or "Uncategorized",
+                "source_image_id": row["source_image_key"],
+            })
+        return results
+
+    def rel_path_for_source(self, source: str, meta: dict | None = None) -> str:
+        meta = meta or {}
+        candidate = meta.get("parent_source") or meta.get("source") or source
+        candidate = os.path.normpath(str(candidate))
+        training_dir = os.path.normpath(self.training_dir)
+        if candidate.startswith(training_dir + os.sep):
+            return os.path.relpath(candidate, training_dir)
+        if os.path.isabs(candidate):
+            try:
+                return os.path.relpath(candidate, training_dir)
+            except ValueError:
+                return os.path.basename(candidate)
+        return candidate
+
+    def record_from_source(self, rel_path: str) -> FileRecord:
+        full_path = os.path.join(self.training_dir, rel_path)
+        if os.path.exists(full_path):
+            stat = os.stat(full_path)
+            return FileRecord(path=rel_path, size=stat.st_size, mtime_ns=stat.st_mtime_ns, sha256=None)
+        return FileRecord(path=rel_path, size=0, mtime_ns=0, sha256=None)
+
+    @staticmethod
+    def page_number(meta: dict) -> int | None:
+        value = meta.get("page")
+        if value is None:
+            return None
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number > 0 else None

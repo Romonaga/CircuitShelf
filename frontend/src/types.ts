@@ -78,6 +78,8 @@ export interface StatusPayload {
   sources: number;
   embeddings: number;
   faissTotal: number;
+  vectorChunks?: number;
+  vectorEmbeddings?: number;
   imageIds: number;
   imageFaissTotal: number;
   cacheStats: unknown;

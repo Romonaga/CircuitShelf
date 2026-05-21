@@ -48,6 +48,8 @@ INGEST_HASH_FILES: false
 DATABASE_URL: ""
 DB_MIGRATIONS_DIR: "db/migrations"
 DB_SCHEMA_VERSION_TABLE: "schema_migrations"
+USE_DB_VECTOR_STORE: true
+VECTOR_EMBEDDING_DIM: 768
 
 INDEX_FILE: "data/index.faiss"
 CHUNKS_FILE: "data/chunks.pkl"

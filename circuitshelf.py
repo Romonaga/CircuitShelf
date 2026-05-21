@@ -55,6 +55,7 @@ from ingest_manifest import IngestManifest
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
 from db.connection import Database, database_url_from_config
 from db.users import UserStore
+from db.vector_store import VectorStore
 from response_cache import (
     ResponseCacheEntry,
     ResponseCacheKey,
@@ -67,6 +68,7 @@ config, trace_logger = SystemInit.load_config_and_logger()
 state = StateManager(use_lock=True, cache_capacity=200, trace_logger=trace_logger)
 database = Database(database_url_from_config(config), trace_logger)
 user_store = UserStore(database, trace_logger)
+vector_store = VectorStore(database, config.get("TRAINING_DIR", "training"), config.get("EMBED_MODEL_NAME"), trace_logger)
 trace_logger.info("🛠️ Configuration and logger successfully initialized.")
 
 # === Decorators ===
@@ -136,6 +138,7 @@ IMAGE_EMBEDDINGS_FILE = config.get("IMAGE_EMBEDDINGS_FILE")
 IMAGE_IDS_FILE = config.get("IMAGE_IDS_FILE")
 CACHE_FILE = config.get("CACHE_FILE", "cache/cache.pkl")
 IMAGE_BLOCK_HTML_FILE = config.get("IMAGE_BLOCK_HTML_FILE")
+USE_DB_VECTOR_STORE = config.get("USE_DB_VECTOR_STORE", True)
 
 # === Directory Info ===
 PROMPT_DIR = config.get("PROMPT_DIR", "prompts")
@@ -832,9 +835,106 @@ def get_or_build_index():
 
     trace_logger.info("🔄 Starting index load or build...")
     start_time = time.time()
-    files_exist = all(os.path.exists(f) for f in files_to_check)
     manifest = build_ingest_manifest()
     current_manifest = manifest.scan()
+
+    if USE_DB_VECTOR_STORE and vector_store.available():
+        previous_manifest = vector_store.load_document_records()
+
+        if previous_manifest:
+            try:
+                chunks, sources, metadata, embeddings = vector_store.load_state_payload()
+                state.set_chunks(chunks)
+                state.set_sources(sources)
+                state.set_metadata(metadata)
+                state.set_embeddings(embeddings)
+                state.set_index(None)
+
+                if not chunks or not embeddings:
+                    raise ValueError("DB vector catalog is incomplete.")
+
+                changes = manifest.diff(previous_manifest, current_manifest)
+                if not changes.has_changes:
+                    duration = time.time() - start_time
+                    SystemInit.log_build_info(trace_logger, chunks, embeddings, state.get_image_id_list(), duration)
+                    trace_logger.info(f"✅ DB vector catalog loaded in {duration:.2f} sec")
+                    return
+
+                trace_logger.info(
+                    f"🔁 Training changes detected in DB catalog. Added: {len(changes.added)}, "
+                    f"modified: {len(changes.modified)}, removed: {len(changes.removed)}, "
+                    f"unchanged: {len(changes.unchanged)}"
+                )
+                prune_training_files_from_state(changes.changed_or_removed)
+                if changes.changed_or_added:
+                    load_documents_parallel(
+                        folder=TRAINING_DIR,
+                        files_selected=changes.changed_or_added,
+                        clear_existing=False,
+                    )
+
+                builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
+                build_result = builder.build()
+                vector_store.replace_catalog(
+                    file_records=current_manifest,
+                    chunks=state.get_chunks(),
+                    sources=state.get_sources(),
+                    metadata=state.get_metadata(),
+                    embeddings=np.asarray(state.get_embeddings(), dtype="float32"),
+                )
+
+                duration = time.time() - start_time
+                SystemInit.log_build_info(
+                    trace_logger,
+                    state.get_chunks(),
+                    state.get_embeddings(),
+                    state.get_image_id_list(),
+                    duration
+                )
+                trace_logger.info(
+                    f"📊 DB vector rebuild complete. Chunks: {build_result.chunks}, "
+                    f"Embeddings: {len(state.get_embeddings())}, Images: {build_result.images}, "
+                    f"Dropped chunks: {build_result.dropped_chunks}"
+                )
+                trace_logger.info(f"✅ Incremental DB vector rebuild completed in {duration:.2f} sec")
+                return
+            except Exception as e:
+                trace_logger.warning(f"🧹 DB vector load failed, rebuilding from scratch: {e}")
+
+        load_documents_parallel(folder=TRAINING_DIR, files_selected=None)
+
+        builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
+        try:
+            build_result = builder.build()
+        except ValueError as e:
+            trace_logger.error(f"❌ DB vector index build failed: {e}")
+            return
+
+        vector_store.replace_catalog(
+            file_records=current_manifest,
+            chunks=state.get_chunks(),
+            sources=state.get_sources(),
+            metadata=state.get_metadata(),
+            embeddings=np.asarray(state.get_embeddings(), dtype="float32"),
+        )
+
+        duration = time.time() - start_time
+        SystemInit.log_build_info(
+            trace_logger,
+            state.get_chunks(),
+            state.get_embeddings(),
+            state.get_image_id_list(),
+            duration
+        )
+        trace_logger.info(
+            f"📊 DB vector catalog built. Chunks: {build_result.chunks}, "
+            f"Embeddings: {len(state.get_embeddings())}, Images: {build_result.images}, "
+            f"Dropped chunks: {build_result.dropped_chunks}"
+        )
+        trace_logger.info(f"✅ DB vector rebuild completed in {duration:.2f} sec")
+        return
+
+    files_exist = all(os.path.exists(f) for f in files_to_check)
 
     if files_exist:
         try:
@@ -1036,6 +1136,36 @@ def deduplicate_hits_by_index(hits):
     return sorted(best_by_index.items(), key=lambda item: item[1])
 
 
+def build_db_chunk_index():
+    mapping = {}
+    per_source_counts = {}
+    metadata = state.get_metadata()
+    sources = state.get_sources()
+    for idx, source in enumerate(sources):
+        meta = metadata[idx] if idx < len(metadata) else {}
+        rel_path = meta.get("db_source_path") or vector_store.rel_path_for_source(source, meta)
+        chunk_index = meta.get("db_chunk_index")
+        if chunk_index is None:
+            chunk_index = per_source_counts.get(rel_path, 0)
+        per_source_counts[rel_path] = int(chunk_index) + 1
+        mapping[(rel_path, int(chunk_index))] = idx
+    return mapping
+
+
+def vector_results_to_hits(results):
+    index_by_key = build_db_chunk_index()
+    hits = []
+    for result in results:
+        rel_path = vector_store.rel_path_for_source(result.get("source", ""), {})
+        key = (rel_path, int(result.get("chunk_index", 0)))
+        idx = index_by_key.get(key)
+        if idx is None:
+            trace_logger.warning(f"⚠️ Retrieved DB chunk not found in runtime state: {key}")
+            continue
+        hits.append((idx, float(result.get("distance", 0.0))))
+    return hits
+
+
 #def clean_response(text):
 #    return re.sub(r"<[^>]+>", "", text).strip()
 
@@ -1234,16 +1364,23 @@ def get_rag_response(
     if not cache_enabled:
         response_cache.misses += 1
 
-    # === FAISS Retrieval ===
+    # === Vector Retrieval ===
     all_hits = []
     faiss_start = time.time()
     for syn in synonyms:
         emb = embedder.encode([syn], convert_to_numpy=True).astype("float32")
-        distances, indices = state.index.search(emb, top_k)
-        for i, dist in zip(indices[0], distances[0]):
-            adjusted = dist * (1 + 0.1 * (1 - len(state.chunks[i]) / 500))
-            if adjusted < dist_thresh:
-                all_hits.append((i, adjusted))
+        if USE_DB_VECTOR_STORE and vector_store.available():
+            vector_results = vector_store.search_chunks(emb[0], top_k=top_k)
+            for i, dist in vector_results_to_hits(vector_results):
+                adjusted = dist * (1 + 0.1 * (1 - len(state.chunks[i]) / 500))
+                if adjusted < dist_thresh:
+                    all_hits.append((i, adjusted))
+        elif state.index is not None:
+            distances, indices = state.index.search(emb, top_k)
+            for i, dist in zip(indices[0], distances[0]):
+                adjusted = dist * (1 + 0.1 * (1 - len(state.chunks[i]) / 500))
+                if adjusted < dist_thresh:
+                    all_hits.append((i, adjusted))
     faiss_duration = time.time() - faiss_start
 
     if not all_hits:
@@ -1261,7 +1398,7 @@ def get_rag_response(
     dedup_hits = deduplicate_hits_by_index(all_hits)
     rerank_duration = None
 
-    if strategy == "FAISS only":
+    if strategy in {"FAISS only", "Vector only"}:
         selected = sorted(dedup_hits, key=lambda x: x[1])[:top_k]
         selected_chunks = reranker_engine.build_chunk_payload(selected)
         confidence = chunker.compute_faiss_confidence(selected, dist_thresh)
@@ -1509,11 +1646,12 @@ def get_response_cache():
 
 def current_index_fingerprint():
     index = state.get_index()
+    vector_counts = vector_store.counts() if USE_DB_VECTOR_STORE and vector_store.available() else {}
     return build_index_fingerprint(
         manifest_path=INGEST_MANIFEST_FILE,
         chunks_count=len(state.get_chunks()),
-        embeddings_count=len(state.get_embeddings()),
-        faiss_total=index.ntotal if index else 0,
+        embeddings_count=vector_counts.get("embeddings", len(state.get_embeddings())),
+        faiss_total=vector_counts.get("chunks", index.ntotal if index else 0),
     )
 
 
@@ -1544,6 +1682,7 @@ def build_response_cache_key(
 def build_runtime_status():
     index = state.get_index()
     image_index = state.get_image_embeddings()
+    vector_counts = vector_store.counts() if USE_DB_VECTOR_STORE and vector_store.available() else {}
     chunks = state.get_chunks()
     sources = state.get_sources()
     metadata = state.get_metadata()
@@ -1554,10 +1693,12 @@ def build_runtime_status():
         for idx, source in enumerate(sources)
     }
     return {
-        "chunks": len(chunks),
-        "sources": len(document_sources),
-        "embeddings": len(embeddings),
+        "chunks": vector_counts.get("chunks", len(chunks)),
+        "sources": vector_counts.get("documents", len(document_sources)),
+        "embeddings": vector_counts.get("embeddings", len(embeddings)),
         "faissTotal": index.ntotal if index else 0,
+        "vectorChunks": vector_counts.get("chunks", 0),
+        "vectorEmbeddings": vector_counts.get("embeddings", 0),
         "imageIds": len(image_ids),
         "imageFaissTotal": image_index.ntotal if image_index else 0,
         "cacheStats": get_response_cache().stats(),
@@ -1570,7 +1711,7 @@ def build_readiness_status():
         "modelConfigured": bool(LLM_MODEL_NAME),
         "embeddingModelConfigured": bool(EMBED_MODEL_NAME),
         "textChunksLoaded": runtime["chunks"] > 0,
-        "textIndexLoaded": runtime["faissTotal"] > 0,
+        "textIndexLoaded": runtime["faissTotal"] > 0 or runtime["vectorEmbeddings"] > 0,
         "embeddingsLoaded": runtime["embeddings"] > 0,
         "databaseConfigured": database.configured,
         "databaseReachable": database.health_check(),
@@ -1616,14 +1757,14 @@ async def app_config():
         "models": LLM_MODEL_OPTIONS,
         "defaultModel": LLM_MODEL_NAME,
         "authConfigured": database.configured and user_store.has_active_users(),
-        "retrievalStrategies": ["FAISS only", "FAISS + CrossEncoder"],
+        "retrievalStrategies": ["Vector only", "Vector + CrossEncoder"],
         "defaults": {
             "topK": 15,
             "distanceThreshold": 4.0,
             "maxTokens": 1800,
             "showFullText": False,
             "bypassCache": True,
-            "strategy": "FAISS + CrossEncoder",
+            "strategy": "Vector + CrossEncoder",
         },
     }
 
@@ -1644,7 +1785,7 @@ async def react_query(req: Request):
             dist_thresh=float(data.get("distanceThreshold", 4.0)),
             max_tokens=int(data.get("maxTokens", 1800)),
             bypass_cache=bool(data.get("bypassCache", True)),
-            strategy=data.get("strategy", "FAISS + CrossEncoder"),
+            strategy=data.get("strategy", "Vector + CrossEncoder"),
             model_name=data.get("model", LLM_MODEL_NAME),
         )
 
@@ -1761,6 +1902,9 @@ def mount_react_app():
 
 # Shutdown Registration
 def save_on_exit():
+    if USE_DB_VECTOR_STORE and vector_store.available():
+        trace_logger.info("DB vector store enabled; skipping legacy pickle/FAISS save on shutdown.")
+        return
     persistence.save_all()
 
 def flush_trace_log():

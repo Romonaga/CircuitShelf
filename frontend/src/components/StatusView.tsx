@@ -8,7 +8,7 @@ export function StatusView({ status, refresh }: { status: StatusPayload | null; 
     <section className="single-panel">
       <SectionHeader
         title="System status"
-        description="Loaded index, image index, and cache state."
+        description="Loaded vector catalog, image index, and cache state."
         actions={
         <button className="ghost-button" onClick={refresh}>
           Refresh
@@ -19,7 +19,7 @@ export function StatusView({ status, refresh }: { status: StatusPayload | null; 
         <Stat label="Chunks" value={formatNumber(status?.chunks)} />
         <Stat label="Documents" value={formatNumber(status?.sources)} />
         <Stat label="Text embeddings" value={formatNumber(status?.embeddings)} />
-        <Stat label="FAISS rows" value={formatNumber(status?.faissTotal)} />
+        <Stat label="Vector rows" value={formatNumber(status?.vectorEmbeddings ?? status?.faissTotal)} />
         <Stat label="Image IDs" value={formatNumber(status?.imageIds)} />
         <Stat label="Image FAISS rows" value={formatNumber(status?.imageFaissTotal)} />
       </div>
