@@ -35,7 +35,7 @@ Install system prerequisites first. On Ubuntu/Debian:
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv nodejs npm postgresql postgresql-client tesseract-ocr
+sudo apt install python3 python3-venv nodejs npm postgresql postgresql-client postgresql-16-pgvector tesseract-ocr
 ```
 
 Install Ollama from `https://ollama.com`, then run the guided installer:
@@ -49,7 +49,7 @@ Install Ollama from `https://ollama.com`, then run the guided installer:
 Install system prerequisites with Homebrew:
 
 ```bash
-brew install python node postgresql@16 tesseract ollama
+brew install python node postgresql@16 pgvector tesseract ollama
 brew services start postgresql@16
 ```
 
@@ -68,6 +68,7 @@ Install these first:
 - Python 3.12 or newer from `https://www.python.org`
 - Node.js LTS from `https://nodejs.org`
 - PostgreSQL from `https://www.postgresql.org/download/windows/`
+- pgvector for your PostgreSQL version from `https://github.com/pgvector/pgvector`
 - Tesseract OCR from `https://github.com/UB-Mannheim/tesseract/wiki`
 - Ollama from `https://ollama.com`
 
@@ -101,6 +102,7 @@ GRANT ALL PRIVILEGES ON DATABASE circuitshelf TO circuitshelf_app;
 \c circuitshelf
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 Use this shape when the installer asks for `DATABASE_URL`:
