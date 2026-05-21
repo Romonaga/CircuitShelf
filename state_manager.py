@@ -6,7 +6,7 @@
 
 import threading
 from collections import deque
-from lru_cache import LRUCache
+from response_cache import ResponseCache
 import faiss
 
 class StateManager:
@@ -34,7 +34,7 @@ class StateManager:
     
 
         # === Cache ===
-        self.cache = LRUCache(capacity=cache_capacity, trace_logger=trace_logger)
+        self.cache = ResponseCache(capacity=cache_capacity, trace_logger=trace_logger)
 
     def get_cache(self):
         return self.cache

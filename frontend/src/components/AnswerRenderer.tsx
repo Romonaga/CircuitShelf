@@ -1,4 +1,6 @@
 import { ReactNode, useMemo } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const ALLOWED_TAGS = new Set(["DETAILS", "SUMMARY", "DIV", "P", "PRE", "CODE", "IMG"]);
 
@@ -76,7 +78,11 @@ export function AnswerRenderer({ content }: { content: string }) {
 
   return (
     <div className="answer-rich">
-      {answerText ? <div className="answer-plain">{answerText}</div> : null}
+      {answerText ? (
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ children }) => <span>{children}</span> }}>
+          {answerText}
+        </ReactMarkdown>
+      ) : null}
       {imageNodes.length ? <div className="answer-generated-images">{imageNodes}</div> : null}
     </div>
   );

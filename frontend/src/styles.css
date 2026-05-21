@@ -256,7 +256,8 @@ nav {
   grid-template-columns: minmax(0, 1fr) 310px;
   grid-template-areas:
     "query controls"
-    "answer sources";
+    "answer sources"
+    "history sources";
 }
 
 .docs-grid {
@@ -279,9 +280,14 @@ nav {
   grid-area: sources;
 }
 
+.history-panel {
+  grid-area: history;
+}
+
 .query-panel,
 .controls-panel,
 .answer-panel,
+.history-panel,
 .sources-panel,
 .document-list-panel,
 .chunk-panel,
@@ -323,6 +329,10 @@ nav {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.query-actions .primary-button {
+  min-width: 112px;
 }
 
 .primary-button {
@@ -380,11 +390,81 @@ nav {
 
 .answer-rich {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
-.answer-plain {
-  white-space: pre-wrap;
+.answer-rich > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.answer-rich h1,
+.answer-rich h2,
+.answer-rich h3 {
+  margin-top: 18px;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+
+.answer-rich h1 {
+  font-size: 1.45rem;
+}
+
+.answer-rich h2 {
+  font-size: 1.22rem;
+}
+
+.answer-rich h3 {
+  font-size: 1.08rem;
+}
+
+.answer-rich p,
+.answer-rich li {
+  line-height: 1.65;
+}
+
+.answer-rich ul,
+.answer-rich ol {
+  display: grid;
+  gap: 5px;
+  margin: 4px 0 4px 22px;
+  padding: 0;
+}
+
+.answer-rich table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.94rem;
+}
+
+.answer-rich th,
+.answer-rich td {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.answer-rich th {
+  background: var(--panel-soft);
+  font-weight: 700;
+}
+
+.answer-rich code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #eef3f9;
+  font-size: 0.92em;
+}
+
+.answer-rich hr {
+  width: 100%;
+  height: 1px;
+  border: 0;
+  background: var(--line);
 }
 
 .answer-generated-images {
@@ -437,6 +517,31 @@ nav {
   line-height: 1.5;
 }
 
+.chat-history {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.chat-turn {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.chat-question {
+  color: #172033;
+  font-weight: 700;
+}
+
+.chat-answer {
+  color: var(--text);
+  line-height: 1.55;
+}
+
 .empty-state {
   min-height: 160px;
   display: grid;
@@ -471,9 +576,102 @@ nav {
 }
 
 .source-item summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "arrow title"
+    "arrow pages";
+  column-gap: 8px;
+  row-gap: 3px;
+  align-items: center;
   padding: 11px 12px;
   cursor: pointer;
   font-weight: 700;
+  list-style: none;
+}
+
+.source-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.source-item summary::before {
+  content: "▸";
+  grid-area: arrow;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1;
+  transition: transform 0.12s ease;
+}
+
+.source-item[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.source-title {
+  grid-area: title;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-item summary small {
+  grid-area: pages;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-detail {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: #ffffff;
+}
+
+.source-meta,
+.source-chunk-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.source-meta span,
+.source-chunk-meta span {
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-soft);
+}
+
+.source-chunks {
+  display: grid;
+  gap: 10px;
+}
+
+.source-chunk {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.source-chunk p {
+  margin: 0;
+  color: #233044;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .source-item pre,
@@ -602,6 +800,7 @@ nav {
       "query"
       "controls"
       "answer"
+      "history"
       "sources";
   }
 
@@ -644,6 +843,7 @@ nav {
   .query-panel,
   .controls-panel,
   .answer-panel,
+  .history-panel,
   .sources-panel,
   .document-list-panel,
   .chunk-panel,

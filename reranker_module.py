@@ -68,10 +68,11 @@ class Reranker:
         return [(score - low) / (high - low) for score in scores]
 
     def fuse_scores_with_ranks(self, faiss_hits, rerank_scores, question):
-        q_lower = question.lower()
+        q_lower = str(question).lower()
         profile = "default"
         for pname, pdata in self.rerank_profiles.items():
-            if any(kw in q_lower for kw in pdata.get("keywords", [])):
+            keywords = [str(kw).lower() for kw in pdata.get("keywords", [])]
+            if any(kw in q_lower for kw in keywords):
                 profile = pname
                 break
 

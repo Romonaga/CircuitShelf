@@ -24,6 +24,291 @@ class ChunkingUtils:
         self.trace_logger.debug(f"🔧 Loaded SCORING_HEURISTICS: {self.scoring_heurustics}")
         self.trace_logger.debug(f"📊 Loaded CHUNK_CATEGORIES: {self.chunk_categories}")
         self.trace_logger.debug(f"📊 Loaded EQUATION_DETECTION: {self.equation_detection}")
+
+    def normalize_extracted_text(self, text: str) -> str:
+        """Normalize PDF/OCR text before chunking without trying to understand it semantically."""
+        normalized_lines = []
+        for raw_line in text.replace("\r\n", "\n").replace("\r", "\n").splitlines():
+            line = re.sub(r"\s+", " ", raw_line).strip()
+            if not line:
+                normalized_lines.append("")
+                continue
+            if self.is_low_value_line(line):
+                continue
+            normalized_lines.append(line)
+        return "\n".join(normalized_lines).strip()
+
+    def is_low_value_line(self, line: str) -> bool:
+        lower = line.lower().strip()
+        if not lower:
+            return False
+        if re.fullmatch(r"\d+", lower):
+            return True
+        if self.is_numeric_table_fragment(line):
+            return True
+        if self.is_package_table_fragment(line):
+            return True
+        if line.count(".") / max(1, len(line)) > 0.45:
+            return True
+        boilerplate = [
+            "submit documentation feedback",
+            "product folder links:",
+            "copyright ©",
+            "copyright (c)",
+            "www.ti.com",
+            "think of ways you could apply this knowledge",
+        ]
+        if any(item in lower for item in boilerplate):
+            return True
+        alpha_ratio = sum(char.isalpha() for char in line) / max(1, len(line))
+        symbol_ratio = sum(not char.isalnum() and not char.isspace() for char in line) / max(1, len(line))
+        return symbol_ratio > 0.65 and alpha_ratio < 0.15
+
+    def is_numeric_table_fragment(self, line: str) -> bool:
+        """Detect isolated numeric table cells that have no useful labels."""
+        stripped = line.strip()
+        if not stripped:
+            return False
+        if not re.search(r"\d", stripped):
+            return False
+        alpha_ratio = sum(char.isalpha() for char in stripped) / max(1, len(stripped))
+        digit_ratio = sum(char.isdigit() for char in stripped) / max(1, len(stripped))
+        allowed = re.fullmatch(r"[\d\s.,+\-−–/%()]+", stripped) is not None
+        return allowed and digit_ratio > 0.28 and alpha_ratio < 0.08
+
+    def is_package_table_fragment(self, line: str) -> bool:
+        """Detect low-value packaging/order-code fragments common in datasheets."""
+        tokens = [token.lower().strip("()[]{}.,;:") for token in re.split(r"\s+", line) if token.strip()]
+        if not tokens:
+            return False
+
+        package_tokens = {
+            "spq", "l", "w", "t", "b", "mm", "µm", "um", "tssop", "soic", "ssop",
+            "pdip", "cdip", "sop", "so", "db", "ns", "nipdau", "green", "rohs",
+            "non-rohs", "lead", "finish", "package", "orderable", "top-side", "marking",
+        }
+        short_or_package = sum(1 for token in tokens if token in package_tokens or len(token) <= 3)
+        if len(tokens) <= 12 and short_or_package / max(1, len(tokens)) >= 0.75:
+            return True
+        if re.fullmatch(r"[A-Z0-9]{2,8}(?:\s*[|/]\s*[A-Z0-9]{1,8})+", line.strip()):
+            return True
+        return False
+
+    def classify_line_type(self, line: str) -> str:
+        lower = line.lower()
+        if "=>" in line or re.search(r"\b[A-Z]{1,4}\d*\([A-Z+\-]+\)\s*=>", line):
+            return "wiring"
+        if re.search(r"\bfigure\s+\d+", lower):
+            return "figure"
+        if re.search(r"\b(table|parameter|conditions|typ|max|min|unit)\b", lower) and self.numeric_density(line) > 0.08:
+            return "table"
+        if self.score_equation_likelihood(line) >= 0.25:
+            return "formula"
+        if re.match(r"^[-*•]\s+", line) or re.match(r"^\d+[\).]\s+", line):
+            return "list"
+        return "paragraph"
+
+    @staticmethod
+    def numeric_density(text: str) -> float:
+        return sum(char.isdigit() for char in text) / max(1, len(text))
+
+    def estimate_chunk_quality(self, text: str, chunk_type: str = "paragraph") -> tuple[float, list[str]]:
+        stripped = text.strip()
+        if not stripped:
+            return 0.0, ["empty"]
+
+        flags = []
+        alpha_ratio = sum(char.isalpha() for char in stripped) / max(1, len(stripped))
+        symbol_ratio = sum(not char.isalnum() and not char.isspace() for char in stripped) / max(1, len(stripped))
+        dot_ratio = stripped.count(".") / max(1, len(stripped))
+        digit_ratio = self.numeric_density(stripped)
+        token_count = self.token_utils.tokenize_len(stripped)
+        score = 1.0
+
+        if dot_ratio > 0.25:
+            score -= 0.55
+            flags.append("dot_leader")
+        if alpha_ratio < 0.18 and chunk_type not in {"table", "formula", "wiring"}:
+            score -= 0.35
+            flags.append("low_alpha")
+        if symbol_ratio > 0.45 and chunk_type not in {"table", "formula", "wiring"}:
+            score -= 0.35
+            flags.append("symbol_heavy")
+        if digit_ratio > 0.45 and alpha_ratio < 0.25 and chunk_type not in {"table", "formula"}:
+            score -= 0.55
+            flags.append("numeric_heavy")
+        if token_count < self.config.get("MIN_TOKENS_PER_CHUNK", 5):
+            score -= 0.4
+            flags.append("too_short")
+        if re.search(r"\.{8,}", stripped):
+            score -= 0.45
+            flags.append("repeated_dots")
+
+        return round(max(0.0, min(1.0, score)), 3), flags
+
+    def make_chunk_meta(self, text: str, source_file: str, section: str, chunk_type: str) -> dict:
+        category = self.categorize_chunk(text)
+        quality_score, quality_flags = self.estimate_chunk_quality(text, chunk_type)
+        if self.is_low_value_chunk(text, section, chunk_type):
+            quality_score = 0.0
+            quality_flags = sorted(set(quality_flags + ["low_value_chunk"]))
+        return {
+            "section": section,
+            "page": 1,
+            "source": source_file,
+            "category": category,
+            "chunk_type": chunk_type,
+            "token_count": self.token_utils.tokenize_len(text),
+            "quality_score": quality_score,
+            "quality_flags": quality_flags,
+        }
+
+    def is_low_value_chunk(self, text: str, section: str = "", chunk_type: str = "paragraph") -> bool:
+        stripped = text.strip()
+        if not stripped:
+            return True
+
+        lower = stripped.lower()
+        section_lower = str(section or "").lower()
+        alpha_words = re.findall(r"[a-zA-Z]{2,}", stripped)
+        electronics_terms = [
+            "pin", "vcc", "gnd", "ground", "trigger", "threshold", "discharge", "reset",
+            "output", "input", "timer", "timing", "capacitor", "resistor", "current", "voltage",
+            "frequency", "duty", "oscillator", "monostable", "astable",
+        ]
+
+        if len(alpha_words) < 2 and not any(term in lower for term in electronics_terms):
+            return True
+
+        package_sections = [
+            "package outline",
+            "package materials information",
+            "package option addendum",
+            "packaging information",
+            "ceramic dual-in-line",
+            "example board layout",
+            "land pattern",
+        ]
+        if any(item in section_lower for item in package_sections):
+            return not any(term in lower for term in electronics_terms)
+
+        if chunk_type == "table" and self.numeric_density(stripped) > 0.35 and not any(term in lower for term in electronics_terms):
+            return True
+
+        if re.fullmatch(r"\d{1,2}[-/][A-Za-z]{3}[-/]\d{2,4}", stripped):
+            return True
+
+        return False
+
+    def split_lines_to_budget(self, lines, chunk_size, overlap):
+        chunks = []
+        i = 0
+        while i < len(lines):
+            current = []
+            token_total = 0
+            j = i
+            while j < len(lines):
+                line_tokens = self.token_utils.tokenize_len(lines[j])
+                if current and token_total + line_tokens > chunk_size:
+                    break
+                current.append(lines[j])
+                token_total += line_tokens
+                j += 1
+
+            if not current:
+                current = [lines[i]]
+                j = i + 1
+            chunks.append("\n".join(current).strip())
+
+            if overlap <= 0 or j >= len(lines):
+                i = j
+                continue
+
+            overlap_tokens = 0
+            rewind = j
+            while rewind > i and overlap_tokens < overlap:
+                rewind -= 1
+                overlap_tokens += self.token_utils.tokenize_len(lines[rewind])
+            i = max(rewind, i + 1)
+        return [chunk for chunk in chunks if chunk]
+
+    def deterministic_chunk_text(self, text, source_file, chunk_size, overlap):
+        cleaned = self.normalize_extracted_text(text)
+        if not cleaned:
+            return [], []
+
+        blocks = []
+        current_section = "Untitled Section"
+        current_lines = []
+        current_type = None
+
+        def flush_block():
+            nonlocal current_lines, current_type
+            if current_lines:
+                blocks.append({
+                    "section": current_section,
+                    "type": current_type or "paragraph",
+                    "lines": current_lines,
+                })
+            current_lines = []
+            current_type = None
+
+        for line in cleaned.splitlines():
+            if not line.strip():
+                flush_block()
+                continue
+            if self.is_heading(line):
+                flush_block()
+                current_section = line.strip()
+                continue
+
+            line_type = self.classify_line_type(line)
+            if current_lines and line_type != current_type and line_type in {"table", "formula", "wiring", "figure"}:
+                flush_block()
+            current_type = current_type or line_type
+            current_lines.append(line)
+
+        flush_block()
+
+        chunks_out, meta = [], []
+        buffer_lines = []
+        buffer_section = None
+        buffer_type = None
+
+        def flush_buffer():
+            nonlocal buffer_lines, buffer_section, buffer_type
+            if not buffer_lines:
+                return
+            for chunk in self.split_lines_to_budget(buffer_lines, chunk_size, overlap):
+                chunks_out.append(chunk)
+                meta.append(self.make_chunk_meta(chunk, source_file, buffer_section or "Untitled Section", buffer_type or "paragraph"))
+            buffer_lines = []
+            buffer_section = None
+            buffer_type = None
+
+        for block in blocks:
+            block_lines = block["lines"]
+            block_type = block["type"]
+            block_section = block["section"]
+            block_tokens = self.token_utils.tokenize_len("\n".join(block_lines))
+            combinable = block_type in {"paragraph", "list"} and block_tokens < chunk_size
+
+            if combinable:
+                candidate = buffer_lines + [""] + block_lines if buffer_lines else block_lines
+                same_section = buffer_section in {None, block_section}
+                if same_section and self.token_utils.tokenize_len("\n".join(candidate)) <= chunk_size:
+                    buffer_lines = candidate
+                    buffer_section = block_section
+                    buffer_type = block_type if buffer_type is None else buffer_type
+                    continue
+
+            flush_buffer()
+            for chunk in self.split_lines_to_budget(block_lines, chunk_size, overlap):
+                chunks_out.append(chunk)
+                meta.append(self.make_chunk_meta(chunk, source_file, block_section, block_type))
+
+        flush_buffer()
+        return chunks_out, meta
             
 
     def smart_chunk_text(self, text, source_file, force_math=False, chunk_size=None, overlap=None):
@@ -35,12 +320,20 @@ class ChunkingUtils:
 
         if(overlap is None):
             overlap  =  self.config.get("CHUNK_OVERLAP")
+
+        text = self.normalize_extracted_text(text)
+        if not text:
+            return [], []
     
 
         enable_math_chunking = self.config.get("ENABLE_MATH_HEAVY_CHUNKING", False)
         if enable_math_chunking and not force_math and self.is_math_heavy(text):
             force_math = True            
             self.trace_logger.info(f"🔍 Auto-detected math-heavy content in {source_file}. Switching to math chunking.")
+
+        if not force_math and self.config.get("CHUNKING_MODE", "deterministic") == "deterministic":
+            self.trace_logger.info(f"🧱 Deterministic page chunking for {source_file}")
+            return self.deterministic_chunk_text(text, source_file, chunk_size, overlap)
 
         if force_math:
             self.trace_logger.info(f"📀 Math-mode chunking for {source_file}")
@@ -178,27 +471,75 @@ class ChunkingUtils:
         s = text.strip()
         if not s or len(s.split()) > 12:
             return False
-        if s == s.upper() and 5 <= len(s) <= 100:
-            return True
-        strong_starts = ["section", "chapter", "appendix", "part", "module", "unit", "figure", "table"]
-        if any(s.lower().startswith(word + " ") for word in strong_starts):
+        if self.is_numeric_table_fragment(s) or self.is_package_table_fragment(s):
+            return False
+        if self.numeric_density(s) > 0.25:
+            return False
+
+        lower = s.lower().rstrip(":")
+        strong_titles = {
+            "applications",
+            "features",
+            "overview",
+            "description",
+            "design requirements",
+            "detailed design procedure",
+            "electrical characteristics",
+            "absolute maximum ratings",
+            "recommended operating conditions",
+            "pin configuration and functions",
+            "package materials information",
+            "layout",
+            "schematic",
+            "parts list",
+            "procedure",
+            "operation",
+            "notes",
+        }
+        strong_starts = [
+            "section", "chapter", "appendix", "part", "module", "unit", "figure", "table",
+            "application", "feature", "overview", "description", "design", "electrical",
+            "pin configuration", "absolute maximum", "recommended operating",
+        ]
+        if lower in strong_titles or any(lower.startswith(word + " ") for word in strong_starts):
             return True
         if re.match(r"^\s*([A-Z]?[0-9]+(\.[0-9A-Z]+)*[\):]?)\s+[A-Z]", s):
             return True
         if re.match(r"^(NOTE|WARNING|CAUTION|SUMMARY|OBJECTIVE|GOAL|PURPOSE)\s*[:\-]", s, re.IGNORECASE):
             return True
-        if s.istitle() and len(s.split()) <= 6:
-            return True
+        if s == s.upper() and 5 <= len(s) <= 100:
+            words = s.split()
+            meaningful_words = [word for word in words if len(word.strip("()[]{}.,;:")) > 3]
+            return len(words) >= 2 and len(meaningful_words) >= 1
         return False
 
     def categorize_chunk(self, text: str) -> str:
         chunk_cats = self.config.get("CHUNK_CATEGORIES", {})
         lower_text = text.lower()
+        scored_categories = []
         for category, data in chunk_cats.items():
+            score = 0
             for keyword in data.get("keywords", []):
+                keyword = str(keyword).lower()
                 if keyword.lower() in lower_text:
-                    return category
-        return "General Information"
+                    score += 1
+            if score:
+                scored_categories.append((score, self.category_priority(category), category))
+        if not scored_categories:
+            return "General Information"
+        scored_categories.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return scored_categories[0][2]
+
+    @staticmethod
+    def category_priority(category: str) -> int:
+        category_upper = category.upper()
+        if "TECH" in category_upper:
+            return 30
+        if "MED" in category_upper:
+            return 20
+        if "HIGH" in category_upper:
+            return 10
+        return 0
 
  
 
@@ -216,7 +557,7 @@ class ChunkingUtils:
         self.trace_logger.debug(f"🔍 Checking math question heuristics for: '{question}'")
 
         # Check for math-related keywords
-        keyword_matches = [kw for kw in keywords if kw.lower() in question]
+        keyword_matches = [str(kw).lower() for kw in keywords if str(kw).lower() in question]
         keyword_hit = bool(keyword_matches)
 
         if keyword_hit:
@@ -309,21 +650,63 @@ class ChunkingUtils:
             return "Medium-level Detail"
         return "Technical Detail"
 
+    def clean_ocr_text(self, text: str) -> str:
+        """Normalize OCR text before scoring or indexing."""
+        return re.sub(r"\s+", " ", self.normalize_extracted_text(str(text or ""))).strip()
+
+    def has_ocr_value_signal(self, text: str) -> bool:
+        """Return true when short OCR text still looks useful for electronics retrieval."""
+        lower = text.lower()
+        electronics_terms = [
+            "breadboard", "component", "connection", "resistor", "capacitor", "transistor",
+            "diode", "led", "switch", "jumper", "battery", "ground", "timer", "trigger",
+            "threshold", "discharge", "reset", "output", "input", "vcc", "gnd", "pin",
+            "ohm", "kohm", "uf", "pf", "nf", "volt", "voltage", "current", "frequency",
+            "duty", "monostable", "astable", "experiment", "chapter", "schematic",
+        ]
+        if any(term in lower for term in electronics_terms):
+            return True
+        if re.search(r"\b[A-Z]{1,6}\d*\([A-Z+\-]+\)\s*=>\s*[A-Z]\d+\b", text):
+            return True
+        if re.search(r"\b\d+(\.\d+)?\s*(k?ohm|kq|q|uf|µf|pf|nf|v|ma)\b", lower):
+            return True
+        return False
+
+    def is_isolated_ocr_noise(self, text: str) -> bool:
+        stripped = text.strip()
+        if not stripped:
+            return True
+        if self.is_low_value_line(stripped):
+            return True
+        if re.fullmatch(r"[\W\d_]+", stripped):
+            return True
+        if re.fullmatch(r"(?:page|fig(?:ure)?|table)?\s*\d+[A-Za-z]?", stripped, re.IGNORECASE):
+            return True
+        if re.fullmatch(r"\d{1,2}[-/][A-Za-z]{3}[-/]\d{2,4}", stripped):
+            return True
+        return False
+
     def evaluate_ocr_quality(self, text, ocr_confidence=None):
-        text = text.strip()
+        text = self.clean_ocr_text(text)
         if not text:
             return 0.0, "Empty"
 
         unique_chars = len(set(text))
         words = text.split()
+        meaningful_words = re.findall(r"[A-Za-z]{2,}", text)
         avg_word_len = np.mean([len(w) for w in words]) if words else 0
         alpha_ratio = sum(c.isalpha() for c in text) / len(text)
         digit_ratio = sum(c.isdigit() for c in text) / len(text)
         space_ratio = sum(c.isspace() for c in text) / len(text)
         symbol_ratio = sum(not c.isalnum() and not c.isspace() for c in text) / len(text)
+        has_value_signal = self.has_ocr_value_signal(text)
 
         # Load thresholds from config (or use defaults)
         min_length = self.config.get("OCR_MIN_LENGTH", 20)
+        min_meaningful_chars = self.config.get("OCR_MIN_MEANINGFUL_CHARS", 80)
+        min_meaningful_words = self.config.get("OCR_MIN_MEANINGFUL_WORDS", 6)
+        short_text_max_score = self.config.get("OCR_SHORT_TEXT_MAX_SCORE", 0.3)
+        low_content_max_score = self.config.get("OCR_LOW_CONTENT_MAX_SCORE", 0.2)
         min_unique_chars = self.config.get("OCR_MIN_UNIQUE_CHARS", 10)
         max_avg_word_len = self.config.get("OCR_MAX_AVG_WORD_LEN", 12)
         min_alpha_ratio = self.config.get("OCR_MIN_ALPHA_RATIO", 0.3)
@@ -335,9 +718,20 @@ class ChunkingUtils:
         score = 1.0
         details = []
 
+        if self.is_isolated_ocr_noise(text):
+            return 0.0, "isolated OCR noise"
+
         if len(text) < min_length:
             score -= 0.4
             details.append("too short")
+
+        if len(text) < min_meaningful_chars and not has_value_signal:
+            score = min(score, short_text_max_score)
+            details.append("short text without electronics signal")
+
+        if len(meaningful_words) < min_meaningful_words and not has_value_signal:
+            score = min(score, low_content_max_score)
+            details.append("low meaningful word count")
 
         if unique_chars < min_unique_chars:
             score -= 0.3
@@ -381,22 +775,25 @@ class ChunkingUtils:
         filtered_sources = []
         filtered_metadata = []
         dropped_count = 0
+        min_quality = self.config.get("MIN_CHUNK_QUALITY", 0.15)
 
         for chunk, src, meta in zip(chunks, sources, metadata):
             tok_len = self.token_utils.tokenize_len(chunk)
             stripped = chunk.strip()
             is_junk = not stripped or not re.search(r"[A-Za-z0-9]", stripped)
+            quality_score = meta.get("quality_score", 1.0) if isinstance(meta, dict) else 1.0
+            low_quality = quality_score < min_quality
 
-            if min_tokens <= tok_len <= max_tokens and not is_junk:
+            if min_tokens <= tok_len <= max_tokens and not is_junk and not low_quality:
                 filtered_chunks.append(chunk)
                 filtered_sources.append(src)
                 filtered_metadata.append(meta)
             else:
                 dropped_count += 1
-                
+                reason = "Junk" if is_junk else "Low quality" if low_quality else "Token count out of range"
                 self.trace_logger.debug(
                     f"🚫 Dropped chunk from '{src}' | Tokens: {tok_len} | "
-                    f"Reason: {'Junk' if is_junk else 'Token count out of range'} | "
+                    f"Quality: {quality_score:.2f} | Reason: {reason} | "
                     f"Preview: {chunk[:80].strip()}"
                 )
 

@@ -53,11 +53,17 @@ from reranker_module import Reranker
 from ocr_utils import run_ocr
 from index_builder import IndexBuilder
 from ingest_manifest import IngestManifest
+from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
+from response_cache import (
+    ResponseCacheEntry,
+    ResponseCacheKey,
+    build_index_fingerprint,
+    should_cache_response,
+)
 
 #Inits the logger as well as the configuraqtion system
 config, trace_logger = SystemInit.load_config_and_logger()
 state = StateManager(use_lock=True, cache_capacity=200, trace_logger=trace_logger)
-cache = state.get_cache()
 trace_logger.info("🛠️ Configuration and logger successfully initialized.")
 
 # === Decorators ===
@@ -145,24 +151,13 @@ CHUNK_SIZE = config.get("CHUNK_SIZE")
 CHUNK_OVERLAP = config.get("CHUNK_OVERLAP")
 EMBED_MODEL_NAME = config.get("EMBED_MODEL_NAME")
 LLM_MODEL_NAME = config.get("LLM_MODEL_NAME")
-LLM_API_URL = config.get("LLM_API_URL")
 OLLAMA_API_URL = config.get("OLLAMA_API_URL")
-LLAMA_API_URL = config.get("LLAMA_API_URL")
 
 CROSS_ENCODER_MODEL = config.get("CROSS_ENCODER_MODEL")
 LLM_MODEL_OPTIONS = config.get("LLM_MODEL_OPTIONS")
 
 
-
-
-# === This is to use the /api/chat endpoint in ollama ===
-# === It requiers a much different format then for the /api/rag_query endpoint ===
-# === You can not use this with USE_CHAT_HISTORY ===
-USE_CHAT_ENDPOINT = config.get("USE_CHAT_ENDPOINT", False)
-
-# === Settings to control prompt/endpoint and history ===
-# === can not be used with USE_CHAT_ENDPOINT == true ===
-USE_CHAT_HISTORY = config.get("USE_CHAT_HISTORY", False)
+# === Ollama chat and history settings ===
 MAX_CHAT_HISTORY_TURNS = config.get("MAX_CHAT_HISTORY_TURNS", 5)
 MAX_CHAT_HISTORY_CHARS = config.get("MAX_CHAT_HISTORY_CHARS", 2000)
 BANNED_PHRASES = config.get("PROMPT_SECURITY", {}).get("BANNED_PHRASES", [])
@@ -356,11 +351,12 @@ def ocr_image_bytes(image_bytes, image_id):
             "skipped": True,
         }
 
-    score, reason = chunker.evaluate_ocr_quality(result.text, result.confidence)
+    cleaned_text = chunker.clean_ocr_text(result.text)
+    score, reason = chunker.evaluate_ocr_quality(cleaned_text, result.confidence)
     accepted = score >= config.get("OCR_TXT_DROP_SCORE", 0.4)
     return {
         "accepted": accepted,
-        "text": result.text,
+        "text": cleaned_text,
         "score": score,
         "reason": reason,
         "confidence": result.confidence,
@@ -465,15 +461,15 @@ def load_pdf_text(path):
                 if INDEX_IMAGE_OCR_AS_TEXT and len(ocr_text) >= OCR_INDEX_TEXT_MIN_CHARS:
                     extra_chunks.append(ocr_text)
                     extra_sources.append(path)
-                    extra_meta.append({
+                    ocr_meta = chunker.make_chunk_meta(ocr_text, path, "Image OCR", "ocr")
+                    ocr_meta.update({
                         "page": page_num + 1,
-                        "source": path,
                         "parent_source": path,
                         "source_image_id": img_name,
-                        "section": "Image OCR",
                         "ocr_score": score,
                         "ocr_confidence": confidence,
                     })
+                    extra_meta.append(ocr_meta)
 
             except Exception as ex:
                 trace_logger.warning(f"❌ Failed to process image on page {page_num+1}: {ex}")
@@ -551,13 +547,22 @@ def extract_images_from_docx_textboxes(path):
                                 chunks, meta = chunker.smart_chunk_text(ocr_text, base_doc)
 
                             for m in meta:
-                                m.update({
+                                ocr_meta = chunker.make_chunk_meta(
+                                    ocr_text,
+                                    base_doc,
+                                    "Textbox OCR",
+                                    "ocr",
+                                )
+                                ocr_meta.update(m)
+                                ocr_meta.update({
                                     "section": "Textbox OCR",
                                     "source_image_id": img_name,
                                     "ocr_score": score,
                                     "ocr_confidence": confidence,
                                     "source": base_doc
                                 })
+                                m.clear()
+                                m.update(ocr_meta)
 
                             all_chunks.extend(chunks)
                             all_meta.extend(meta)
@@ -688,13 +693,22 @@ def process_image_file(fpath, state, trace_logger, chunker, token_utils=None):
             chunks, meta = chunker.smart_chunk_text(ocr_text, img_name)
 
         for m in meta:
-            m.update({
+            ocr_meta = chunker.make_chunk_meta(
+                ocr_text,
+                img_name,
+                "Image OCR",
+                "ocr",
+            )
+            ocr_meta.update(m)
+            ocr_meta.update({
                 "section": "Image OCR",
                 "source_image_id": img_name,
                 "ocr_score": score,
                 "ocr_confidence": confidence,
                 "source": img_name
             })
+            m.clear()
+            m.update(ocr_meta)
 
         state.extend_chunks(chunks, [img_name] * len(chunks), meta)
         trace_logger.info(f"✅ Processed image file: {fpath}")
@@ -967,9 +981,13 @@ def expand_query(q):
 
     synonym_pairs = config.get("QUERY_SYNONYMS", [])
     synonyms = set()
-    q_lower = q.lower()
+    q_lower = str(q).lower()
 
-    for orig, repl in synonym_pairs:
+    for pair in synonym_pairs:
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            trace_logger.warning(f"⚠️ Invalid QUERY_SYNONYMS entry skipped: {pair!r}")
+            continue
+        orig, repl = (str(pair[0]).lower(), str(pair[1]).lower())
         if orig in q_lower:
             synonyms.add(q_lower.replace(orig, repl))
 
@@ -1055,7 +1073,8 @@ def fuse_scores_with_ranks(faiss_hits, rerank_scores, question):
 
     # Match profile based on keywords
     for profile_name, profile_data in RERANK_PROFILES.items():
-        if any(kw in q_lower for kw in profile_data.get("keywords", [])):
+        keywords = [str(kw).lower() for kw in profile_data.get("keywords", [])]
+        if any(kw in q_lower for kw in keywords):
             selected_profile = profile_name
             break
 
@@ -1089,104 +1108,12 @@ def get_average_query_time():
     return f"{avg_time:.2f} sec over {len(query_timings)} queries"
 
 
-trace_timer("summarize_chat_with_llm")
-def summarize_chat_with_llm(chat_history, summarizer_model, llm_api_url):
-    """
-    Use an LLM to summarize prior Q&A turns into a compact fact summary.
-    """
-    if not chat_history:
-        return "[No chat history]"
-
-    for pair in chat_history:
-        if not isinstance(pair, (tuple, list)) or len(pair) != 2:
-            trace_logger.warning(f"⚠️ Invalid Q/A pair: {pair}")
-            continue
-        
-    valid_pairs = [tuple(pair) for pair in chat_history if isinstance(pair, (tuple, list)) and len(pair) == 2]
-    if not valid_pairs:
-        trace_logger.warning("⚠️ No valid Q/A pairs found in chat_history.")
-        return "[Error: Invalid chat history format]"
-
-
-    # Include **all** turns, not just prior ones
-    prior_turns = "\n".join(f"Q: {q}\nA: {a}" for q, a in chat_history)
-    if not prior_turns.strip():
-        trace_logger.info("ℹ️ No chat history to summarize.")
-        return "[No chat history]"
-
-    prompt = (
-        "Summarize the following Q&A turns into key facts or instructions "
-        "that are important for answering the next user question.\n\n"
-        f"{prior_turns}\n\nSummary:"
-    )
-
-    trace_logger.debug(f"Summarization prompt: {prompt[:25]}")
-    api_url = llm_api_url or f"{OLLAMA_API_URL}/generate"
-    payload = {
-        "model": summarizer_model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "temperature": 0.0,
-            "num_predict": 300,
-            "top_p": 0.9,
-        },
-    }
-    try:
-        response = requests.post(api_url, json=payload, timeout=POST_TIMEOUT)
-        response.raise_for_status()
-        summary = response.json().get("response", "").strip()
-
-        if not summary:
-            trace_logger.warning("⚠️ Summarization returned empty response.")
-            return "[Empty summary]"
-
-        trace_logger.debug(f"Summarization response (preview): {summary[:25]}")
-        return summary
-
-    except RequestException as e:
-        trace_logger.warning(f"❌ Summarization LLM call failed: {e}")
-        return "[Error: Summarization failed]"
-
-
-def build_ollama_chat_messages(prompt, chat_history=None):
-    messages = [{"role": "system", "content": RAG_CHAT_SYSTEM_PROMPT}]
-
-    if chat_history:
-        for turn in chat_history[-MAX_CHAT_HISTORY_TURNS:]:
-            if isinstance(turn, dict):
-                role = turn.get("role")
-                content = turn.get("content")
-                if role in {"user", "assistant"} and isinstance(content, str) and content.strip():
-                    messages.append({"role": role, "content": content})
-            elif isinstance(turn, (list, tuple)) and len(turn) == 2:
-                q, a = turn
-                if q:
-                    messages.append({"role": "user", "content": str(q)})
-                if a:
-                    messages.append({"role": "assistant", "content": str(a)})
-
-    messages.append({"role": "user", "content": prompt})
-    return messages
-
-
-@trace_timer("query_llm with retry")
-def query_llm_with_retry(prompt, model_name, chat_history=None, retries=QUERY_RETRIES,
-                         delay=QUERY_RETRY_DELAY):
+@trace_timer("query_ollama_chat with retry")
+def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=QUERY_RETRIES,
+                                 delay=QUERY_RETRY_DELAY):
 
     LLM_API_KEY = config.get("LLM_API_KEY", "")
-
-    OLLAMA_API_URL = config.get("OLLAMA_API_URL")
-    LLAMA_API_URL = config.get("LLAMA_API_URL")
-
-    use_llam = config.get("USE_LLAMA", False)
-    if use_llam:
-
-        url = f"{LLAMA_API_URL}/chat/completions" if USE_CHAT_ENDPOINT else f"{LLAMA_API_URL}/completions"
-    else:
-        url = f"{OLLAMA_API_URL}/chat" if USE_CHAT_ENDPOINT else f"{OLLAMA_API_URL}/generate"
-
-    #url = f"{LLM_API_URL}{endpoint}"
+    url = f"{OLLAMA_API_URL}/chat"
 
     headers = {
         "Content-Type": "application/json"
@@ -1197,16 +1124,18 @@ def query_llm_with_retry(prompt, model_name, chat_history=None, retries=QUERY_RE
     payload = {
         "model": model_name or "default",
         "stream": False,
+        "messages": build_chat_messages(
+            RAG_CHAT_SYSTEM_PROMPT,
+            prompt,
+            chat_history,
+            max_turns=MAX_CHAT_HISTORY_TURNS,
+            max_chars=MAX_CHAT_HISTORY_CHARS,
+        ),
         "options": {
             "temperature": 0.2,
             "num_predict": 1024,
         },
     }
-
-    if USE_CHAT_ENDPOINT:
-        payload["messages"] = build_ollama_chat_messages(prompt, chat_history)
-    else:
-        payload["prompt"] = prompt
 
     for attempt in range(retries):
         try:
@@ -1214,16 +1143,7 @@ def query_llm_with_retry(prompt, model_name, chat_history=None, retries=QUERY_RE
             response.raise_for_status()
 
             json_data = response.json() #CLEAN THIS UP LATER
-            if use_llam:
-                if USE_CHAT_ENDPOINT:
-                    result = json_data["choices"][0]["message"]["content"].strip()
-                else:
-                    result = json_data["choices"][0]["text"].strip()
-            else:
-                if USE_CHAT_ENDPOINT:
-                    result = json_data.get("message", {}).get("content", "").strip()
-                else:
-                    result = json_data.get("response", "[Empty response]").strip()
+            result = json_data.get("message", {}).get("content", "").strip()
 
             trace_logger.debug(f"✅ LLM call success: {result[:80]}...")
             return result
@@ -1245,7 +1165,7 @@ def sanitize_input(user_input: str) -> str:
     return user_input
 
 
-trace_timer("get_rag_response")
+@trace_timer("get_rag_response")
 def get_rag_response(
     question,
     chat_history,
@@ -1259,18 +1179,39 @@ def get_rag_response(
 ):
     start_time = time.time()
     norm_q = normalize_question(question)
-    synonyms = expand_query(norm_q)
-    cache_key = f"{model_name}::{strategy}::{norm_q}"
-    
-    if not bypass_cache:
-        cached = cache.get(cache_key)
-        if cached:
-            trace_logger.info(f"✅ Cache HIT: {cache_key}")
-            norm_q, chat_history, sources, confidence = cached
-            query_timings.append(time.time() - start_time)
-            return norm_q, chat_history, sources, cache.stats(), confidence, get_average_query_time()
+    retrieval_q = normalize_question(build_contextual_retrieval_query(norm_q, chat_history))
+    synonyms = expand_query(retrieval_q)
+    cache_enabled = should_cache_response(chat_history, bypass_cache)
+    response_cache = get_response_cache()
+    cache_key = build_response_cache_key(
+        model_name=model_name,
+        strategy=strategy,
+        norm_q=norm_q,
+        retrieval_q=retrieval_q,
+        top_k=top_k,
+        dist_thresh=dist_thresh,
+        max_tokens=max_tokens,
+        show_full_text=show_full_text,
+    )
 
-    trace_logger.info(f"🔍 Cache MISS: {cache_key} | Executing query")
+    if cache_enabled:
+        cached = response_cache.get_response(cache_key)
+        if cached:
+            trace_logger.info(f"✅ Response cache HIT: {cache_key.digest()}")
+            query_timings.append(time.time() - start_time)
+            chat_history = [list(turn) for turn in cached.chat_history]
+            confidence = cached.confidence
+            return norm_q, cached.answer, chat_history, cached.sources, response_cache.stats(), confidence, get_average_query_time()
+    else:
+        if bypass_cache:
+            trace_logger.debug("Response cache bypassed by request option.")
+        elif chat_history:
+            trace_logger.debug("Response cache skipped for conversational request.")
+
+    trace_logger.info(f"🔍 Response cache MISS: {cache_key.digest()} | Executing query")
+
+    if not cache_enabled:
+        response_cache.misses += 1
 
     # === FAISS Retrieval ===
     all_hits = []
@@ -1287,7 +1228,14 @@ def get_rag_response(
     if not all_hits:
         response = f"No relevant documents found for: {norm_q}"
         trace_logger.warning(f"⚠️ No results for query: {norm_q}")
-        return norm_q, chat_history + [[norm_q, response]], "", cache.stats(), "0.00", get_average_query_time()
+        chat_history = append_chat_turn(
+            chat_history,
+            norm_q,
+            response,
+            max_turns=MAX_CHAT_HISTORY_TURNS,
+            max_chars=MAX_CHAT_HISTORY_CHARS,
+        )
+        return norm_q, response, chat_history, "", response_cache.stats(), "0.00", get_average_query_time()
 
     dedup_hits = deduplicate_hits_by_index(all_hits)
     rerank_duration = None
@@ -1299,7 +1247,7 @@ def get_rag_response(
         profile = "N/A"
     else:
         rerank_start = time.time()
-        reranked_chunks, confidence, profile = reranker_engine.rerank_chunks(dedup_hits, norm_q)
+        reranked_chunks, confidence, profile = reranker_engine.rerank_chunks(dedup_hits, retrieval_q)
         rerank_duration = time.time() - rerank_start
         selected_chunks = reranked_chunks
         if not selected_chunks:
@@ -1311,57 +1259,47 @@ def get_rag_response(
 
     selected_chunks = trim_chunks_to_token_budget(selected_chunks, max_tokens)
 
-    # === Chat Summarization (Only for /generate)
-    summary = ""
-    if chat_history and not USE_CHAT_ENDPOINT and USE_CHAT_HISTORY:
-        MAX_TURNS = config.get("MAX_CHAT_HISTORY_TURNS", 5)
-        MAX_CHARS = config.get("MAX_CHAT_HISTORY_CHARS", 2000)
-
-        valid_pairs = [tuple(p) for p in chat_history if isinstance(p, (list, tuple)) and len(p) == 2]
-        recent_pairs = valid_pairs[-MAX_TURNS:]
-        filtered = [(q, a) for q, a in recent_pairs if len(q.split()) > 4 and len(a.split()) > 4]
-
-        combined = ""
-        trimmed_history = []
-        for q, a in reversed(filtered):
-            entry = f"Q: {q}\nA: {a}\n"
-            if len(combined) + len(entry) > MAX_CHARS:
-                break
-            combined = entry + combined
-            trimmed_history.insert(0, (q, a))
-
-        trace_logger.debug(f"💬 Chat summarization history: {len(combined)} chars")
-
-        summary = summarize_chat_with_llm(
-            trimmed_history,
-            summarizer_model=config.get("SUMMARIZER_MODEL", "mistral"),
-            llm_api_url=LLM_API_URL
-        )
-        if not summary or summary.strip().startswith("["):
-            trace_logger.warning(f"⚠️ Ignoring unusable summary response: {summary}")
-            summary = ""
-
     # === Build Final Prompt
     context = "\n\n".join([c["text"] for c in selected_chunks])
-    enhanced_context = f"{summary}\n\n{context}" if summary else context
-    prompt = build_prompt(enhanced_context, norm_q, chunker.is_math_heavy_question(norm_q))
+    prompt = build_prompt(context, norm_q, chunker.is_math_heavy_question(norm_q))
 
     # === LLM Call
-    response = query_llm_with_retry(prompt, model_name, chat_history=chat_history)
+    response = query_ollama_chat_with_retry(prompt, model_name, chat_history=chat_history)
 
     # === Format Output
-    image_md_blocks = build_image_markdown_blocks(norm_q) if show_full_text else []
+    image_md_blocks = build_image_markdown_blocks(retrieval_q) if show_full_text else []
     final_answer = _assemble_final_markdown(response, image_md_blocks)
 
-    
-    chat_history.append((norm_q, final_answer))
+    chat_history = append_chat_turn(
+        chat_history,
+        norm_q,
+        response,
+        max_turns=MAX_CHAT_HISTORY_TURNS,
+        max_chars=MAX_CHAT_HISTORY_CHARS,
+    )
 
-    sources = "\n".join([c["source"] for c in selected_chunks])
-    cache.put(cache_key, (norm_q, chat_history, sources, confidence))
+    source_payload = build_source_payload(selected_chunks)
+    source_text = "\n".join([c["source"] for c in selected_chunks])
+    if cache_enabled:
+        response_cache.put_response(
+            cache_key,
+            ResponseCacheEntry(
+                answer=final_answer,
+                chat_history=[list(turn) for turn in chat_history],
+                sources=source_payload,
+                confidence=confidence,
+                metadata={
+                    "model": model_name,
+                    "strategy": strategy,
+                    "retrieval_query": retrieval_q,
+                },
+            ),
+        )
     query_timings.append(time.time() - start_time)
 
     state.update_last_trace({
         "question": norm_q,
+        "retrieval_query": retrieval_q,
         "strategy": strategy,
         "model": model_name,
         "confidence": confidence,
@@ -1378,14 +1316,14 @@ def get_rag_response(
             context=context,
             llm_response=response,
             model=model_name,
-            sources=sources,
+            sources=source_text,
             confidence=confidence,
             rerank_strategy=strategy
         )
     except Exception as e:
         trace_logger.warning(f"⚠️ Failed to log training sample: {e}")
 
-    return norm_q, chat_history, sources, cache.stats(), confidence, get_average_query_time()
+    return norm_q, final_answer, chat_history, source_payload, response_cache.stats(), confidence, get_average_query_time()
 
 @trace_timer("extract_doc_and_page")
 def extract_doc_and_page(img_id):
@@ -1499,6 +1437,89 @@ def normalize_sources_for_api(sources):
     return []
 
 
+def api_scalar(value):
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def build_source_payload(selected_chunks):
+    grouped = OrderedDict()
+    for chunk in selected_chunks:
+        source = chunk.get("source") or "Unknown"
+        doc = grouped.setdefault(
+            source,
+            {
+                "source": source,
+                "displayName": display_source_name(source),
+                "pages": [],
+                "chunkCount": 0,
+                "chunks": [],
+            },
+        )
+        page = api_scalar(chunk.get("page"))
+        if page is not None and page not in doc["pages"]:
+            doc["pages"].append(page)
+
+        text = chunk.get("text", "")
+        preview = re.sub(r"\s+", " ", text).strip()
+        if len(preview) > 360:
+            preview = f"{preview[:360].rstrip()}..."
+
+        doc["chunkCount"] += 1
+        doc["chunks"].append({
+            "index": api_scalar(chunk.get("index")),
+            "page": page,
+            "section": chunk.get("section", "Unknown"),
+            "category": chunk.get("category", "Uncategorized"),
+            "distance": api_scalar(chunk.get("distance")),
+            "sourceImageId": chunk.get("source_image_id"),
+            "preview": preview,
+        })
+
+    for doc in grouped.values():
+        doc["pages"] = sorted(doc["pages"], key=lambda item: (not isinstance(item, (int, float)), item))
+    return list(grouped.values())
+
+
+def get_response_cache():
+    return state.get_cache()
+
+
+def current_index_fingerprint():
+    index = state.get_index()
+    return build_index_fingerprint(
+        manifest_path=INGEST_MANIFEST_FILE,
+        chunks_count=len(state.get_chunks()),
+        embeddings_count=len(state.get_embeddings()),
+        faiss_total=index.ntotal if index else 0,
+    )
+
+
+def build_response_cache_key(
+    *,
+    model_name,
+    strategy,
+    norm_q,
+    retrieval_q,
+    top_k,
+    dist_thresh,
+    max_tokens,
+    show_full_text,
+):
+    return ResponseCacheKey(
+        index_fingerprint=current_index_fingerprint(),
+        model=model_name or "",
+        strategy=strategy,
+        question=norm_q,
+        retrieval_query=retrieval_q,
+        top_k=int(top_k),
+        distance_threshold=round(float(dist_thresh), 6),
+        max_tokens=int(max_tokens),
+        show_full_text=bool(show_full_text),
+    )
+
+
 def build_runtime_status():
     index = state.get_index()
     image_index = state.get_image_embeddings()
@@ -1518,7 +1539,7 @@ def build_runtime_status():
         "faissTotal": index.ntotal if index else 0,
         "imageIds": len(image_ids),
         "imageFaissTotal": image_index.ntotal if image_index else 0,
-        "cacheStats": cache.stats(),
+        "cacheStats": get_response_cache().stats(),
     }
 
 
@@ -1595,7 +1616,7 @@ async def react_query(req: Request):
         if not question.strip():
             return {"error": "No question provided."}
 
-        _, chat_history, sources, cache_stats, confidence, avg_time = get_rag_response(
+        _, answer, chat_history, sources, cache_stats, confidence, avg_time = get_rag_response(
             question=question,
             chat_history=data.get("chatHistory", []),
             show_full_text=bool(data.get("showFullText", False)),
@@ -1609,7 +1630,7 @@ async def react_query(req: Request):
 
         return {
             "question": question,
-            "answer": chat_history[-1][1] if chat_history else "",
+            "answer": answer,
             "chatHistory": chat_history,
             "sources": normalize_sources_for_api(sources),
             "cacheStats": cache_stats,

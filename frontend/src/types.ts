@@ -31,8 +31,8 @@ export interface QueryResponse {
   question: string;
   answer: string;
   chatHistory: ChatTurn[];
-  sources: unknown[];
-  cacheStats: Record<string, unknown>;
+  sources: SourceSummary[];
+  cacheStats: unknown;
   confidence: number | null;
   averageQueryTime: number | null;
   error?: string;
@@ -43,6 +43,24 @@ export interface DocumentSummary {
   displayName?: string;
   chunkCount: number;
   imageCount: number;
+}
+
+export interface SourceChunk {
+  index?: number | null;
+  page?: number | string | null;
+  section?: string;
+  category?: string;
+  distance?: number | null;
+  sourceImageId?: string | null;
+  preview?: string;
+}
+
+export interface SourceSummary {
+  source: string;
+  displayName?: string;
+  pages?: Array<number | string>;
+  chunkCount?: number;
+  chunks?: SourceChunk[];
 }
 
 export interface DocumentChunk {
@@ -62,5 +80,5 @@ export interface StatusPayload {
   faissTotal: number;
   imageIds: number;
   imageFaissTotal: number;
-  cacheStats: Record<string, unknown>;
+  cacheStats: unknown;
 }

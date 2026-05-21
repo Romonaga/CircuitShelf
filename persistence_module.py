@@ -8,6 +8,7 @@ import pickle
 import faiss
 from dataclasses import dataclass
 from typing import List
+from response_cache import ResponseCache
 
 @dataclass
 class PersistenceConfig:
@@ -87,12 +88,15 @@ class PersistenceManager:
         try:
             with open(self.config.cache_file, "rb") as f:
                 loaded_cache = pickle.load(f)
+                if not isinstance(loaded_cache, ResponseCache):
+                    raise ValueError("Cache file is not a ResponseCache.")
                 self.state.set_cache(loaded_cache)
                 self.logger.info("   ✅ Cache loaded.")
         except FileNotFoundError:
-            self.logger.warning("⚠️ Cache file not found. Starting fresh.")
+            self.logger.info("Cache file not found. Starting fresh.")
         except Exception as e:
-            self.logger.warning(f"⚠️ Failed to load cache: {e}")
+            self.logger.warning(f"⚠️ Cache file ignored. Starting fresh: {e}")
+            self.state.set_cache(ResponseCache(trace_logger=self.logger))
 
         self._load_pickle_data(self.config.embeddings_file, self.state.set_embeddings, "embeddings")
         self._load_pickle_data(self.config.chunks_file, self.state.set_chunks, "chunks")

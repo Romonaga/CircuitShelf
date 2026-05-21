@@ -1,11 +1,13 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { runQuery } from "../api";
 import type { AppConfig, ChatTurn, QueryOptions, QueryResponse } from "../types";
 import { errorMessage } from "../lib/errors";
-import { formatNumber, formatObject, sourceLabel } from "../lib/format";
+import { formatNumber } from "../lib/format";
 import { AnswerRenderer } from "./AnswerRenderer";
+import { ChatHistory } from "./ChatHistory";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
+import { SourceList } from "./SourceList";
 
 export function AskView({ config }: { config: AppConfig }) {
   const [question, setQuestion] = useState("");
@@ -14,9 +16,26 @@ export function AskView({ config }: { config: AppConfig }) {
   const [chatHistory, setChatHistory] = useState<ChatTurn[]>([]);
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [busy, setBusy] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
 
   const canSubmit = question.trim().length > 0 && !busy;
+  const askButtonText = busy ? `Running ${formatElapsed(elapsedSeconds)}` : "Ask";
+
+  useEffect(() => {
+    if (!busy) {
+      setElapsedSeconds(0);
+      return;
+    }
+
+    const startedAt = Date.now();
+    setElapsedSeconds(0);
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [busy]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -34,6 +53,7 @@ export function AskView({ config }: { config: AppConfig }) {
       });
       setResult(response);
       setChatHistory(response.chatHistory);
+      setQuestion("");
     } catch (err) {
       setError(errorMessage(err, "Query failed"));
     } finally {
@@ -56,7 +76,7 @@ export function AskView({ config }: { config: AppConfig }) {
         />
         <div className="query-actions">
           <button className="primary-button" disabled={!canSubmit}>
-            {busy ? "Querying..." : "Ask"}
+            {askButtonText}
           </button>
           <button
             className="ghost-button"
@@ -152,21 +172,24 @@ export function AskView({ config }: { config: AppConfig }) {
         </div>
       </section>
 
+      <section className="history-panel">
+        <SectionHeader title="Conversation" description={`${Math.max(chatHistory.length - 1, 0)} earlier turns`} />
+        <ChatHistory turns={chatHistory.slice(0, -1)} />
+      </section>
+
       <section className="sources-panel">
         <h3>Sources</h3>
-        {result?.sources?.length ? (
-          <div className="source-list">
-            {result.sources.map((source, index) => (
-              <details key={`${sourceLabel(source, index)}-${index}`} className="source-item">
-                <summary>{sourceLabel(source, index)}</summary>
-                <pre>{formatObject(source)}</pre>
-              </details>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state compact">No sources yet.</div>
-        )}
+        <SourceList sources={result?.sources ?? []} />
       </section>
     </section>
   );
+}
+
+function formatElapsed(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes <= 0) {
+    return `${remainingSeconds}s`;
+  }
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
