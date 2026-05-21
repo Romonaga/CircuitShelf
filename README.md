@@ -25,6 +25,24 @@ The following are intentionally ignored because this is planned as a public repo
 
 ## Setup
 
+For a guided local install, run:
+
+```bash
+./install.sh
+```
+
+The installer creates `.venv`, installs Python and frontend dependencies, creates `config/config.yaml` if needed, prompts for `DATABASE_URL`, applies migrations, optionally creates an admin user, and builds the React frontend.
+
+You still need these system-level prerequisites installed first:
+
+- Python 3.12 or newer
+- Node.js and npm
+- PostgreSQL server and client tools
+- Tesseract OCR for OCR support
+- Ollama for local model inference
+
+Manual setup is:
+
 1. Create and activate a virtual environment.
 2. Install Python dependencies:
 
