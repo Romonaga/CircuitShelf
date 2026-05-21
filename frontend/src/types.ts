@@ -13,6 +13,8 @@ export interface AppConfig {
   defaultModel: string;
   authConfigured: boolean;
   retrievalStrategies: RetrievalStrategy[];
+  statusPollIntervalSeconds: number;
+  activeStatusPollIntervalSeconds: number;
   defaults: QueryOptions;
 }
 

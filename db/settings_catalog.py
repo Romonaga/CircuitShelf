@@ -66,6 +66,8 @@ SETTING_UI = {
     "INGEST_WATCH_INTERVAL_SECONDS": ("ingestion", "Watcher interval", "Seconds between automatic document-change checks.", False),
     "MAX_DOCUMENT_WORKERS": ("ingestion", "Document workers", "Maximum documents processed concurrently during ingestion.", True),
     "INGEST_HASH_FILES": ("ingestion", "Hash file contents", "Use content hashes for change detection instead of size and modified time.", True),
+    "STATUS_POLL_INTERVAL_SECONDS": ("ingestion", "Idle status refresh", "Seconds between browser status refreshes while indexing is idle.", False),
+    "STATUS_POLL_ACTIVE_INTERVAL_SECONDS": ("ingestion", "Active status refresh", "Seconds between browser status refreshes while indexing is running.", False),
     "CHUNKING_MODE": ("chunking", "Chunking mode", "Strategy used to split documents before embedding.", False),
     "CHUNK_SIZE": ("chunking", "Target chunk size", "Approximate target size for generated text chunks.", False),
     "CHUNK_OVERLAP": ("chunking", "Chunk overlap", "Amount of neighboring context repeated between chunks.", False),

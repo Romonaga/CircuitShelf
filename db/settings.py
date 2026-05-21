@@ -121,6 +121,17 @@ class AppSettingsStore:
             )
         return True
 
+    def seed_setting(self, key: str, value: Any, description: str = "") -> bool:
+        if not self.database.configured or key in self.load() or not self._should_store(key, value):
+            return False
+        value_type, text_value, integer_value, numeric_value, boolean_value = self._typed_values(value)
+        with self.database.connection() as conn:
+            conn.execute(
+                load_query("settings_upsert.sql"),
+                (key, value_type, text_value, integer_value, numeric_value, boolean_value, description, False),
+            )
+        return True
+
     def apply_to_config(self, config_wrapper) -> int:
         db_settings = self.load()
         target = getattr(config_wrapper, "config", None)

@@ -83,6 +83,9 @@ for prompt_key, prompt_path in prompt_files.items():
         with open(prompt_path, "r", encoding="utf-8") as prompt_file:
             if settings_store.seed_text_setting(prompt_key, prompt_file.read(), f"Imported from {prompt_path}."):
                 prompt_seeded += 1
+settings_store.seed_setting("STATUS_POLL_INTERVAL_SECONDS", 15, "Browser status refresh interval while indexing is idle.")
+settings_store.seed_setting("STATUS_POLL_ACTIVE_INTERVAL_SECONDS", 3, "Browser status refresh interval while indexing is running.")
+settings_store.seed_setting("INGEST_WATCH_INTERVAL_SECONDS", 300, "Seconds between automatic document-change checks.")
 applied_settings = settings_store.apply_to_config(config)
 if seeded_settings or applied_settings:
     trace_logger.info(
@@ -1991,6 +1994,8 @@ async def app_config():
         "defaultModel": LLM_MODEL_NAME,
         "authConfigured": database.configured and user_store.has_active_users(),
         "retrievalStrategies": ["Vector only", "Vector + CrossEncoder"],
+        "statusPollIntervalSeconds": max(5, int(config.get("STATUS_POLL_INTERVAL_SECONDS", 15))),
+        "activeStatusPollIntervalSeconds": max(1, int(config.get("STATUS_POLL_ACTIVE_INTERVAL_SECONDS", 3))),
         "defaults": {
             "topK": 15,
             "distanceThreshold": 4.0,

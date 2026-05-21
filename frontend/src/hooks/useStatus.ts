@@ -3,7 +3,12 @@ import { getStatus } from "../api";
 import { errorMessage } from "../lib/errors";
 import type { StatusPayload } from "../types";
 
-export function useStatus() {
+function normalizedInterval(value: number | undefined, fallback: number, minimum: number): number {
+  const seconds = Number.isFinite(value) ? Number(value) : fallback;
+  return Math.max(minimum, seconds) * 1000;
+}
+
+export function useStatus(idlePollSeconds = 15, activePollSeconds = 3) {
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [error, setError] = useState("");
 
@@ -21,14 +26,14 @@ export function useStatus() {
   }, [refreshStatus]);
 
   useEffect(() => {
-    if (!status?.ingest?.running) {
-      return;
-    }
+    const interval = status?.ingest?.running
+      ? normalizedInterval(activePollSeconds, 3, 1)
+      : normalizedInterval(idlePollSeconds, 15, 5);
     const timer = window.setInterval(() => {
       void refreshStatus();
-    }, 2500);
+    }, interval);
     return () => window.clearInterval(timer);
-  }, [refreshStatus, status?.ingest?.running]);
+  }, [activePollSeconds, idlePollSeconds, refreshStatus, status?.ingest?.running]);
 
   return { status, statusError: error, refreshStatus };
 }

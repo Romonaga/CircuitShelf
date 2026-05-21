@@ -16,7 +16,10 @@ import type { View } from "./types";
 export default function App() {
   const [activeView, setActiveView] = useState<View>("ask");
   const { config, error: configError } = useAppConfig();
-  const { status, statusError, refreshStatus } = useStatus();
+  const { status, statusError, refreshStatus } = useStatus(
+    config?.statusPollIntervalSeconds,
+    config?.activeStatusPollIntervalSeconds
+  );
   const { user, login, logout } = useSession(config);
   const error = configError || statusError;
 
