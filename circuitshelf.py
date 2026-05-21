@@ -27,6 +27,7 @@ import nltk
 from lxml import etree
 from datetime import datetime, timezone
 from fastapi import FastAPI, File, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from collections import deque, OrderedDict
 from contextlib import asynccontextmanager
 from docx import Document
@@ -1450,6 +1451,25 @@ def source_image_id_from_metadata(source, metadata=None):
     return None
 
 
+def image_asset_belongs_to_document(image_id, doc_source):
+    doc_base = os.path.basename(doc_source or "")
+    if not doc_base:
+        return False
+    return (
+        image_id == doc_base
+        or image_id.startswith(f"{doc_base}_page")
+        or image_id.startswith(f"{doc_base}_textbox")
+    )
+
+
+def image_asset_count_for_document(doc_source):
+    return sum(
+        1
+        for image_id in state.get_image_store().keys()
+        if image_asset_belongs_to_document(image_id, doc_source)
+    )
+
+
 def deduplicate_hits_by_index(hits):
     best_by_index = {}
     for idx, distance in hits:
@@ -2343,7 +2363,8 @@ async def react_query(req: Request):
         if not question.strip():
             return {"error": "No question provided."}
 
-        _, answer, chat_history, sources, cache_stats, confidence, avg_time = get_rag_response(
+        _, answer, chat_history, sources, cache_stats, confidence, avg_time = await run_in_threadpool(
+            get_rag_response,
             question=question,
             chat_history=data.get("chatHistory", []),
             show_full_text=bool(data.get("showFullText", False)),
@@ -2396,7 +2417,7 @@ async def documents():
             "source": doc["source"],
             "displayName": doc["displayName"],
             "chunkCount": doc["chunkCount"],
-            "imageCount": len(doc["imageIds"]),
+            "imageCount": max(len(doc["imageIds"]), image_asset_count_for_document(doc["source"])),
         })
     docs.sort(key=lambda item: item["displayName"].lower())
     return {"documents": docs}
