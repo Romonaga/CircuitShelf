@@ -20,5 +20,15 @@ export function useStatus() {
     void refreshStatus();
   }, [refreshStatus]);
 
+  useEffect(() => {
+    if (!status?.ingest?.running) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void refreshStatus();
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [refreshStatus, status?.ingest?.running]);
+
   return { status, statusError: error, refreshStatus };
 }

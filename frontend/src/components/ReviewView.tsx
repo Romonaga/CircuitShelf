@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { approveReviewDocument, getReviewDocument, getReviewDocuments, reindexReviewDocument, removeReviewDocument } from "../api";
 import type { ReviewChunk, ReviewDocument } from "../types";
 import { errorMessage } from "../lib/errors";
@@ -6,7 +6,15 @@ import { formatInteger } from "../lib/format";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 
-export function ReviewView({ onStatusChange }: { onStatusChange: () => void }) {
+export function ReviewView({
+  isActive,
+  refreshSignal,
+  onStatusChange
+}: {
+  isActive: boolean;
+  refreshSignal: number;
+  onStatusChange: () => void;
+}) {
   const [documents, setDocuments] = useState<ReviewDocument[]>([]);
   const [selected, setSelected] = useState("");
   const [chunks, setChunks] = useState<ReviewChunk[]>([]);
@@ -15,6 +23,7 @@ export function ReviewView({ onStatusChange }: { onStatusChange: () => void }) {
   const [actionBusy, setActionBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const selectedRef = useRef("");
 
   const filteredDocuments = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -26,24 +35,30 @@ export function ReviewView({ onStatusChange }: { onStatusChange: () => void }) {
 
   const selectedDocument = documents.find((doc) => doc.source === selected) || null;
 
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+
   const loadDocuments = useCallback(async () => {
     setBusy(true);
     setError("");
     try {
       const response = await getReviewDocuments();
       setDocuments(response.documents);
-      const nextSelected = response.documents.find((doc) => doc.source === selected) || response.documents[0];
+      const nextSelected = response.documents.find((doc) => doc.source === selectedRef.current) || response.documents[0];
       setSelected(nextSelected?.source || "");
     } catch (err) {
       setError(errorMessage(err, "Could not load review queue"));
     } finally {
       setBusy(false);
     }
-  }, [selected]);
+  }, []);
 
   useEffect(() => {
-    void loadDocuments();
-  }, [loadDocuments]);
+    if (isActive) {
+      void loadDocuments();
+    }
+  }, [isActive, loadDocuments, refreshSignal]);
 
   useEffect(() => {
     if (!selected) {

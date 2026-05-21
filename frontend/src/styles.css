@@ -888,6 +888,71 @@ nav {
   background: var(--panel-soft);
 }
 
+.ingest-status-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ingest-status-panel.running {
+  border-color: #7dd3fc;
+  background: #f0f9ff;
+}
+
+.ingest-status-panel.error {
+  border-color: #fda29b;
+  background: #fffbfa;
+}
+
+.ingest-status-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ingest-status-heading strong {
+  font-size: 0.94rem;
+}
+
+.ingest-status-heading p,
+.ingest-status-grid,
+.ingest-change-list,
+.ingest-error {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.ingest-status-heading .ghost-button {
+  flex: 0 0 auto;
+}
+
+.ingest-status-grid,
+.ingest-change-list {
+  display: grid;
+  gap: 5px;
+}
+
+.ingest-change-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ingest-change-list span {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-soft);
+  text-align: center;
+}
+
+.ingest-error {
+  color: var(--warn);
+}
+
 .upload-panel input[type="file"] {
   width: 100%;
 }

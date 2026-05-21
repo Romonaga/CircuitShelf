@@ -49,11 +49,20 @@ export default function App() {
         <AskView config={config} />
       </div>
       <div hidden={activeView !== "documents"}>
-        <DocumentsView isAdmin={Boolean(user?.isAdmin)} onStatusChange={refreshStatus} />
+        <DocumentsView
+          isAdmin={Boolean(user?.isAdmin)}
+          status={status}
+          onStatusChange={refreshStatus}
+          onOpenReview={() => setActiveView("review")}
+        />
       </div>
       {user?.isAdmin ? (
         <div hidden={activeView !== "review"}>
-          <ReviewView onStatusChange={refreshStatus} />
+          <ReviewView
+            isActive={activeView === "review"}
+            refreshSignal={status?.pendingReview ?? 0}
+            onStatusChange={refreshStatus}
+          />
         </div>
       ) : null}
       <div hidden={activeView !== "trace"}>

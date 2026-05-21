@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getDocument, getDocuments, triggerIndexCheck, uploadDocument } from "../api";
-import type { DocumentChunk, DocumentSummary } from "../types";
+import type { DocumentChunk, DocumentSummary, StatusPayload } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
 import { ErrorMessage } from "./ErrorMessage";
+import { IngestStatusPanel } from "./IngestStatusPanel";
 import { SectionHeader } from "./SectionHeader";
 
-export function DocumentsView({ isAdmin, onStatusChange }: { isAdmin: boolean; onStatusChange: () => void }) {
+export function DocumentsView({
+  isAdmin,
+  status,
+  onStatusChange,
+  onOpenReview
+}: {
+  isAdmin: boolean;
+  status: StatusPayload | null;
+  onStatusChange: () => void;
+  onOpenReview: () => void;
+}) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selected, setSelected] = useState("");
   const [chunks, setChunks] = useState<DocumentChunk[]>([]);
@@ -127,6 +138,7 @@ export function DocumentsView({ isAdmin, onStatusChange }: { isAdmin: boolean; o
             </button>
           </div>
         ) : null}
+        {isAdmin ? <IngestStatusPanel ingest={status?.ingest} pendingReview={status?.pendingReview} onOpenReview={onOpenReview} /> : null}
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter documents" />
         {message ? <p className="success-message">{message}</p> : null}
         <ErrorMessage message={error} />
