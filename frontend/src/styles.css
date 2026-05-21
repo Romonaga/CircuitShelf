@@ -719,6 +719,34 @@ nav {
   max-height: calc(100vh - 48px);
 }
 
+.settings-toolbar {
+  display: grid;
+  gap: 10px;
+}
+
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.inline-check input {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-advanced-toggle {
+  min-height: 32px;
+  font-size: 0.86rem;
+}
+
+.settings-hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
 .document-list,
 .settings-list,
 .chunk-table {
@@ -768,6 +796,27 @@ nav {
   background: #ffffff;
 }
 
+.settings-group {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-group-heading {
+  display: grid;
+  gap: 3px;
+  padding: 4px 2px 0;
+}
+
+.settings-group-heading strong {
+  font-size: 0.88rem;
+}
+
+.settings-group-heading small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
 .settings-row:hover,
 .settings-row.active {
   border-color: var(--accent);
@@ -779,6 +828,24 @@ nav {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 750;
+}
+
+.setting-row-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.setting-row-tags em {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--panel-soft);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .settings-row small,

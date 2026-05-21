@@ -97,9 +97,15 @@ export type SettingValue = string | number | boolean;
 
 export interface AppSetting {
   key: string;
+  label: string;
+  group: string;
+  groupLabel: string;
+  groupDescription?: string;
   value: SettingValue;
   valueType: SettingValueType;
   description: string;
+  rawDescription?: string;
+  advanced: boolean;
   updatedAt?: string | null;
   restartRequired: boolean;
 }

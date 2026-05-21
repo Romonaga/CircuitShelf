@@ -7,6 +7,7 @@ from psycopg.errors import UndefinedTable
 
 from db.connection import Database
 from db.sql import load_query
+from db.settings_catalog import SETTING_GROUPS, SETTING_UI, setting_metadata
 
 
 BOOTSTRAP_KEYS = {
@@ -45,14 +46,23 @@ class AppSettingsStore:
     def list_editable(self) -> list[dict[str, Any]]:
         with self.database.connection() as conn:
             rows = conn.execute(load_query("settings_admin_list.sql")).fetchall()
-        return [self._api_row(row) for row in rows if row["key"] not in BOOTSTRAP_KEYS]
+        settings = [self._api_row(row) for row in rows if self._is_ui_editable(row)]
+        group_order = {group: index for index, group in enumerate(SETTING_GROUPS)}
+        return sorted(
+            settings,
+            key=lambda setting: (
+                group_order.get(setting["group"], len(group_order)),
+                setting["advanced"],
+                setting["label"].lower(),
+            ),
+        )
 
     def update_setting(self, key: str, value: Any) -> dict[str, Any]:
         with self.database.connection() as conn:
             row = conn.execute(load_query("settings_get_one.sql"), (key,)).fetchone()
             if not row:
                 raise KeyError(f"Unknown setting: {key}")
-            if row["is_sensitive"] or row["key"] in BOOTSTRAP_KEYS:
+            if not self._is_ui_editable(row):
                 raise PermissionError(f"Setting cannot be edited from the UI: {key}")
 
             value_type = row["value_type"]
@@ -126,6 +136,9 @@ class AppSettingsStore:
             return False
         return isinstance(value, (str, int, float, bool)) and value is not None
 
+    def _is_ui_editable(self, row) -> bool:
+        return bool(not row["is_sensitive"] and row["key"] not in BOOTSTRAP_KEYS and row["key"] in SETTING_UI)
+
     def _typed_values(self, value: Any) -> tuple[str, str | None, int | None, Decimal | None, bool | None]:
         if isinstance(value, bool):
             return "boolean", None, None, None, value
@@ -172,11 +185,18 @@ class AppSettingsStore:
         return row["text_value"]
 
     def _api_row(self, row) -> dict[str, Any]:
+        metadata = setting_metadata(row["key"]) or {}
         return {
             "key": row["key"],
+            "label": metadata.get("label", row["key"].replace("_", " ").title()),
+            "group": metadata.get("group", "general"),
+            "groupLabel": metadata.get("groupLabel", "General"),
+            "groupDescription": metadata.get("groupDescription", ""),
             "value": self._row_value(row),
             "valueType": row["value_type"],
-            "description": row["description"] or "",
+            "description": metadata.get("description") or row["description"] or "",
+            "rawDescription": row["description"] or "",
+            "advanced": bool(metadata.get("advanced", False)),
             "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
             "restartRequired": True,
         }

@@ -6,8 +6,6 @@ import yaml
 
 class Config:
     REQUIRED_KEYS = [
-        "UI_AUTO", "UI_HOST", "UI_PORT",
-        "API_HOST", "API_PORT",
         "EMBED_MODEL_NAME", "CROSS_ENCODER_MODEL",
         "LLM_MODEL_NAME", "LLM_MODEL_OPTIONS", "OLLAMA_API_URL",
         "TRAINING_DIR", "BUILD_INDEX_LOG_FILE",
