@@ -37,6 +37,9 @@ LLM_MODEL_OPTIONS:
   - "electronics-helper:latest"
 
 OLLAMA_API_URL: "http://localhost:11434/api"
+LLM_TEMPERATURE: 0.2
+LLM_NUM_PREDICT: 3072
+LLM_NUM_CTX: 8192
 
 TRAINING_DIR: "training"
 TRAINING_RECURSIVE: false

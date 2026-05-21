@@ -135,7 +135,7 @@ export function AskView({ config }: { config: AppConfig }) {
           />
         </label>
         <label>
-          Max tokens
+          Context tokens
           <input
             type="number"
             min="100"

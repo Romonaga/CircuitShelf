@@ -152,6 +152,9 @@ CHUNK_OVERLAP = config.get("CHUNK_OVERLAP")
 EMBED_MODEL_NAME = config.get("EMBED_MODEL_NAME")
 LLM_MODEL_NAME = config.get("LLM_MODEL_NAME")
 OLLAMA_API_URL = config.get("OLLAMA_API_URL")
+LLM_TEMPERATURE = config.get("LLM_TEMPERATURE", 0.2)
+LLM_NUM_PREDICT = config.get("LLM_NUM_PREDICT", 3072)
+LLM_NUM_CTX = config.get("LLM_NUM_CTX")
 
 CROSS_ENCODER_MODEL = config.get("CROSS_ENCODER_MODEL")
 LLM_MODEL_OPTIONS = config.get("LLM_MODEL_OPTIONS")
@@ -1121,6 +1124,13 @@ def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=
     if LLM_API_KEY:
         headers["Authorization"] = f"Bearer {LLM_API_KEY}"
 
+    options = {
+        "temperature": float(LLM_TEMPERATURE),
+        "num_predict": int(LLM_NUM_PREDICT),
+    }
+    if LLM_NUM_CTX:
+        options["num_ctx"] = int(LLM_NUM_CTX)
+
     payload = {
         "model": model_name or "default",
         "stream": False,
@@ -1131,10 +1141,7 @@ def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=
             max_turns=MAX_CHAT_HISTORY_TURNS,
             max_chars=MAX_CHAT_HISTORY_CHARS,
         ),
-        "options": {
-            "temperature": 0.2,
-            "num_predict": 1024,
-        },
+        "options": options,
     }
 
     for attempt in range(retries):
@@ -1144,6 +1151,17 @@ def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=
 
             json_data = response.json() #CLEAN THIS UP LATER
             result = json_data.get("message", {}).get("content", "").strip()
+            done_reason = json_data.get("done_reason", "")
+            if done_reason in {"length", "max_tokens"}:
+                trace_logger.warning(
+                    "⚠️ Ollama response stopped at generation limit. "
+                    f"Increase LLM_NUM_PREDICT above {LLM_NUM_PREDICT} if this answer needs more room."
+                )
+                result = (
+                    f"{result}\n\n"
+                    "> Response stopped at the model generation limit. "
+                    "Increase the answer token limit and ask again if this is incomplete."
+                )
 
             trace_logger.debug(f"✅ LLM call success: {result[:80]}...")
             return result
