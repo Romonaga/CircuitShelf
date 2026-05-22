@@ -47,6 +47,7 @@ class ImageStore:
         image_embeddings: dict[str, Any],
         embedding_model: str,
         metadata: list[dict],
+        progress_callback=None,
     ) -> None:
         if not image_store:
             with self.database.connection() as conn:
@@ -67,6 +68,7 @@ class ImageStore:
                 image_embeddings=image_embeddings,
                 embedding_model=embedding_model,
                 metadata=metadata,
+                progress_callback=progress_callback,
             )
             self._refresh_document_image_stats(conn, None)
 
@@ -81,6 +83,7 @@ class ImageStore:
         embedding_model: str,
         metadata: list[dict],
         rel_paths: set[str],
+        progress_callback=None,
     ) -> None:
         if not image_store:
             return
@@ -96,6 +99,7 @@ class ImageStore:
                 embedding_model=embedding_model,
                 metadata=metadata,
                 rel_paths=rel_paths,
+                progress_callback=progress_callback,
             )
             self._refresh_document_image_stats(conn, refreshed_paths)
 
@@ -111,11 +115,15 @@ class ImageStore:
         embedding_model: str,
         metadata: list[dict],
         rel_paths: set[str] | None = None,
+        progress_callback=None,
     ) -> None:
         image_meta = self._metadata_by_image_key(metadata)
         doc_rows = conn.execute(load_query("image_document_map.sql")).fetchall()
         documents = self._document_lookup(doc_rows)
         ordinals: dict[str, int] = defaultdict(int)
+        total_images = len(image_store)
+        stored_images = 0
+        skipped_images = 0
 
         for image_key, image_base64 in sorted(image_store.items()):
             rel_path, page_number, score, confidence = self._resolve_image_document(
@@ -125,9 +133,11 @@ class ImageStore:
                 documents,
             )
             if rel_paths is not None and rel_path not in rel_paths:
+                skipped_images += 1
                 continue
             doc_row = documents.get(rel_path)
             if not doc_row:
+                skipped_images += 1
                 if self.logger:
                     self.logger.warning(f"Skipping image without indexed document: {image_key}")
                 continue
@@ -158,6 +168,14 @@ class ImageStore:
                     vector_to_sql(image_embeddings[image_key]) if image_key in image_embeddings else None,
                 ),
             )
+            stored_images += 1
+            if progress_callback and (stored_images == 1 or stored_images % 100 == 0 or stored_images + skipped_images >= total_images):
+                progress_callback(
+                    saved_images=stored_images,
+                    total_images=total_images,
+                    skipped_images=skipped_images,
+                    current_image=image_key,
+                )
 
     def _refresh_document_image_stats(self, conn, rel_paths: set[str] | None) -> None:
         paths = sorted(rel_paths) if rel_paths is not None else None

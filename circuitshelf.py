@@ -50,7 +50,7 @@ from system_init import SystemInit
 from reranker_module import Reranker
 from ocr_utils import run_ocr
 from pdf_visuals import link_chunks_to_rendered_pages, render_pdf_visual_pages
-from index_builder import IndexBuilder
+from index_builder import IndexBuildResult, IndexBuilder
 from pinout_extractor import extract_pinout_map
 from datasheet_intelligence import build_datasheet_intelligence
 from circuit_build_cards import build_circuit_build_card
@@ -666,27 +666,83 @@ def refresh_active_state_from_db():
     return load_db_image_state()
 
 
-def persist_db_image_state(file_records, target_state=None, rel_paths=None):
+def persist_db_image_state(file_records, target_state=None, rel_paths=None, progress_file=None):
     target_state = target_state or state
     image_text = target_state.get_image_page_text()
     image_ids = target_state.get_image_id_list()
+    image_payload = target_state.get_image_store()
+    total_images = len(image_payload)
+    update_index_detail(
+        savedImages=0,
+        totalImagesToSave=total_images,
+        skippedImages=0,
+        indexedImageTexts=len(image_ids),
+    )
+    if progress_file:
+        update_index_progress(
+            current_file=progress_file,
+            file_details={
+                "documentPhase": "Preparing image save",
+                "savedImages": 0,
+                "totalImagesToSave": total_images,
+                "skippedImages": 0,
+            },
+        )
     image_embeddings = {}
     if image_ids:
+        update_index_detail(imageEmbeddingTexts=0, imageEmbeddingTotal=len(image_ids))
+        if progress_file:
+            update_index_progress(
+                current_file=progress_file,
+                file_details={
+                    "documentPhase": "Embedding image text",
+                    "imageEmbeddingTexts": 0,
+                    "imageEmbeddingTotal": len(image_ids),
+                },
+            )
         encoded = embedder.encode(
             [image_text[key] for key in image_ids],
             batch_size=config.get("EMBED_BATCH_SIZE", 32),
             convert_to_numpy=True,
         ).astype("float32")
         image_embeddings = {key: encoded[idx] for idx, key in enumerate(image_ids)}
+        update_index_detail(imageEmbeddingTexts=len(image_ids), imageEmbeddingTotal=len(image_ids))
+        if progress_file:
+            update_index_progress(
+                current_file=progress_file,
+                file_details={
+                    "imageEmbeddingTexts": len(image_ids),
+                    "imageEmbeddingTotal": len(image_ids),
+                },
+            )
+
+    def report_image_save_progress(saved_images, total_images, skipped_images=0, current_image=None):
+        update_index_detail(
+            savedImages=saved_images,
+            totalImagesToSave=total_images,
+            skippedImages=skipped_images,
+        )
+        if progress_file:
+            update_index_progress(
+                current_file=progress_file,
+                file_details={
+                    "documentPhase": "Saving images",
+                    "savedImages": saved_images,
+                    "totalImagesToSave": total_images,
+                    "skippedImages": skipped_images,
+                    "currentImage": current_image,
+                },
+            )
 
     payload = {
         "file_records": file_records,
-        "image_store": target_state.get_image_store(),
+        "image_store": image_payload,
         "image_captions": target_state.get_image_captions(),
         "image_page_text": target_state.get_image_page_text(),
         "image_embeddings": image_embeddings,
         "embedding_model": EMBED_MODEL_NAME,
         "metadata": target_state.get_metadata(),
+        "progress_callback": report_image_save_progress,
     }
     if rel_paths is None:
         image_store.replace_catalog(**payload)
@@ -1322,6 +1378,145 @@ def load_documents_parallel(
     )
 
 
+def extract_document_for_incremental_ingest(source):
+    ingested_state, ingest_token_utils, ingest_chunker = build_ingest_context()
+    fpath = source if os.path.isabs(source) else os.path.join(TRAINING_DIR, source)
+    active_count = begin_document_worker()
+    try:
+        update_index_progress(
+            stage="processing_documents",
+            current_file=source,
+            file_details={"documentPhase": "Starting"},
+        )
+        thread_id = threading.get_ident()
+        trace_logger.info(f"🛠️ Thread-{thread_id} started for {source} ({active_count} active document workers)")
+        start = time.time()
+
+        def detail_progress(**details):
+            update_index_progress(stage="processing_documents", current_file=source, file_details=details)
+
+        process_file_by_type(
+            fpath,
+            ingested_state,
+            trace_logger,
+            ingest_chunker,
+            ingest_token_utils,
+            progress_callback=detail_progress,
+        )
+        if config.get("ENABLE_TOKEN_NORMALIZATION", False):
+            ingest_token_utils.normalize_token_distribution()
+
+        elapsed = time.time() - start
+        trace_logger.info(f"✅ Thread-{thread_id} extracted {source} in {elapsed:.2f}s")
+        return {
+            "source": source,
+            "state": ingested_state,
+            "token_utils": ingest_token_utils,
+            "chunker": ingest_chunker,
+        }
+    except Exception as exc:
+        trace_logger.error(f"❌ Error processing {source}: {exc}")
+        raise
+    finally:
+        finish_document_worker()
+
+
+def persist_incremental_document(extracted, current_manifest):
+    source = extracted["source"]
+    ingested_state = extracted["state"]
+    ingest_chunker = extracted["chunker"]
+
+    raw_chunk_counts = count_state_chunks_by_document(ingested_state)
+    raw_image_counts = count_state_images_by_document(ingested_state.get_image_store().keys(), [source])
+    raw_ocr_image_counts = count_state_images_by_document(ingested_state.get_image_page_text().keys(), [source])
+    update_index_progress(
+        stage="embedding_chunks",
+        current_file=source,
+        file_details={
+            "documentPhase": "Embedding text",
+            "rawChunks": sum(raw_chunk_counts.values()),
+            "extractedImages": sum(raw_image_counts.values()),
+            "ocrImageTexts": sum(raw_ocr_image_counts.values()),
+        },
+        details={
+            "currentDocument": source,
+            "rawChunks": sum(raw_chunk_counts.values()),
+            "extractedImages": sum(raw_image_counts.values()),
+            "ocrImageTexts": sum(raw_ocr_image_counts.values()),
+        },
+    )
+    builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
+    build_result = builder.build()
+    update_index_progress(
+        stage="persisting_chunks",
+        current_file=source,
+        file_details={
+            "documentPhase": "Saving text chunks",
+            "chunks": build_result.chunks,
+            "droppedChunks": build_result.dropped_chunks,
+            "indexedImageTexts": build_result.images,
+        },
+        details={
+            "currentDocument": source,
+            "chunks": build_result.chunks,
+            "droppedChunks": build_result.dropped_chunks,
+            "extractedImages": sum(raw_image_counts.values()),
+            "indexedImageTexts": build_result.images,
+            "ocrImageTexts": sum(raw_ocr_image_counts.values()),
+        },
+    )
+    document_stats = collect_document_ingest_stats(
+        ingested_state,
+        [source],
+        raw_chunk_counts=raw_chunk_counts,
+        raw_image_counts=raw_image_counts,
+        raw_ocr_image_counts=raw_ocr_image_counts,
+    )
+    vector_store.replace_sources(
+        delete_rel_paths=[source],
+        file_records=current_manifest,
+        chunks=ingested_state.get_chunks(),
+        sources=ingested_state.get_sources(),
+        metadata=ingested_state.get_metadata(),
+        embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
+        status="pending",
+        document_stats=document_stats,
+    )
+    update_index_progress(
+        stage="persisting_images",
+        current_file=source,
+        file_details={
+            "documentPhase": "Saving images",
+            "extractedImages": sum(raw_image_counts.values()),
+            "indexedImageTexts": build_result.images,
+        },
+        details={
+            "currentDocument": source,
+            "chunks": build_result.chunks,
+            "droppedChunks": build_result.dropped_chunks,
+            "extractedImages": sum(raw_image_counts.values()),
+            "indexedImageTexts": build_result.images,
+        },
+    )
+    image_result = persist_db_image_state(
+        current_manifest,
+        target_state=ingested_state,
+        rel_paths=[source],
+        progress_file=source,
+    )
+    vector_store.set_sources_status([source], "needs_review")
+    final_details = {
+        **summarize_document_ingest_stats(document_stats),
+        **image_result,
+    }
+    update_index_progress(
+        stage="processing_documents",
+        finished_file=source,
+        details={**final_details, "lastCompletedDocument": source},
+    )
+    trace_logger.info(f"✅ {source} is ready for review.")
+    return build_result, final_details
+
 
 def run_incremental_ingest(changes, current_manifest):
     if changes.removed:
@@ -1338,92 +1533,105 @@ def run_incremental_ingest(changes, current_manifest):
     )
     prune_training_files_from_state(delete_rel_paths)
 
-    ingested_state = None
-    build_result = None
+    total_chunks = 0
+    total_dropped_chunks = 0
+    total_images = 0
+    embedding_dim = 0
+    failed_files = []
+    aggregate_details = {
+        "rawChunks": 0,
+        "chunks": 0,
+        "droppedChunks": 0,
+        "extractedImages": 0,
+        "indexedImageTexts": 0,
+        "ocrImageTexts": 0,
+        "storedImages": 0,
+        "skippedImages": 0,
+    }
     final_details = {}
     if changed_rel_paths:
-        ingested_state, ingest_token_utils, ingest_chunker = build_ingest_context()
-        load_documents_parallel(
-            folder=TRAINING_DIR,
-            files_selected=changed_rel_paths,
-            clear_existing=True,
-            target_state=ingested_state,
-            target_chunker=ingest_chunker,
-            target_token_utils=ingest_token_utils,
-            progress_callback=update_index_progress,
-        )
-        raw_chunk_counts = count_state_chunks_by_document(ingested_state)
-        raw_image_counts = count_state_images_by_document(ingested_state.get_image_store().keys(), changed_rel_paths)
-        raw_ocr_image_counts = count_state_images_by_document(ingested_state.get_image_page_text().keys(), changed_rel_paths)
-        update_index_progress(
-            stage="embedding_chunks",
-            details={
-                "documents": len(changed_rel_paths),
-                "rawChunks": sum(raw_chunk_counts.values()),
-                "extractedImages": sum(raw_image_counts.values()),
-                "ocrImageTexts": sum(raw_ocr_image_counts.values()),
-            },
-        )
-        builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
-        try:
-            build_result = builder.build()
-        except ValueError as exc:
-            trace_logger.warning(f"⚠️ Changed documents produced no valid chunks: {exc}")
-            if delete_rel_paths:
-                vector_store.delete_sources(delete_rel_paths)
-            return None, {}
-        update_index_progress(
-            stage="persisting_chunks",
-            details={
-                "documents": len(changed_rel_paths),
-                "chunks": build_result.chunks,
-                "droppedChunks": build_result.dropped_chunks,
-                "extractedImages": sum(raw_image_counts.values()),
-                "indexedImageTexts": build_result.images,
-                "ocrImageTexts": sum(raw_ocr_image_counts.values()),
-            },
-        )
-        document_stats = collect_document_ingest_stats(
-            ingested_state,
-            changed_rel_paths,
-            raw_chunk_counts=raw_chunk_counts,
-            raw_image_counts=raw_image_counts,
-            raw_ocr_image_counts=raw_ocr_image_counts,
-        )
-        vector_store.replace_sources(
-            delete_rel_paths=delete_rel_paths,
-            file_records=current_manifest,
-            chunks=ingested_state.get_chunks(),
-            sources=ingested_state.get_sources(),
-            metadata=ingested_state.get_metadata(),
-            embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
-            status="pending",
-            document_stats=document_stats,
+        cpu_count = detected_cpu_count()
+        max_workers = document_worker_count(len(changed_rel_paths), cpu_count=cpu_count)
+        trace_logger.info(
+            f"⚙️ Ingest worker budget: {cpu_count} cores detected, reserving {reserved_core_count(cpu_count)}, "
+            f"{usable_core_count(cpu_count)} usable, {max_workers} document workers for {len(changed_rel_paths)} files."
         )
         update_index_progress(
-            stage="persisting_images",
+            stage="processing_documents",
+            total_files=len(changed_rel_paths),
             details={
                 "documents": len(changed_rel_paths),
-                "chunks": build_result.chunks,
-                "droppedChunks": build_result.dropped_chunks,
-                "extractedImages": sum(raw_image_counts.values()),
-                "indexedImageTexts": build_result.images,
+                "activeWorkers": max_workers,
             },
         )
-        image_result = persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=changed_rel_paths)
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(extract_document_for_incremental_ingest, source): source
+                for source in changed_rel_paths
+            }
+            for future in as_completed(futures):
+                source = futures[future]
+                try:
+                    extracted = future.result()
+                    build_result, document_details = persist_incremental_document(extracted, current_manifest)
+                    total_chunks += build_result.chunks
+                    total_dropped_chunks += build_result.dropped_chunks
+                    total_images += build_result.images
+                    embedding_dim = build_result.embedding_dim
+                    for key in aggregate_details:
+                        aggregate_details[key] += int(document_details.get(key, 0) or 0)
+                    final_details = {
+                        "documents": len(changed_rel_paths),
+                        "completedDocuments": int(index_status.get("processedFiles") or 0),
+                        **aggregate_details,
+                        "failedDocuments": len(failed_files),
+                    }
+                    update_index_detail(**final_details)
+                except ValueError as exc:
+                    failed_files.append(source)
+                    trace_logger.warning(f"⚠️ {source} produced no valid chunks: {exc}")
+                    vector_store.delete_sources([source])
+                    update_index_progress(
+                        stage="processing_documents",
+                        finished_file=source,
+                        details={
+                            "documents": len(changed_rel_paths),
+                            "failedDocuments": len(failed_files),
+                            "failedFiles": failed_files[:10],
+                        },
+                    )
+                except Exception as exc:
+                    failed_files.append(source)
+                    trace_logger.error(f"❌ Incremental document ingest failed for {source}: {exc}")
+                    update_index_progress(
+                        stage="processing_documents",
+                        finished_file=source,
+                        details={
+                            "documents": len(changed_rel_paths),
+                            "failedDocuments": len(failed_files),
+                            "failedFiles": failed_files[:10],
+                        },
+                    )
+
         final_details = {
-            **summarize_document_ingest_stats(document_stats),
-            **image_result,
+            **final_details,
+            "documents": len(changed_rel_paths),
+            "completedDocuments": len(changed_rel_paths) - len(failed_files),
+            **aggregate_details,
+            "failedDocuments": len(failed_files),
         }
-        update_index_progress(
-            stage="readying_review",
-            details=final_details,
-        )
-        ready_sources = vector_store.set_sources_status(list(changed_rel_paths), "needs_review")
-        trace_logger.info(f"✅ {len(ready_sources)} documents are ready for review.")
     elif delete_rel_paths:
         vector_store.delete_sources(delete_rel_paths)
 
+    build_result = None
+    if total_chunks:
+        build_result = IndexBuildResult(
+            chunks=total_chunks,
+            dropped_chunks=total_dropped_chunks,
+            images=total_images,
+            embedding_dim=embedding_dim,
+        )
     return build_result, final_details
 
 

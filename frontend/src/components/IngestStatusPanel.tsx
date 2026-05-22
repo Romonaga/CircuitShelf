@@ -68,10 +68,16 @@ function formatDetailLabel(key: string): string {
     pdfPage: "PDF page",
     pdfPages: "PDF pages",
     extractedImages: "Extracted images",
+    totalImagesToSave: "Images to save",
+    savedImages: "Saved images",
+    skippedImages: "Skipped images",
     imageCandidates: "Indexed image OCR",
     storedImages: "Stored images",
     indexedImageTexts: "Indexed image texts",
-    ocrImageTexts: "OCR image texts"
+    imageEmbeddingTexts: "Embedded image texts",
+    imageEmbeddingTotal: "Image texts to embed",
+    ocrImageTexts: "OCR image texts",
+    currentImage: "Image"
   };
   return labels[key] ?? formatStage(key);
 }
@@ -102,6 +108,15 @@ function pageProgress(progress: Record<string, string | number | boolean | null 
     return formatDetailValue(page);
   }
   return "n/a";
+}
+
+function imageProgress(progress: Record<string, string | number | boolean | null | undefined>): string {
+  const saved = progress.savedImages;
+  const total = progress.totalImagesToSave;
+  if (saved !== undefined && total !== undefined) {
+    return `${formatDetailValue(saved)} / ${formatDetailValue(total)}`;
+  }
+  return formatDetailValue(progress.imageCandidates);
 }
 
 function compactPhase(progress: Record<string, string | number | boolean | null | undefined>): string {
@@ -198,7 +213,7 @@ export function IngestStatusPanel({
               <strong title={file}>{file}</strong>
               <span title={formatDetailValue(progress.documentPhase ?? "Active")}>{compactPhase(progress)}</span>
               <span>{pageProgress(progress)}</span>
-              <span>{formatDetailValue(progress.imageCandidates)}</span>
+              <span>{imageProgress(progress)}</span>
             </div>
           ))}
         </div>
