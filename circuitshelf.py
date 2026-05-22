@@ -2660,18 +2660,19 @@ def remove_document_from_store(source: str, *, delete_file: bool = True) -> tupl
     if not source:
         return {"error": "Document source is required."}, 400
 
-    row = vector_store.delete_document(source)
+    rel_source = vector_store.rel_path_for_source(source)
+    row = vector_store.delete_document(rel_source)
     if not row:
         return {"error": "Document not found."}, 404
-    prune_training_files_from_state([source])
+    prune_training_files_from_state([rel_source])
     deleted_file = False
     if delete_file:
-        target = os.path.abspath(os.path.join(TRAINING_DIR, source))
+        target = os.path.abspath(os.path.join(TRAINING_DIR, rel_source))
         training_root = os.path.abspath(TRAINING_DIR)
         if target.startswith(training_root + os.sep) and os.path.exists(target):
             os.remove(target)
             deleted_file = True
-    trace_logger.info(f"🧹 Removed document from store: {source} | deleted source file: {deleted_file}")
+    trace_logger.info(f"🧹 Removed document from store: {rel_source} | deleted source file: {deleted_file}")
     return {"ok": True, "document": dict(row), "deletedFile": deleted_file}, 200
 
 

@@ -143,7 +143,6 @@ export function DocumentsView({
     try {
       const result = await removeIndexedDocument(document.source);
       setMessage(`${displayName} removed from CircuitShelf${result.deletedFile ? " and deleted from training." : "."}`);
-      setContextMenu(null);
       setDetail(null);
       setSelectedPage(null);
       await loadDocuments();
@@ -151,6 +150,7 @@ export function DocumentsView({
     } catch (err) {
       setError(errorMessage(err, "Could not remove document"));
     } finally {
+      setContextMenu(null);
       setRemoving(false);
     }
   }
