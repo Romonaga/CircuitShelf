@@ -399,6 +399,14 @@ def update_index_progress(*, stage=None, current_file=None, finished_file=None, 
         return dict(index_status)
 
 
+def update_index_detail(**updates):
+    with INDEX_PROGRESS_LOCK:
+        details = dict(index_status.get("details") or {})
+        details.update({key: value for key, value in updates.items() if value is not None})
+        index_status["details"] = details
+        return dict(index_status)
+
+
 def begin_document_worker() -> int:
     global ACTIVE_DOCUMENT_WORKERS
     with ACTIVE_DOCUMENT_WORKERS_LOCK:
@@ -771,10 +779,21 @@ def run_pdf_image_ocr_jobs(image_jobs):
     return results
 
 
-def add_pdf_rendered_pages(path, target_state):
+def should_report_page_progress(page_number, total_pages, last_reported, min_interval=10):
+    if page_number <= 1 or page_number >= total_pages:
+        return True
+    return page_number - last_reported >= min_interval
+
+
+def add_pdf_rendered_pages(path, target_state, progress_callback=None):
     if not PDF_RENDER_VECTOR_PAGES:
         return 0
 
+    if progress_callback:
+        progress_callback(
+            currentDocument=os.path.basename(path),
+            documentPhase="Selecting visual PDF pages",
+        )
     try:
         rendered_pages = render_pdf_visual_pages(
             path,
@@ -789,6 +808,12 @@ def add_pdf_rendered_pages(path, target_state):
         return 0
 
     for rendered_page in rendered_pages:
+        if progress_callback:
+            progress_callback(
+                currentDocument=os.path.basename(path),
+                documentPhase="Saving rendered PDF pages",
+                pdfPage=rendered_page.page_number,
+            )
         target_state.add_image_store(
             rendered_page.image_key,
             base64.b64encode(rendered_page.image_bytes).decode("utf-8"),
@@ -802,7 +827,7 @@ def add_pdf_rendered_pages(path, target_state):
 
 
 @trace_timer("load_pdf_text")
-def load_pdf_text(path, target_state=None):
+def load_pdf_text(path, target_state=None, progress_callback=None):
     """
     Extract text and images from a PDF file, perform OCR on images, and save images to a folder.
     """
@@ -813,7 +838,19 @@ def load_pdf_text(path, target_state=None):
     extra_chunks, extra_sources, extra_meta = [], [], []
     image_jobs = []
 
-    for page_num in range(len(pdf)):
+    total_pages = len(pdf)
+    last_reported_page = 0
+    for page_num in range(total_pages):
+        page_number = page_num + 1
+        if progress_callback and should_report_page_progress(page_number, total_pages, last_reported_page):
+            last_reported_page = page_number
+            progress_callback(
+                currentDocument=os.path.basename(path),
+                documentPhase="Scanning PDF pages",
+                pdfPage=page_number,
+                pdfPages=total_pages,
+                imageCandidates=len(image_jobs),
+            )
         page = pdf[page_num]
         page_text = page.get_text().strip()
         page_texts.append(page_text)
@@ -823,13 +860,21 @@ def load_pdf_text(path, target_state=None):
                 xref = img[0]
                 base_image = pdf.extract_image(xref)
                 image_bytes = base_image["image"]
-                img_name = f"{os.path.basename(path)}_page{page_num+1}_img{img_index+1}"
+                img_name = f"{os.path.basename(path)}_page{page_number}_img{img_index+1}"
                 image_jobs.append((len(image_jobs), page_num, img_index, image_bytes, img_name))
 
             except Exception as ex:
-                trace_logger.warning(f"❌ Failed to process image on page {page_num+1}: {ex}")
+                trace_logger.warning(f"❌ Failed to process image on page {page_number}: {ex}")
                 continue
 
+    if progress_callback:
+        progress_callback(
+            currentDocument=os.path.basename(path),
+            documentPhase="OCR image extraction",
+            pdfPage=total_pages,
+            pdfPages=total_pages,
+            imageCandidates=len(image_jobs),
+        )
     for result in run_pdf_image_ocr_jobs(image_jobs):
         page_num = result["page_num"]
         img_name = result["img_name"]
@@ -865,7 +910,7 @@ def load_pdf_text(path, target_state=None):
             })
             extra_meta.append(ocr_meta)
 
-    add_pdf_rendered_pages(path, target_state)
+    add_pdf_rendered_pages(path, target_state, progress_callback=progress_callback)
 
     return page_texts, extra_chunks, extra_sources, extra_meta
 
@@ -997,8 +1042,8 @@ def process_docx_file(fpath, state, trace_logger, chunker, token_utils):
 
 
 @trace_timer("process_pdf_file")
-def process_pdf_file(fpath, state, trace_logger, chunker, token_utils):
-    page_texts, img_chunks, img_sources, img_meta = load_pdf_text(fpath, state)
+def process_pdf_file(fpath, state, trace_logger, chunker, token_utils, progress_callback=None):
+    page_texts, img_chunks, img_sources, img_meta = load_pdf_text(fpath, state, progress_callback=progress_callback)
     text = "\n\n".join(page_texts)
     density = token_utils.estimate_token_density(text)
     if density > 40:
@@ -1119,7 +1164,7 @@ FILE_PROCESSORS = {
 }
 
 @trace_timer("process_file_by_type")
-def process_file_by_type(fpath, state, trace_logger, chunker, token_utils):
+def process_file_by_type(fpath, state, trace_logger, chunker, token_utils, progress_callback=None):
     
     if os.path.isdir(fpath):
         trace_logger.warning(f"⚠️ Skipping directory: {fpath}")
@@ -1128,7 +1173,9 @@ def process_file_by_type(fpath, state, trace_logger, chunker, token_utils):
     ext = os.path.splitext(fpath)[1].lower()
     trace_logger.debug(f"Processing file: {fpath} with extension: {ext}")
 
-    if ext in FILE_PROCESSORS:
+    if ext == PDF_EXT:
+        process_pdf_file(fpath, state, trace_logger, chunker, token_utils, progress_callback=progress_callback)
+    elif ext in FILE_PROCESSORS:
         FILE_PROCESSORS[ext](fpath, state, trace_logger, chunker, token_utils)
     else:
         trace_logger.warning(f"⚠️ Unsupported file type: {ext} for File: {fpath}")
@@ -1199,7 +1246,19 @@ def load_documents_parallel(
             trace_logger.info(f"🛠️ Thread-{thread_id} started for {fname} ({active_count} active document workers)")
             start = time.time()
 
-            process_file_by_type(fpath, target_state, trace_logger, target_chunker, target_token_utils)
+            detail_progress = None
+            if progress_callback:
+                def detail_progress(**details):
+                    progress_callback(stage="processing_documents", details=details)
+
+            process_file_by_type(
+                fpath,
+                target_state,
+                trace_logger,
+                target_chunker,
+                target_token_utils,
+                progress_callback=detail_progress,
+            )
 
             elapsed = time.time() - start
             trace_logger.info(f"✅ Thread-{thread_id} finished {fname} in {elapsed:.2f}s")
