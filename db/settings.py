@@ -8,30 +8,12 @@ from psycopg.errors import UndefinedTable
 from db.connection import Database
 from db.sql import load_query
 from db.settings_catalog import SETTING_GROUPS, SETTING_UI, setting_metadata
-
-
-BOOTSTRAP_KEYS = {
-    "DATABASE_URL",
-    "DB_MIGRATIONS_DIR",
-    "DB_SCHEMA_VERSION_TABLE",
-    "TRACE_LOG_FILE",
-    "TRACE_ROTATE",
-    "TRACE_MAX_BYTES",
-    "TRACE_BACKUP_COUNT",
-    "TRACE_WHEN",
-    "TRACE_TIMESTAMPED_NAME",
-    "TRACE_LOG_LEVEL",
-}
-
-SENSITIVE_KEYS = {
-    "DATABASE_URL",
-    "LLM_API_KEY",
-}
-
-DEPRECATED_KEYS = {
-    "EXTRACTED_IMAGES_DIR",
-    "SAVE_EXTRACTED_IMAGES",
-}
+from settings_runtime import (
+    BOOTSTRAP_SETTING_KEYS,
+    DEPRECATED_SETTING_KEYS,
+    SENSITIVE_SETTING_KEYS,
+    setting_restart_required,
+)
 
 class AppSettingsStore:
     def __init__(self, database: Database, logger=None):
@@ -110,7 +92,7 @@ class AppSettingsStore:
                         numeric_value,
                         boolean_value,
                         f"Imported from bootstrap config for {key}.",
-                        key in SENSITIVE_KEYS,
+                        key in SENSITIVE_SETTING_KEYS,
                     ),
                 )
                 seeded += 1
@@ -143,17 +125,17 @@ class AppSettingsStore:
         if target is None:
             return 0
         for key, value in db_settings.items():
-            if key not in BOOTSTRAP_KEYS:
+            if key not in BOOTSTRAP_SETTING_KEYS:
                 target[key] = value
         return len(db_settings)
 
     def _should_store(self, key: str, value: Any) -> bool:
-        if key in BOOTSTRAP_KEYS or key in SENSITIVE_KEYS or key in DEPRECATED_KEYS:
+        if key in BOOTSTRAP_SETTING_KEYS or key in SENSITIVE_SETTING_KEYS or key in DEPRECATED_SETTING_KEYS:
             return False
         return isinstance(value, (str, int, float, bool)) and value is not None
 
     def _is_ui_editable(self, row) -> bool:
-        return bool(not row["is_sensitive"] and row["key"] not in BOOTSTRAP_KEYS and row["key"] in SETTING_UI)
+        return bool(not row["is_sensitive"] and row["key"] not in BOOTSTRAP_SETTING_KEYS and row["key"] in SETTING_UI)
 
     def _typed_values(self, value: Any) -> tuple[str, str | None, int | None, Decimal | None, bool | None]:
         if isinstance(value, bool):
@@ -214,5 +196,5 @@ class AppSettingsStore:
             "rawDescription": row["description"] or "",
             "advanced": bool(metadata.get("advanced", False)),
             "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
-            "restartRequired": True,
+            "restartRequired": setting_restart_required(row["key"]),
         }

@@ -70,6 +70,7 @@ from response_cache import (
     ResponseCacheKey,
     should_cache_response,
 )
+from settings_runtime import RuntimeSettingsManager
 
 #Inits the logger as well as the configuraqtion system
 config, trace_logger = SystemInit.load_config_and_logger()
@@ -182,6 +183,8 @@ REACT_DIST_DIR = config.get("REACT_DIST_DIR", "frontend/dist")
 QUERY_RETRIES = config.get("QUERY_RETRIES", 3)
 QUERY_RETRY_DELAY = config.get("QUERY_RETRY_DELAY", 5)
 
+runtime_settings = RuntimeSettingsManager(config, globals(), trace_logger)
+
 # === File Extensions ===
 DOC_EXT = config.get("DOC_EXT")
 PDF_EXT = config.get("PDF_EXT")
@@ -248,6 +251,7 @@ config.validate_rerank_profiles(RERANK_PROFILES)
 embedder = SentenceTransformer(EMBED_MODEL_NAME)
 
 reranker_engine = Reranker(config, state, chunker, trace_logger)
+runtime_settings.register_callback("RERANK_PROFILES", lambda value: setattr(reranker_engine, "rerank_profiles", value))
 query_timings = deque(maxlen=100)
 INDEX_JOB_LOCK = threading.Lock()
 INDEX_PROGRESS_LOCK = threading.Lock()
@@ -1362,18 +1366,18 @@ def start_index_check(reason="manual"):
 
 
 def ingest_watch_loop():
-    interval = ingest_watch_interval_seconds()
-    schedule_next_ingest_check(interval)
-    trace_logger.info(f"👁️ Training watcher enabled. Checking every {interval} seconds.")
+    schedule_next_ingest_check()
+    trace_logger.info(f"👁️ Training watcher enabled. Checking every {ingest_watch_interval_seconds()} seconds.")
 
     while not INGEST_WATCH_STOP.is_set():
-        remaining = seconds_until_next_ingest_check(interval)
+        remaining = seconds_until_next_ingest_check()
         if INGEST_WATCH_STOP.wait(remaining):
             break
         if INGEST_WATCH_RESCHEDULE.is_set():
             INGEST_WATCH_RESCHEDULE.clear()
+            schedule_next_ingest_check()
             continue
-        schedule_next_ingest_check(interval)
+        schedule_next_ingest_check()
         start_index_check("watch")
 
 
@@ -1391,6 +1395,24 @@ def start_ingest_watcher():
 
 def stop_ingest_watcher():
     INGEST_WATCH_STOP.set()
+
+
+def apply_ingest_watch_enabled(value):
+    if value:
+        set_index_status(enabled=True)
+        start_ingest_watcher()
+    else:
+        stop_ingest_watcher()
+        set_index_status(enabled=False, nextCheckAt=None)
+
+
+def apply_ingest_watch_interval(_value):
+    schedule_next_ingest_check()
+    INGEST_WATCH_RESCHEDULE.set()
+
+
+runtime_settings.register_callback("INGEST_WATCH_ENABLED", apply_ingest_watch_enabled)
+runtime_settings.register_callback("INGEST_WATCH_INTERVAL_SECONDS", apply_ingest_watch_interval)
 
 
 @trace_timer("get_or_build_index")
@@ -1688,8 +1710,9 @@ def get_average_query_time():
 
 
 @trace_timer("query_ollama_chat with retry")
-def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=QUERY_RETRIES,
-                                 delay=QUERY_RETRY_DELAY):
+def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=None, delay=None):
+    retries = int(QUERY_RETRIES if retries is None else retries)
+    delay = float(QUERY_RETRY_DELAY if delay is None else delay)
 
     LLM_API_KEY = config.get("LLM_API_KEY", "")
     url = f"{OLLAMA_API_URL}/chat"
@@ -1769,9 +1792,10 @@ def get_rag_response(
     max_tokens=1800,
     bypass_cache=True,
     strategy="Vector + CrossEncoder",
-    model_name=LLM_MODEL_OPTIONS[0]
+    model_name=None
 ):
     start_time = time.time()
+    model_name = model_name or (LLM_MODEL_OPTIONS[0] if LLM_MODEL_OPTIONS else LLM_MODEL_NAME)
     norm_q = normalize_question(question)
     retrieval_q = normalize_question(build_contextual_retrieval_query(norm_q, chat_history))
     synonyms = expand_query(retrieval_q)
@@ -2492,7 +2516,11 @@ async def settings_update(key: str, req: Request):
     try:
         data = await req.json()
         updated = settings_store.update_setting(key, data.get("value"))
-        config.config[key] = updated["value"]
+        change = runtime_settings.apply_update(key, updated["value"])
+        if change.runtime_applied:
+            trace_logger.info(f"⚙️ Applied runtime setting update for {key}.")
+        elif change.restart_required:
+            trace_logger.info(f"⚙️ Stored setting update for {key}; restart required to apply it.")
         return {"setting": updated}
     except KeyError as exc:
         return JSONResponse({"error": str(exc)}, status_code=404)
