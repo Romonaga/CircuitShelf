@@ -33,11 +33,38 @@ export interface QueryRequest extends QueryOptions {
   question: string;
   model: string;
   chatHistory: ChatTurn[];
+  conversationId?: string | null;
 }
 
 export type ChatTurn = [string, string];
 
+export interface ConversationTurn {
+  id: string;
+  ordinal: number;
+  question: string;
+  answer: string;
+  modelName?: string | null;
+  retrievalStrategy?: string | null;
+  confidence?: number | null;
+  createdAt?: string | null;
+}
+
+export interface ConversationSummary {
+  id: string;
+  username?: string | null;
+  title: string;
+  turnCount: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  lastTurnAt?: string | null;
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  turns: ConversationTurn[];
+}
+
 export interface QueryResponse {
+  conversation?: ConversationDetail | null;
   question: string;
   answer: string;
   chatHistory: ChatTurn[];

@@ -61,6 +61,7 @@ from log_retention import cleanup_old_logs
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
 from db.connection import Database, database_url_from_config
 from db.assembly_plan_store import AssemblyPlanStore
+from db.conversation_store import ConversationStore
 from db.datasheet_intelligence_store import DatasheetIntelligenceStore
 from db.image_store import ImageStore
 from db.query_log_store import QueryLogStore
@@ -119,6 +120,7 @@ if seeded_settings or applied_settings or seeded_runtime_config or applied_runti
     )
 user_store = UserStore(database, trace_logger)
 query_log_store = QueryLogStore(database, trace_logger)
+conversation_store = ConversationStore(database, trace_logger)
 vector_store = VectorStore(database, config.get("TRAINING_DIR", "training"), config.get("EMBED_MODEL_NAME"), trace_logger)
 image_store = ImageStore(database, config.get("TRAINING_DIR", "training"), trace_logger)
 intelligence_store = DatasheetIntelligenceStore(database, trace_logger)
@@ -138,6 +140,8 @@ if not db_response_cache.available():
     raise RuntimeError("Postgres response cache is unavailable. Run database migrations before starting CircuitShelf.")
 if not query_log_store.available():
     raise RuntimeError("Postgres query log is unavailable. Run database migrations before starting CircuitShelf.")
+if not conversation_store.available():
+    raise RuntimeError("Postgres conversation store is unavailable. Run database migrations before starting CircuitShelf.")
 if not assembly_plan_store.available():
     raise RuntimeError("Postgres assembly plan store is unavailable. Run database migrations before starting CircuitShelf.")
 trace_logger.info("🛠️ Configuration and logger successfully initialized.")
@@ -2791,6 +2795,17 @@ def session_timeout_seconds() -> int:
     return max(60, int(config.get("SESSION_TIMEOUT_SECONDS", config.get("SESSION_TTL_SECONDS", 28800))))
 
 
+def username_for_user(user) -> str | None:
+    return getattr(user, "username", None) if user else None
+
+
+def conversation_title_from_question(question: str) -> str:
+    title = " ".join(str(question or "").split())
+    if not title:
+        return "New conversation"
+    return title[:80]
+
+
 def require_admin_user(req: Request):
     user = user_store.get_session(bearer_token_from_request(req), ttl_seconds=session_timeout_seconds())
     if not user:
@@ -2976,6 +2991,47 @@ async def app_config():
             "strategy": "Vector + CrossEncoder",
         },
     }
+
+
+@app.get("/api/conversations")
+async def conversations_list(req: Request, limit: int = 50):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    return {"conversations": conversation_store.list(username_for_user(user), limit=max(1, min(int(limit), 100)))}
+
+
+@app.post("/api/conversations")
+async def conversation_create(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    data = await req.json()
+    title = data.get("title") or "New conversation"
+    conversation = conversation_store.create(username_for_user(user), title)
+    return {"conversation": {**conversation, "turns": []}}
+
+
+@app.get("/api/conversations/{conversation_id}")
+async def conversation_get(conversation_id: str, req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    conversation = conversation_store.get(conversation_id, username_for_user(user))
+    if not conversation:
+        return JSONResponse({"error": "Conversation not found."}, status_code=404)
+    return {"conversation": conversation}
+
+
+@app.delete("/api/conversations/{conversation_id}")
+async def conversation_delete(conversation_id: str, req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    removed = conversation_store.archive(conversation_id, username_for_user(user))
+    if not removed:
+        return JSONResponse({"error": "Conversation not found."}, status_code=404)
+    return {"ok": True}
 
 
 @app.get("/api/settings")
@@ -3263,10 +3319,23 @@ def remove_document_from_store(source: str, *, delete_file: bool = True) -> tupl
 @app.post("/api/query")
 async def react_query(req: Request):
     try:
+        user, error = require_authenticated_user(req)
+        if error:
+            return error
         data = await req.json()
         question = data.get("question", "")
         if not question.strip():
             return {"error": "No question provided."}
+        username = username_for_user(user)
+        conversation_id = data.get("conversationId")
+        conversation = None
+        if conversation_id:
+            conversation = conversation_store.get(str(conversation_id), username)
+            if not conversation:
+                return JSONResponse({"error": "Conversation not found."}, status_code=404)
+        else:
+            conversation = conversation_store.create(username, conversation_title_from_question(question))
+            conversation_id = conversation["id"]
 
         _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card = await run_in_threadpool(
             get_rag_response,
@@ -3280,8 +3349,19 @@ async def react_query(req: Request):
             strategy=data.get("strategy", "Vector + CrossEncoder"),
             model_name=data.get("model", LLM_MODEL_NAME),
         )
+        stored_answer = chat_history[-1][1] if chat_history else answer
+        conversation_store.append_turn(
+            conversation_id=str(conversation_id),
+            question=question,
+            answer=stored_answer,
+            model_name=data.get("model", LLM_MODEL_NAME),
+            retrieval_strategy=data.get("strategy", "Vector + CrossEncoder"),
+            confidence_score=confidence,
+        )
+        conversation = conversation_store.get(str(conversation_id), username)
 
         return {
+            "conversation": conversation,
             "question": question,
             "answer": answer,
             "chatHistory": chat_history,

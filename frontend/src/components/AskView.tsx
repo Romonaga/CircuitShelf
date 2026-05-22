@@ -1,11 +1,12 @@
-import { FormEvent, useEffect, useState } from "react";
-import { runQuery } from "../api";
-import type { AppConfig, ChatTurn, QueryOptions, QueryResponse } from "../types";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { deleteConversation, getConversation, getConversations, runQuery } from "../api";
+import type { AppConfig, ChatTurn, ConversationSummary, QueryOptions, QueryResponse } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatNumber } from "../lib/format";
 import { AnswerRenderer } from "./AnswerRenderer";
 import { BuildCard } from "./BuildCard";
 import { ChatHistory } from "./ChatHistory";
+import { ConversationPanel } from "./ConversationPanel";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 import { SourceList } from "./SourceList";
@@ -15,6 +16,9 @@ export function AskView({ config }: { config: AppConfig }) {
   const [model, setModel] = useState(config.defaultModel);
   const [options, setOptions] = useState<QueryOptions>(config.defaults);
   const [chatHistory, setChatHistory] = useState<ChatTurn[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationsBusy, setConversationsBusy] = useState(false);
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -22,6 +26,22 @@ export function AskView({ config }: { config: AppConfig }) {
 
   const canSubmit = question.trim().length > 0 && !busy;
   const askButtonText = busy ? `Running ${formatElapsed(elapsedSeconds)}` : "Ask";
+
+  const loadConversations = useCallback(async () => {
+    setConversationsBusy(true);
+    try {
+      const response = await getConversations();
+      setConversations(response.conversations);
+    } catch (err) {
+      setError(errorMessage(err, "Could not load conversations"));
+    } finally {
+      setConversationsBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadConversations();
+  }, [loadConversations]);
 
   useEffect(() => {
     if (!busy) {
@@ -50,16 +70,72 @@ export function AskView({ config }: { config: AppConfig }) {
         ...options,
         question,
         model,
-        chatHistory
+        chatHistory,
+        conversationId: activeConversationId
       });
       setResult(response);
       setChatHistory(response.chatHistory);
+      if (response.conversation?.id) {
+        setActiveConversationId(response.conversation.id);
+      }
+      void loadConversations();
       setQuestion("");
     } catch (err) {
       setError(errorMessage(err, "Query failed"));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function selectConversation(conversationId: string) {
+    setError("");
+    setBusy(true);
+    try {
+      const response = await getConversation(conversationId);
+      const turns = response.conversation.turns.map((turn) => [turn.question, turn.answer] as ChatTurn);
+      const lastTurn = response.conversation.turns.at(-1);
+      setActiveConversationId(response.conversation.id);
+      setChatHistory(turns);
+      setResult(
+        lastTurn
+          ? {
+              conversation: response.conversation,
+              question: lastTurn.question,
+              answer: lastTurn.answer,
+              chatHistory: turns,
+              sources: [],
+              buildCard: null,
+              cacheStats: null,
+              confidence: lastTurn.confidence ?? null,
+              averageQueryTime: null
+            }
+          : null
+      );
+    } catch (err) {
+      setError(errorMessage(err, "Could not load conversation"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeConversation(conversationId: string) {
+    setError("");
+    try {
+      await deleteConversation(conversationId);
+      if (conversationId === activeConversationId) {
+        startNewConversation();
+      }
+      await loadConversations();
+    } catch (err) {
+      setError(errorMessage(err, "Could not remove conversation"));
+    }
+  }
+
+  function startNewConversation() {
+    setActiveConversationId(null);
+    setChatHistory([]);
+    setResult(null);
+    setQuestion("");
   }
 
   return (
@@ -82,12 +158,9 @@ export function AskView({ config }: { config: AppConfig }) {
           <button
             className="ghost-button"
             type="button"
-            onClick={() => {
-              setChatHistory([]);
-              setResult(null);
-            }}
+            onClick={startNewConversation}
           >
-            Clear
+            New conversation
           </button>
         </div>
         <ErrorMessage message={error} />
@@ -175,6 +248,14 @@ export function AskView({ config }: { config: AppConfig }) {
       </section>
 
       <section className="history-panel">
+        <ConversationPanel
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          loading={conversationsBusy}
+          onNew={startNewConversation}
+          onSelect={selectConversation}
+          onDelete={removeConversation}
+        />
         <SectionHeader title="Conversation" description={`${Math.max(chatHistory.length - 1, 0)} earlier turns`} />
         <ChatHistory turns={chatHistory.slice(0, -1)} />
       </section>

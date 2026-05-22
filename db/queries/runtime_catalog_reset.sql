@@ -1,5 +1,7 @@
 TRUNCATE TABLE
     user_sessions,
+    conversation_turns,
+    conversations,
     response_cache_chat_turns,
     response_cache_sources,
     response_cache_entries,

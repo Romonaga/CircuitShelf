@@ -547,6 +547,12 @@ nav {
   background: var(--panel-soft);
 }
 
+.compact-button {
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: 0.84rem;
+}
+
 .danger-button {
   border-color: #fecaca;
   color: #991b1b;
@@ -959,6 +965,71 @@ nav {
   display: grid;
   gap: 12px;
   margin-top: 14px;
+}
+
+.conversation-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.conversation-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.conversation-toolbar h3 {
+  margin: 0;
+}
+
+.conversation-list {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.conversation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.conversation-row.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.conversation-row > button:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+}
+
+.conversation-row strong,
+.conversation-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-row small {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .chat-turn {
