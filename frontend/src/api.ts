@@ -1,5 +1,8 @@
 import type {
   AppConfig,
+  AssemblyPlan,
+  AssemblyPlanSummary,
+  BuildAssemblyPlanResponse,
   DocumentDetail,
   DocumentSummary,
   QueryRequest,
@@ -80,6 +83,48 @@ export function runQuery(payload: QueryRequest): Promise<QueryResponse> {
     method: "POST",
     body: JSON.stringify(payload)
   });
+}
+
+export function getAssemblyPlans(): Promise<{ plans: AssemblyPlanSummary[] }> {
+  return requestJson<{ plans: AssemblyPlanSummary[] }>("/api/assembly-plans");
+}
+
+export function getAssemblyPlan(planId: string): Promise<{ plan: AssemblyPlan }> {
+  return requestJson<{ plan: AssemblyPlan }>(`/api/assembly-plans/${encodeURIComponent(planId)}`);
+}
+
+export function buildAssemblyPlan(payload: {
+  objective: string;
+  model: string;
+  topK: number;
+  distanceThreshold: number;
+  maxTokens: number;
+  strategy: string;
+}): Promise<BuildAssemblyPlanResponse> {
+  return requestJson<BuildAssemblyPlanResponse>("/api/assembly-plans/build", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateAssemblyStep(planId: string, stepId: string, completed: boolean): Promise<{ plan: AssemblyPlan }> {
+  return requestJson<{ plan: AssemblyPlan }>(
+    `/api/assembly-plans/${encodeURIComponent(planId)}/steps/${encodeURIComponent(stepId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ completed })
+    }
+  );
+}
+
+export function askAssemblyAssistant(planId: string, message: string, model: string): Promise<{ plan: AssemblyPlan; answer: string }> {
+  return requestJson<{ plan: AssemblyPlan; answer: string }>(
+    `/api/assembly-plans/${encodeURIComponent(planId)}/assistant`,
+    {
+      method: "POST",
+      body: JSON.stringify({ message, model })
+    }
+  );
 }
 
 export function getDocuments(): Promise<{ documents: DocumentSummary[] }> {

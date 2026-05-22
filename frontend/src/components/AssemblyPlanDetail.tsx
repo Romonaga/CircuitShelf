@@ -1,0 +1,177 @@
+import { askAssemblyAssistant, updateAssemblyStep } from "../api";
+import { errorMessage } from "../lib/errors";
+import { formatNumber } from "../lib/format";
+import type { AppConfig, AssemblyPlan } from "../types";
+import { ErrorMessage } from "./ErrorMessage";
+import { LoadingSpinner } from "./LoadingSpinner";
+import { SectionHeader } from "./SectionHeader";
+import { FormEvent, useMemo, useState } from "react";
+
+export function AssemblyPlanDetail({
+  plan,
+  loading,
+  config,
+  onPlanUpdated
+}: {
+  plan: AssemblyPlan | null;
+  loading: boolean;
+  config: AppConfig;
+  onPlanUpdated: (plan: AssemblyPlan) => void;
+}) {
+  const [stepBusy, setStepBusy] = useState("");
+  const [assistantBusy, setAssistantBusy] = useState(false);
+  const [assistantMessage, setAssistantMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const progress = useMemo(() => {
+    if (!plan?.stepCount) {
+      return 0;
+    }
+    return Math.round((plan.completedStepCount / plan.stepCount) * 100);
+  }, [plan]);
+
+  async function toggleStep(stepId: string, completed: boolean) {
+    if (!plan) {
+      return;
+    }
+    setStepBusy(stepId);
+    setError("");
+    try {
+      const response = await updateAssemblyStep(plan.id, stepId, completed);
+      onPlanUpdated(response.plan);
+    } catch (err) {
+      setError(errorMessage(err, "Could not update step"));
+    } finally {
+      setStepBusy("");
+    }
+  }
+
+  async function submitAssistant(event: FormEvent) {
+    event.preventDefault();
+    if (!plan || !assistantMessage.trim() || assistantBusy) {
+      return;
+    }
+    setAssistantBusy(true);
+    setError("");
+    try {
+      const response = await askAssemblyAssistant(plan.id, assistantMessage, config.defaultModel);
+      setAssistantMessage("");
+      onPlanUpdated(response.plan);
+    } catch (err) {
+      setError(errorMessage(err, "Bench assistant failed"));
+    } finally {
+      setAssistantBusy(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="document-loading">
+        <LoadingSpinner />
+        <span>Loading assembly plan...</span>
+      </div>
+    );
+  }
+
+  if (!plan) {
+    return <div className="empty-state">Create or select an assembly plan.</div>;
+  }
+
+  return (
+    <div className="assembly-detail">
+      <SectionHeader
+        title={plan.title}
+        description={`${plan.componentName || "Circuit"} | Confidence ${formatNumber(plan.confidence)} | ${progress}% complete`}
+      />
+      <ErrorMessage message={error} />
+      <p className="assembly-summary">{plan.summary || plan.objective}</p>
+
+      <div className="assembly-section-grid">
+        <section>
+          <h3>Parts</h3>
+          <ul className="assembly-list">
+            {plan.parts.map((part) => (
+              <li key={part.id}>
+                <strong>{part.name}</strong>
+                <span>{part.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section>
+          <h3>Power</h3>
+          <ul className="assembly-list">
+            {plan.power.map((item) => (
+              <li key={item.id}>{item.note}</li>
+            ))}
+          </ul>
+        </section>
+      </div>
+
+      <section>
+        <h3>Assembly checklist</h3>
+        <div className="assembly-step-list">
+          {plan.steps.map((step) => (
+            <label key={step.id} className={step.completed ? "assembly-step complete" : `assembly-step ${step.type}`}>
+              <input
+                type="checkbox"
+                checked={step.completed}
+                disabled={stepBusy === step.id}
+                onChange={(event) => void toggleStep(step.id, event.target.checked)}
+              />
+              <span className="assembly-step-body">
+                <strong>
+                  {step.ordinal}. {step.title}
+                </strong>
+                <span>{step.instruction}</span>
+                {step.note ? <small>{step.note}</small> : null}
+                {step.sourcePath || step.page ? (
+                  <small>
+                    Evidence: {step.sourcePath || "source"} {step.page ? `page ${step.page}` : ""}
+                  </small>
+                ) : null}
+              </span>
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h3>Sources</h3>
+        <div className="assembly-source-list">
+          {plan.sources.map((source) => (
+            <div key={source.id} className="assembly-source-row">
+              <strong>{source.displayName}</strong>
+              <span>{source.pages.length ? `Pages ${source.pages.join(", ")}` : "No page refs"}</span>
+              <small>{source.chunkCount} chunks</small>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h3>Bench assistant</h3>
+        <div className="assembly-notes">
+          {plan.notes.map((note) => (
+            <article key={note.id} className={`assembly-note ${note.role}`}>
+              <strong>{note.role === "assistant" ? "Assistant" : "You"}</strong>
+              <p>{note.message}</p>
+            </article>
+          ))}
+          {!plan.notes.length ? <div className="empty-state compact">No bench conversation yet.</div> : null}
+        </div>
+        <form className="assembly-assistant-form" onSubmit={submitAssistant}>
+          <textarea
+            value={assistantMessage}
+            onChange={(event) => setAssistantMessage(event.target.value)}
+            placeholder="Example: I wired step 4. What should I test next?"
+            rows={3}
+          />
+          <button className="primary-button" disabled={!assistantMessage.trim() || assistantBusy}>
+            {assistantBusy ? "Thinking..." : "Ask bench assistant"}
+          </button>
+        </form>
+      </section>
+    </div>
+  );
+}

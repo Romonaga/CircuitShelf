@@ -260,6 +260,192 @@ nav {
     "history sources";
 }
 
+.bench-grid {
+  min-height: calc(100vh - 48px);
+  display: grid;
+  grid-template-columns: 390px minmax(0, 1fr);
+  gap: 18px;
+}
+
+.bench-sidebar,
+.bench-detail-panel,
+.assembly-builder {
+  min-width: 0;
+}
+
+.bench-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.bench-detail-panel,
+.assembly-builder,
+.assembly-plan-list {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.assembly-builder {
+  display: grid;
+  gap: 14px;
+}
+
+.assembly-builder textarea {
+  min-height: 130px;
+}
+
+.assembly-builder-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.assembly-build-button {
+  width: 100%;
+}
+
+.assembly-plan-list {
+  display: grid;
+  gap: 10px;
+}
+
+.assembly-plan-row {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 11px;
+  color: var(--text);
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.assembly-plan-row.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.assembly-plan-row span,
+.assembly-plan-row small {
+  color: var(--muted);
+}
+
+.assembly-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.assembly-summary {
+  color: #2c3a4f;
+  line-height: 1.55;
+}
+
+.assembly-section-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.assembly-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.assembly-list li {
+  line-height: 1.45;
+}
+
+.assembly-list span {
+  display: block;
+  color: var(--muted);
+}
+
+.assembly-step-list,
+.assembly-source-list,
+.assembly-notes {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.assembly-step {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.assembly-step.warning {
+  border-color: #fecaca;
+  background: #fff5f5;
+}
+
+.assembly-step.complete {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.assembly-step input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.assembly-step-body {
+  display: grid;
+  gap: 4px;
+  color: var(--text);
+}
+
+.assembly-step-body small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.assembly-source-row,
+.assembly-note {
+  display: grid;
+  gap: 4px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.assembly-source-row span,
+.assembly-source-row small {
+  color: var(--muted);
+}
+
+.assembly-note.assistant {
+  background: var(--panel-soft);
+}
+
+.assembly-note p {
+  color: #2c3a4f;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.assembly-assistant-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.assembly-assistant-form textarea {
+  min-height: 96px;
+}
+
 .docs-grid {
   grid-template-columns: 360px minmax(0, 1fr);
 }
@@ -1571,6 +1757,15 @@ nav {
   .chunk-panel {
     max-height: none;
   }
+
+  .bench-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assembly-builder-controls,
+  .assembly-section-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1609,6 +1804,9 @@ nav {
   .history-panel,
   .sources-panel,
   .document-list-panel,
+  .bench-detail-panel,
+  .assembly-builder,
+  .assembly-plan-list,
   .settings-list-panel,
   .settings-editor-panel,
   .chunk-panel,

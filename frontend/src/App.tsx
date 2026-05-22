@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { AskView } from "./components/AskView";
+import { BenchView } from "./components/BenchView";
 import { DocumentsView } from "./components/DocumentsView";
 import { LoginView } from "./components/LoginView";
 import { ReviewView } from "./components/ReviewView";
@@ -50,6 +51,9 @@ export default function App() {
       <ErrorMessage message={error} className="top-error" />
       <div hidden={activeView !== "ask"}>
         <AskView config={config} />
+      </div>
+      <div hidden={activeView !== "bench"}>
+        <BenchView config={config} isActive={activeView === "bench"} />
       </div>
       <div hidden={activeView !== "documents"}>
         <DocumentsView

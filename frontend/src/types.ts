@@ -1,5 +1,5 @@
 export type RetrievalStrategy = "Vector only" | "Vector + CrossEncoder" | string;
-export type View = "ask" | "documents" | "review" | "trace" | "status" | "settings";
+export type View = "ask" | "bench" | "documents" | "review" | "trace" | "status" | "settings";
 
 export interface SessionUser {
   username: string;
@@ -181,6 +181,78 @@ export interface CircuitBuildCard {
   checks: string[];
   warnings: string[];
   sourceNotes: Array<{ source: string; pages: Array<number | string>; chunks: number }>;
+}
+
+export interface AssemblyPlanSummary {
+  id: string;
+  title: string;
+  objective: string;
+  componentName: string;
+  componentType: string;
+  confidence?: number | null;
+  status: string;
+  stepCount: number;
+  completedStepCount: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface AssemblyPlanPart {
+  id: string;
+  name: string;
+  detail: string;
+}
+
+export interface AssemblyPlanPowerNote {
+  id: string;
+  note: string;
+}
+
+export interface AssemblyPlanStep {
+  id: string;
+  ordinal: number;
+  type: "wiring" | "check" | "warning" | string;
+  title: string;
+  instruction: string;
+  note: string;
+  sourcePath?: string | null;
+  page?: number | null;
+  completed: boolean;
+  completedAt?: string | null;
+}
+
+export interface AssemblyPlanSource {
+  id: string;
+  sourcePath: string;
+  displayName: string;
+  pages: number[];
+  chunkCount: number;
+}
+
+export interface AssemblyPlanNote {
+  id: string;
+  role: "user" | "assistant" | string;
+  message: string;
+  createdAt?: string | null;
+}
+
+export interface AssemblyPlan extends AssemblyPlanSummary {
+  summary: string;
+  createdBy?: string | null;
+  parts: AssemblyPlanPart[];
+  power: AssemblyPlanPowerNote[];
+  steps: AssemblyPlanStep[];
+  sources: AssemblyPlanSource[];
+  notes: AssemblyPlanNote[];
+}
+
+export interface BuildAssemblyPlanResponse {
+  plan?: AssemblyPlan;
+  answer?: string;
+  sources?: SourceSummary[];
+  confidence?: number | null;
+  averageQueryTime?: number | null;
+  error?: string;
 }
 
 export interface DocumentDetail {

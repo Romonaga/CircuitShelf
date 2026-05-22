@@ -59,6 +59,7 @@ from ingest_manifest import IngestManifest
 from log_tail import tail_text_file
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
 from db.connection import Database, database_url_from_config
+from db.assembly_plan_store import AssemblyPlanStore
 from db.datasheet_intelligence_store import DatasheetIntelligenceStore
 from db.image_store import ImageStore
 from db.query_log_store import QueryLogStore
@@ -118,6 +119,7 @@ query_log_store = QueryLogStore(database, trace_logger)
 vector_store = VectorStore(database, config.get("TRAINING_DIR", "training"), config.get("EMBED_MODEL_NAME"), trace_logger)
 image_store = ImageStore(database, config.get("TRAINING_DIR", "training"), trace_logger)
 intelligence_store = DatasheetIntelligenceStore(database, trace_logger)
+assembly_plan_store = AssemblyPlanStore(database, config.get("TRAINING_DIR", "training"), trace_logger)
 db_response_cache = PostgresResponseCache(
     database,
     capacity=config.get("RESPONSE_CACHE_CAPACITY", 200),
@@ -133,6 +135,8 @@ if not db_response_cache.available():
     raise RuntimeError("Postgres response cache is unavailable. Run database migrations before starting CircuitShelf.")
 if not query_log_store.available():
     raise RuntimeError("Postgres query log is unavailable. Run database migrations before starting CircuitShelf.")
+if not assembly_plan_store.available():
+    raise RuntimeError("Postgres assembly plan store is unavailable. Run database migrations before starting CircuitShelf.")
 trace_logger.info("🛠️ Configuration and logger successfully initialized.")
 
 # === Decorators ===
@@ -2362,6 +2366,15 @@ def require_admin_user(req: Request):
     return user, None
 
 
+def require_authenticated_user(req: Request):
+    if not database.configured or not user_store.has_active_users():
+        return None, None
+    user = user_store.get_session(bearer_token_from_request(req), ttl_seconds=session_timeout_seconds())
+    if not user:
+        return None, JSONResponse({"error": "Authentication required."}, status_code=401)
+    return user, None
+
+
 def safe_upload_filename(filename: str) -> str:
     name = os.path.basename(str(filename or "")).strip()
     if not name or name in {".", ".."}:
@@ -2654,6 +2667,137 @@ async def indexed_document_remove(req: Request):
     if status_code != 200:
         return JSONResponse(result, status_code=status_code)
     return result
+
+
+@app.get("/api/assembly-plans")
+async def assembly_plans(req: Request):
+    _, error = require_authenticated_user(req)
+    if error:
+        return error
+    return {"plans": assembly_plan_store.list()}
+
+
+@app.get("/api/assembly-plans/{plan_id}")
+async def assembly_plan(plan_id: str, req: Request):
+    _, error = require_authenticated_user(req)
+    if error:
+        return error
+    plan = assembly_plan_store.get(plan_id)
+    if not plan:
+        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+    return {"plan": plan}
+
+
+@app.post("/api/assembly-plans/build")
+async def assembly_plan_build(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    data = await req.json()
+    objective = str(data.get("objective") or "").strip()
+    if not objective:
+        return JSONResponse({"error": "Build objective is required."}, status_code=400)
+    model_name = data.get("model") or LLM_MODEL_NAME
+
+    _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card = await run_in_threadpool(
+        get_rag_response,
+        question=objective,
+        chat_history=[],
+        show_full_text=False,
+        top_k=int(data.get("topK", 15)),
+        dist_thresh=float(data.get("distanceThreshold", 4.0)),
+        max_tokens=int(data.get("maxTokens", 1800)),
+        bypass_cache=True,
+        strategy=data.get("strategy", "Vector + CrossEncoder"),
+        model_name=model_name,
+    )
+    if not build_card:
+        return JSONResponse(
+            {
+                "error": "CircuitShelf could not build an assembly plan from the current indexed sources.",
+                "answer": answer,
+                "sources": normalize_sources_for_api(sources),
+                "confidence": confidence,
+                "averageQueryTime": avg_time,
+                "cacheStats": cache_stats,
+                "chatHistory": chat_history,
+            },
+            status_code=422,
+        )
+
+    created_by = user.username if user else None
+    plan = assembly_plan_store.create_from_card(question=objective, card=build_card, created_by=created_by)
+    return {
+        "plan": plan,
+        "answer": answer,
+        "sources": normalize_sources_for_api(sources),
+        "confidence": confidence,
+        "averageQueryTime": avg_time,
+        "cacheStats": cache_stats,
+        "chatHistory": chat_history,
+    }
+
+
+@app.patch("/api/assembly-plans/{plan_id}/steps/{step_id}")
+async def assembly_step_update(plan_id: str, step_id: str, req: Request):
+    _, error = require_authenticated_user(req)
+    if error:
+        return error
+    data = await req.json()
+    updated = assembly_plan_store.set_step_completed(plan_id, step_id, bool(data.get("completed")))
+    if not updated:
+        return JSONResponse({"error": "Assembly step not found."}, status_code=404)
+    plan = assembly_plan_store.get(plan_id)
+    return {"plan": plan}
+
+
+@app.post("/api/assembly-plans/{plan_id}/assistant")
+async def assembly_assistant(plan_id: str, req: Request):
+    _, error = require_authenticated_user(req)
+    if error:
+        return error
+    data = await req.json()
+    message = str(data.get("message") or "").strip()
+    if not message:
+        return JSONResponse({"error": "Message is required."}, status_code=400)
+    plan = assembly_plan_store.get(plan_id)
+    if not plan:
+        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+
+    assembly_plan_store.add_note(plan_id, "user", message)
+    prompt = build_assembly_assistant_prompt(plan, message)
+    assistant_answer = await run_in_threadpool(query_ollama_chat_with_retry, prompt, data.get("model") or LLM_MODEL_NAME, [])
+    assembly_plan_store.add_note(plan_id, "assistant", assistant_answer)
+    return {"plan": assembly_plan_store.get(plan_id), "answer": assistant_answer}
+
+
+def build_assembly_assistant_prompt(plan: dict, message: str) -> str:
+    steps = "\n".join(
+        f"{step['ordinal']}. [{'done' if step['completed'] else 'open'}] {step['title']}: {step['instruction']} {step.get('note') or ''}"
+        for step in plan.get("steps", [])
+    )
+    sources = "\n".join(
+        f"- {source['displayName']} pages {', '.join(str(page) for page in source.get('pages') or [])}"
+        for source in plan.get("sources", [])
+    )
+    notes = "\n".join(
+        f"{note['role']}: {note['message']}"
+        for note in (plan.get("notes") or [])[-8:]
+    )
+    return (
+        "You are CircuitShelf's electronics bench assistant. Use only the assembly plan, checklist, and source notes below. "
+        "Give practical next-step guidance, checks to perform, expected readings or behavior when supported, and safety cautions. "
+        "If the plan lacks enough evidence, say what is missing.\n\n"
+        f"Assembly plan: {plan.get('title')}\n"
+        f"Objective: {plan.get('objective')}\n"
+        f"Component: {plan.get('componentName')} ({plan.get('componentType')})\n"
+        f"Summary: {plan.get('summary')}\n\n"
+        f"Checklist:\n{steps}\n\n"
+        f"Sources:\n{sources}\n\n"
+        f"Recent bench conversation:\n{notes}\n\n"
+        f"User says: {message}\n\n"
+        "Respond as a concise lab assistant."
+    )
 
 
 def remove_document_from_store(source: str, *, delete_file: bool = True) -> tuple[dict, int]:

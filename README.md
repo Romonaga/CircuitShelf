@@ -234,6 +234,12 @@ python tools/db_user.py list
 
 Do not commit real database credentials.
 
+## Bench Assembly Plans
+
+The `Bench` page turns retrieved electronics sources into persisted assembly plans. Each plan stores parts, power notes, pin-by-pin wiring steps, checks, warnings, source evidence, checklist progress, and a small bench-assistant conversation in Postgres.
+
+Create a plan from the Bench page after indexing relevant books or datasheets. If no indexed sources support the build request, CircuitShelf returns a clear failure instead of inventing a plan.
+
 ## Tests
 
 ```bash
