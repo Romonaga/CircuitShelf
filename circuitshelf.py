@@ -248,6 +248,7 @@ query_timings = deque(maxlen=100)
 INDEX_JOB_LOCK = threading.Lock()
 INDEX_PROGRESS_LOCK = threading.Lock()
 INGEST_WATCH_STOP = threading.Event()
+INGEST_WATCH_RESCHEDULE = threading.Event()
 INGEST_WATCH_THREAD = None
 index_status = {
     "enabled": bool(config.get("INGEST_WATCH_ENABLED", True)),
@@ -332,6 +333,32 @@ def set_index_status(**updates):
     with INDEX_PROGRESS_LOCK:
         index_status.update(updates)
         return dict(index_status)
+
+
+def ingest_watch_interval_seconds():
+    return max(30, int(config.get("INGEST_WATCH_INTERVAL_SECONDS", 300)))
+
+
+def schedule_next_ingest_check(interval=None):
+    interval_seconds = interval if interval is not None else ingest_watch_interval_seconds()
+    next_check = datetime.now(timezone.utc).timestamp() + interval_seconds
+    return set_index_status(
+        nextCheckAt=datetime.fromtimestamp(next_check, timezone.utc).isoformat()
+    )
+
+
+def seconds_until_next_ingest_check(interval=None):
+    with INDEX_PROGRESS_LOCK:
+        next_check_at = index_status.get("nextCheckAt")
+    if not next_check_at:
+        status = schedule_next_ingest_check(interval)
+        next_check_at = status["nextCheckAt"]
+    try:
+        next_check = datetime.fromisoformat(next_check_at).timestamp()
+    except (TypeError, ValueError):
+        status = schedule_next_ingest_check(interval)
+        next_check = datetime.fromisoformat(status["nextCheckAt"]).timestamp()
+    return max(0, next_check - datetime.now(timezone.utc).timestamp())
 
 
 def update_index_progress(*, stage=None, current_file=None, finished_file=None, total_files=None, details=None):
@@ -1309,6 +1336,12 @@ def start_index_check(reason="manual"):
     if INDEX_JOB_LOCK.locked():
         return {"started": False, "status": dict(index_status)}
 
+    if reason != "watch":
+        status = schedule_next_ingest_check()
+        INGEST_WATCH_RESCHEDULE.set()
+    else:
+        status = dict(index_status)
+
     thread = threading.Thread(
         target=check_for_training_changes,
         kwargs={"reason": reason},
@@ -1316,16 +1349,22 @@ def start_index_check(reason="manual"):
         daemon=True,
     )
     thread.start()
-    return {"started": True, "status": dict(index_status)}
+    return {"started": True, "status": status}
 
 
 def ingest_watch_loop():
-    interval = max(30, int(config.get("INGEST_WATCH_INTERVAL_SECONDS", 300)))
-    set_index_status(nextCheckAt=datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() + interval, timezone.utc).isoformat())
+    interval = ingest_watch_interval_seconds()
+    schedule_next_ingest_check(interval)
     trace_logger.info(f"👁️ Training watcher enabled. Checking every {interval} seconds.")
-    while not INGEST_WATCH_STOP.wait(interval):
-        next_check = datetime.now(timezone.utc).timestamp() + interval
-        set_index_status(nextCheckAt=datetime.fromtimestamp(next_check, timezone.utc).isoformat())
+
+    while not INGEST_WATCH_STOP.is_set():
+        remaining = seconds_until_next_ingest_check(interval)
+        if INGEST_WATCH_STOP.wait(remaining):
+            break
+        if INGEST_WATCH_RESCHEDULE.is_set():
+            INGEST_WATCH_RESCHEDULE.clear()
+            continue
+        schedule_next_ingest_check(interval)
         start_index_check("watch")
 
 
