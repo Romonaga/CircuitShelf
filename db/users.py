@@ -13,6 +13,7 @@ from db.sql import load_query
 
 @dataclass(frozen=True)
 class AuthenticatedUser:
+    user_id: int
     username: str
     is_admin: bool
 
@@ -20,6 +21,7 @@ class AuthenticatedUser:
 @dataclass(frozen=True)
 class UserSession:
     token: str
+    user_id: int
     username: str
     is_admin: bool
 
@@ -59,7 +61,7 @@ class UserStore:
                     return None
 
                 conn.execute(load_query("users_touch_last_login.sql"), (username,))
-                return AuthenticatedUser(username=str(row["username"]), is_admin=bool(row["is_admin"]))
+                return AuthenticatedUser(user_id=int(row["id"]), username=str(row["username"]), is_admin=bool(row["is_admin"]))
         except UndefinedTable:
             if self.logger:
                 self.logger.warning("Users table does not exist. Run database migrations before logging in.")
@@ -94,8 +96,8 @@ class UserStore:
         token_hash = self._token_hash(token)
         with self.database.connection() as conn:
             conn.execute(load_query("user_sessions_prune.sql"))
-            conn.execute(load_query("user_sessions_insert.sql"), (user.username, token_hash, int(ttl_seconds)))
-        return UserSession(token=token, username=user.username, is_admin=user.is_admin)
+            conn.execute(load_query("user_sessions_insert.sql"), (user.user_id, user.username, token_hash, int(ttl_seconds)))
+        return UserSession(token=token, user_id=user.user_id, username=user.username, is_admin=user.is_admin)
 
     def get_session(self, token: str, *, ttl_seconds: int | None = None) -> AuthenticatedUser | None:
         if not token:
@@ -109,7 +111,7 @@ class UserStore:
                 ttl = int(ttl_seconds or 0)
                 if ttl > 0:
                     conn.execute(load_query("user_sessions_touch.sql"), (ttl, token_hash))
-            return AuthenticatedUser(username=str(row["username"]), is_admin=bool(row["is_admin"]))
+            return AuthenticatedUser(user_id=int(row["id"]), username=str(row["username"]), is_admin=bool(row["is_admin"]))
         except Exception as exc:
             if self.logger:
                 self.logger.warning(f"Session lookup failed: {exc}")

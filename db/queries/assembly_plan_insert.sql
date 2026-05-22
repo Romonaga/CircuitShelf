@@ -5,8 +5,11 @@ INSERT INTO assembly_plans (
     component_type,
     summary,
     confidence,
+    user_id,
     created_by,
     updated_at
 )
-VALUES (%s, %s, %s, %s, %s, %s, %s, now())
+SELECT %s, %s, %s, %s, %s, %s, %s, username, now()
+FROM users
+WHERE id = %s
 RETURNING id;

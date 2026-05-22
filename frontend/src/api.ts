@@ -69,10 +69,21 @@ export function getAppConfig(): Promise<AppConfig> {
   return requestJson<AppConfig>("/api/app-config");
 }
 
-export function login(username: string, password: string): Promise<{ ok: boolean; username?: string; isAdmin?: boolean; token?: string; error?: string }> {
+export function login(username: string, password: string): Promise<{ ok: boolean; userId?: number; username?: string; isAdmin?: boolean; token?: string; error?: string }> {
   return requestJson("/api/login", {
     method: "POST",
     body: JSON.stringify({ username, password })
+  });
+}
+
+export function getUserPreference<T>(key: string): Promise<{ key: string; value: T }> {
+  return requestJson<{ key: string; value: T }>(`/api/user/preferences/${encodeURIComponent(key)}`);
+}
+
+export function updateUserPreference<T>(key: string, value: T): Promise<{ key: string; value: T }> {
+  return requestJson<{ key: string; value: T }>(`/api/user/preferences/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify({ value })
   });
 }
 

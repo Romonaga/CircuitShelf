@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { deleteConversation, getConversation, getConversations, runQuery } from "../api";
+import { deleteConversation, getConversation, getConversations, getUserPreference, runQuery, updateUserPreference } from "../api";
 import type { AppConfig, ChatTurn, ConversationSummary, QueryOptions, QueryResponse } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatNumber } from "../lib/format";
@@ -11,6 +11,8 @@ import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 import { SourceList } from "./SourceList";
 
+const ASK_RETRIEVAL_PREFERENCE_KEY = "ask.retrieval";
+
 export function AskView({ config }: { config: AppConfig }) {
   const [question, setQuestion] = useState("");
   const [model, setModel] = useState(config.defaultModel);
@@ -21,6 +23,7 @@ export function AskView({ config }: { config: AppConfig }) {
   const [conversationsBusy, setConversationsBusy] = useState(false);
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [busy, setBusy] = useState(false);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
 
@@ -42,6 +45,43 @@ export function AskView({ config }: { config: AppConfig }) {
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPreferences() {
+      try {
+        const response = await getUserPreference<Partial<QueryOptions>>(ASK_RETRIEVAL_PREFERENCE_KEY);
+        if (cancelled) {
+          return;
+        }
+        setOptions((current) => ({
+          ...current,
+          showFullText: typeof response.value?.showFullText === "boolean" ? response.value.showFullText : current.showFullText,
+          bypassCache: typeof response.value?.bypassCache === "boolean" ? response.value.bypassCache : current.bypassCache
+        }));
+      } catch {
+        // Preferences are not required for asking; defaults remain usable.
+      } finally {
+        if (!cancelled) {
+          setPreferencesLoaded(true);
+        }
+      }
+    }
+    void loadPreferences();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!preferencesLoaded) {
+      return;
+    }
+    void updateUserPreference(ASK_RETRIEVAL_PREFERENCE_KEY, {
+      showFullText: options.showFullText,
+      bypassCache: options.bypassCache
+    }).catch(() => undefined);
+  }, [options.bypassCache, options.showFullText, preferencesLoaded]);
 
   useEffect(() => {
     if (!busy) {

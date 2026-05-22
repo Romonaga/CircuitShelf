@@ -68,6 +68,7 @@ from db.query_log_store import QueryLogStore
 from db.response_cache_store import PostgresResponseCache
 from db.runtime_config_store import RuntimeConfigStore
 from db.settings import AppSettingsStore
+from db.user_preferences import UserPreferencesStore
 from db.users import UserStore
 from db.vector_store import VectorStore
 from process_lock import ProcessLockError, acquire_process_lock
@@ -119,6 +120,7 @@ if seeded_settings or applied_settings or seeded_runtime_config or applied_runti
         f"runtime seeded: {seeded_runtime_config}, runtime tables: {sorted(applied_runtime_config.keys())}"
     )
 user_store = UserStore(database, trace_logger)
+user_preferences_store = UserPreferencesStore(database, trace_logger)
 query_log_store = QueryLogStore(database, trace_logger)
 conversation_store = ConversationStore(database, trace_logger)
 vector_store = VectorStore(database, config.get("TRAINING_DIR", "training"), config.get("EMBED_MODEL_NAME"), trace_logger)
@@ -144,6 +146,8 @@ if not conversation_store.available():
     raise RuntimeError("Postgres conversation store is unavailable. Run database migrations before starting CircuitShelf.")
 if not assembly_plan_store.available():
     raise RuntimeError("Postgres assembly plan store is unavailable. Run database migrations before starting CircuitShelf.")
+if not user_preferences_store.available():
+    raise RuntimeError("Postgres user preferences store is unavailable. Run database migrations before starting CircuitShelf.")
 trace_logger.info("🛠️ Configuration and logger successfully initialized.")
 
 # === Decorators ===
@@ -2245,7 +2249,9 @@ def get_rag_response(
     max_tokens=1800,
     bypass_cache=True,
     strategy="Vector + CrossEncoder",
-    model_name=None
+    model_name=None,
+    user_id=None,
+    username=None,
 ):
     start_time = time.time()
     model_name = model_name or (LLM_MODEL_OPTIONS[0] if LLM_MODEL_OPTIONS else LLM_MODEL_NAME)
@@ -2281,6 +2287,8 @@ def get_rag_response(
                 cache_hit=True,
                 confidence_score=confidence,
                 selected_chunks=[],
+                user_id=user_id,
+                username=username,
             )
             build_card = build_circuit_build_card(norm_q, cached.sources, intelligence_for_question_and_sources(norm_q, cached.sources))
             return norm_q, cached.answer, chat_history, cached.sources, response_cache.stats(), confidence, get_average_query_time(), build_card
@@ -2401,6 +2409,8 @@ def get_rag_response(
         cache_hit=False,
         confidence_score=confidence,
         selected_chunks=selected_chunks,
+        user_id=user_id,
+        username=username,
     )
 
     return norm_q, final_answer, chat_history, source_payload, response_cache.stats(), confidence, get_average_query_time(), build_card
@@ -2799,11 +2809,18 @@ def username_for_user(user) -> str | None:
     return getattr(user, "username", None) if user else None
 
 
+def user_id_for_user(user) -> int | None:
+    return getattr(user, "user_id", None) if user else None
+
+
 def conversation_title_from_question(question: str) -> str:
     title = " ".join(str(question or "").split())
     if not title:
         return "New conversation"
     return title[:80]
+
+
+USER_PREFERENCE_KEYS = {"ask.retrieval"}
 
 
 def require_admin_user(req: Request):
@@ -2961,7 +2978,7 @@ async def login(req: Request):
     user = verify_user(username, password)
     if user:
         session = user_store.create_session(user, ttl_seconds=session_timeout_seconds())
-        return {"ok": True, "username": session.username, "isAdmin": session.is_admin, "token": session.token}
+        return {"ok": True, "userId": session.user_id, "username": session.username, "isAdmin": session.is_admin, "token": session.token}
     return {"ok": False, "error": "Invalid credentials"}
 
 
@@ -2969,6 +2986,27 @@ async def login(req: Request):
 async def logout(req: Request):
     user_store.delete_session(bearer_token_from_request(req))
     return {"ok": True}
+
+
+@app.get("/api/user/preferences/{key}")
+async def user_preference_get(key: str, req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    if key not in USER_PREFERENCE_KEYS:
+        return JSONResponse({"error": "Unknown preference key."}, status_code=404)
+    return {"key": key, "value": user_preferences_store.get(user_id_for_user(user), key, {})}
+
+
+@app.put("/api/user/preferences/{key}")
+async def user_preference_update(key: str, req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    if key not in USER_PREFERENCE_KEYS:
+        return JSONResponse({"error": "Unknown preference key."}, status_code=404)
+    data = await req.json()
+    return {"key": key, "value": user_preferences_store.set(user_id_for_user(user), key, data.get("value") or {})}
 
 
 @app.get("/api/app-config")
@@ -2998,7 +3036,7 @@ async def conversations_list(req: Request, limit: int = 50):
     user, error = require_authenticated_user(req)
     if error:
         return error
-    return {"conversations": conversation_store.list(username_for_user(user), limit=max(1, min(int(limit), 100)))}
+    return {"conversations": conversation_store.list(user_id_for_user(user), limit=max(1, min(int(limit), 100)))}
 
 
 @app.post("/api/conversations")
@@ -3008,7 +3046,7 @@ async def conversation_create(req: Request):
         return error
     data = await req.json()
     title = data.get("title") or "New conversation"
-    conversation = conversation_store.create(username_for_user(user), title)
+    conversation = conversation_store.create(user_id_for_user(user), title)
     return {"conversation": {**conversation, "turns": []}}
 
 
@@ -3017,7 +3055,7 @@ async def conversation_get(conversation_id: str, req: Request):
     user, error = require_authenticated_user(req)
     if error:
         return error
-    conversation = conversation_store.get(conversation_id, username_for_user(user))
+    conversation = conversation_store.get(conversation_id, user_id_for_user(user))
     if not conversation:
         return JSONResponse({"error": "Conversation not found."}, status_code=404)
     return {"conversation": conversation}
@@ -3028,7 +3066,7 @@ async def conversation_delete(conversation_id: str, req: Request):
     user, error = require_authenticated_user(req)
     if error:
         return error
-    removed = conversation_store.archive(conversation_id, username_for_user(user))
+    removed = conversation_store.archive(conversation_id, user_id_for_user(user))
     if not removed:
         return JSONResponse({"error": "Conversation not found."}, status_code=404)
     return {"ok": True}
@@ -3167,18 +3205,18 @@ async def indexed_document_remove(req: Request):
 
 @app.get("/api/assembly-plans")
 async def assembly_plans(req: Request):
-    _, error = require_authenticated_user(req)
+    user, error = require_authenticated_user(req)
     if error:
         return error
-    return {"plans": assembly_plan_store.list()}
+    return {"plans": assembly_plan_store.list(user_id_for_user(user))}
 
 
 @app.get("/api/assembly-plans/{plan_id}")
 async def assembly_plan(plan_id: str, req: Request):
-    _, error = require_authenticated_user(req)
+    user, error = require_authenticated_user(req)
     if error:
         return error
-    plan = assembly_plan_store.get(plan_id)
+    plan = assembly_plan_store.get(plan_id, user_id_for_user(user))
     if not plan:
         return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
     return {"plan": plan}
@@ -3206,6 +3244,8 @@ async def assembly_plan_build(req: Request):
         bypass_cache=True,
         strategy=data.get("strategy", "Vector + CrossEncoder"),
         model_name=model_name,
+        user_id=user_id_for_user(user),
+        username=username_for_user(user),
     )
     if not build_card:
         return JSONResponse(
@@ -3221,8 +3261,12 @@ async def assembly_plan_build(req: Request):
             status_code=422,
         )
 
-    created_by = user.username if user else None
-    plan = assembly_plan_store.create_from_card(question=objective, card=build_card, created_by=created_by)
+    plan = assembly_plan_store.create_from_card(
+        question=objective,
+        card=build_card,
+        user_id=user_id_for_user(user),
+        created_by=username_for_user(user),
+    )
     return {
         "plan": plan,
         "answer": answer,
@@ -3236,35 +3280,35 @@ async def assembly_plan_build(req: Request):
 
 @app.patch("/api/assembly-plans/{plan_id}/steps/{step_id}")
 async def assembly_step_update(plan_id: str, step_id: str, req: Request):
-    _, error = require_authenticated_user(req)
+    user, error = require_authenticated_user(req)
     if error:
         return error
     data = await req.json()
-    updated = assembly_plan_store.set_step_completed(plan_id, step_id, bool(data.get("completed")))
+    updated = assembly_plan_store.set_step_completed(plan_id, step_id, bool(data.get("completed")), user_id_for_user(user))
     if not updated:
         return JSONResponse({"error": "Assembly step not found."}, status_code=404)
-    plan = assembly_plan_store.get(plan_id)
+    plan = assembly_plan_store.get(plan_id, user_id_for_user(user))
     return {"plan": plan}
 
 
 @app.post("/api/assembly-plans/{plan_id}/assistant")
 async def assembly_assistant(plan_id: str, req: Request):
-    _, error = require_authenticated_user(req)
+    user, error = require_authenticated_user(req)
     if error:
         return error
     data = await req.json()
     message = str(data.get("message") or "").strip()
     if not message:
         return JSONResponse({"error": "Message is required."}, status_code=400)
-    plan = assembly_plan_store.get(plan_id)
+    plan = assembly_plan_store.get(plan_id, user_id_for_user(user))
     if not plan:
         return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
 
-    assembly_plan_store.add_note(plan_id, "user", message)
+    assembly_plan_store.add_note(plan_id, "user", message, user_id_for_user(user))
     prompt = build_assembly_assistant_prompt(plan, message)
     assistant_answer = await run_in_threadpool(query_ollama_chat_with_retry, prompt, data.get("model") or LLM_MODEL_NAME, [])
-    assembly_plan_store.add_note(plan_id, "assistant", assistant_answer)
-    return {"plan": assembly_plan_store.get(plan_id), "answer": assistant_answer}
+    assembly_plan_store.add_note(plan_id, "assistant", assistant_answer, user_id_for_user(user))
+    return {"plan": assembly_plan_store.get(plan_id, user_id_for_user(user)), "answer": assistant_answer}
 
 
 def build_assembly_assistant_prompt(plan: dict, message: str) -> str:
@@ -3327,14 +3371,15 @@ async def react_query(req: Request):
         if not question.strip():
             return {"error": "No question provided."}
         username = username_for_user(user)
+        user_id = user_id_for_user(user)
         conversation_id = data.get("conversationId")
         conversation = None
         if conversation_id:
-            conversation = conversation_store.get(str(conversation_id), username)
+            conversation = conversation_store.get(str(conversation_id), user_id)
             if not conversation:
                 return JSONResponse({"error": "Conversation not found."}, status_code=404)
         else:
-            conversation = conversation_store.create(username, conversation_title_from_question(question))
+            conversation = conversation_store.create(user_id, conversation_title_from_question(question))
             conversation_id = conversation["id"]
 
         _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card = await run_in_threadpool(
@@ -3348,6 +3393,8 @@ async def react_query(req: Request):
             bypass_cache=bool(data.get("bypassCache", True)),
             strategy=data.get("strategy", "Vector + CrossEncoder"),
             model_name=data.get("model", LLM_MODEL_NAME),
+            user_id=user_id,
+            username=username,
         )
         stored_answer = chat_history[-1][1] if chat_history else answer
         conversation_store.append_turn(
@@ -3358,7 +3405,7 @@ async def react_query(req: Request):
             retrieval_strategy=data.get("strategy", "Vector + CrossEncoder"),
             confidence_score=confidence,
         )
-        conversation = conversation_store.get(str(conversation_id), username)
+        conversation = conversation_store.get(str(conversation_id), user_id)
 
         return {
             "conversation": conversation,

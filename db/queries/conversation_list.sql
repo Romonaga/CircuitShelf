@@ -6,6 +6,7 @@ WITH turn_counts AS (
     GROUP BY conversation_id
 )
 SELECT c.id,
+       c.user_id,
        c.username,
        c.title,
        coalesce(t.turn_count, 0) AS turn_count,
@@ -15,6 +16,6 @@ SELECT c.id,
 FROM conversations c
 LEFT JOIN turn_counts t ON t.conversation_id = c.id
 WHERE c.archived_at IS NULL
-  AND (%s::citext IS NULL OR c.username = %s::citext)
+  AND (%s::bigint IS NULL OR c.user_id = %s::bigint)
 ORDER BY c.updated_at DESC, c.created_at DESC
 LIMIT %s;

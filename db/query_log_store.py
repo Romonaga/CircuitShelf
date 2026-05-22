@@ -39,6 +39,7 @@ class QueryLogStore:
         cache_hit: bool,
         confidence_score: Any,
         selected_chunks: list[dict],
+        user_id: int | None = None,
         username: str | None = None,
     ) -> None:
         if not self.database.configured:
@@ -48,6 +49,7 @@ class QueryLogStore:
                 row = conn.execute(
                     load_query("query_log_insert.sql"),
                     (
+                        user_id,
                         username,
                         model_name,
                         retrieval_strategy,

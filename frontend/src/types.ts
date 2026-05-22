@@ -2,6 +2,7 @@ export type RetrievalStrategy = "Vector only" | "Vector + CrossEncoder" | string
 export type View = "ask" | "bench" | "documents" | "review" | "trace" | "status" | "settings";
 
 export interface SessionUser {
+  userId?: number;
   username: string;
   isAdmin: boolean;
   token: string;
@@ -51,6 +52,7 @@ export interface ConversationTurn {
 
 export interface ConversationSummary {
   id: string;
+  userId?: number | null;
   username?: string | null;
   title: string;
   turnCount: number;
@@ -218,6 +220,8 @@ export interface CircuitBuildCard {
 
 export interface AssemblyPlanSummary {
   id: string;
+  userId?: number | null;
+  createdBy?: string | null;
   title: string;
   objective: string;
   componentName: string;
@@ -271,7 +275,6 @@ export interface AssemblyPlanNote {
 
 export interface AssemblyPlan extends AssemblyPlanSummary {
   summary: string;
-  createdBy?: string | null;
   parts: AssemblyPlanPart[];
   power: AssemblyPlanPowerNote[];
   steps: AssemblyPlanStep[];

@@ -1,4 +1,5 @@
 INSERT INTO query_logs (
+    user_id,
     username,
     model_name,
     retrieval_strategy,
@@ -8,5 +9,5 @@ INSERT INTO query_logs (
     cache_hit,
     confidence_score
 )
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
 RETURNING id;

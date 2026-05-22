@@ -27,19 +27,21 @@ class ConversationStore:
                 self.logger.warning(f"Conversation store is not available: {exc}")
             return False
 
-    def list(self, username: str | None, *, limit: int = 50) -> list[dict]:
+    def list(self, user_id: int | None, *, limit: int = 50) -> list[dict]:
         with self.database.connection() as conn:
-            rows = conn.execute(load_query("conversation_list.sql"), (username, username, int(limit))).fetchall()
+            rows = conn.execute(load_query("conversation_list.sql"), (user_id, user_id, int(limit))).fetchall()
         return [self._summary(row) for row in rows]
 
-    def create(self, username: str | None, title: str) -> dict:
+    def create(self, user_id: int, title: str) -> dict:
         with self.database.connection() as conn:
-            row = conn.execute(load_query("conversation_insert.sql"), (username, self._clean_title(title))).fetchone()
+            row = conn.execute(load_query("conversation_insert.sql"), (user_id, self._clean_title(title), user_id)).fetchone()
+        if not row:
+            raise ValueError("User not found.")
         return self._summary(row)
 
-    def get(self, conversation_id: str, username: str | None) -> dict | None:
+    def get(self, conversation_id: str, user_id: int | None) -> dict | None:
         with self.database.connection() as conn:
-            row = conn.execute(load_query("conversation_get.sql"), (conversation_id, username, username)).fetchone()
+            row = conn.execute(load_query("conversation_get.sql"), (conversation_id, user_id, user_id)).fetchone()
             if not row:
                 return None
             turns = conn.execute(load_query("conversation_turns_get.sql"), (conversation_id,)).fetchall()
@@ -78,9 +80,9 @@ class ConversationStore:
         with self.database.connection() as conn:
             conn.execute(load_query("conversation_title_update.sql"), (self._clean_title(title), conversation_id))
 
-    def archive(self, conversation_id: str, username: str | None) -> bool:
+    def archive(self, conversation_id: str, user_id: int | None) -> bool:
         with self.database.connection() as conn:
-            row = conn.execute(load_query("conversation_archive.sql"), (conversation_id, username, username)).fetchone()
+            row = conn.execute(load_query("conversation_archive.sql"), (conversation_id, user_id, user_id)).fetchone()
         return bool(row)
 
     @staticmethod
@@ -104,6 +106,7 @@ class ConversationStore:
     def _summary(self, row) -> dict:
         return {
             "id": str(row["id"]),
+            "userId": row.get("user_id"),
             "username": row.get("username"),
             "title": row["title"],
             "turnCount": int(row.get("turn_count") or 0),

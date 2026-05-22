@@ -20,7 +20,7 @@ class AssemblyPlanStore:
             return False
         try:
             with self.database.connection() as conn:
-                conn.execute(load_query("assembly_plan_list.sql")).fetchone()
+                conn.execute(load_query("assembly_plan_list.sql"), (None, None)).fetchone()
             return True
         except UndefinedTable:
             return False
@@ -29,7 +29,7 @@ class AssemblyPlanStore:
                 self.logger.warning(f"Assembly plan store is not available: {exc}")
             return False
 
-    def create_from_card(self, *, question: str, card: dict[str, Any], created_by: str | None = None) -> dict:
+    def create_from_card(self, *, question: str, card: dict[str, Any], user_id: int, created_by: str | None = None) -> dict:
         with self.database.connection() as conn:
             plan_id = conn.execute(
                 load_query("assembly_plan_insert.sql"),
@@ -40,7 +40,8 @@ class AssemblyPlanStore:
                     card.get("componentType") or "",
                     card.get("summary") or "",
                     self._optional_float(card.get("confidence")),
-                    created_by,
+                    int(user_id),
+                    int(user_id),
                 ),
             ).fetchone()["id"]
 
@@ -98,16 +99,16 @@ class AssemblyPlanStore:
                         source["chunk_count"],
                     ),
                 )
-        return self.get(plan_id) or {}
+        return self.get(plan_id, user_id=user_id) or {}
 
-    def list(self) -> list[dict]:
+    def list(self, user_id: int | None = None) -> list[dict]:
         with self.database.connection() as conn:
-            rows = conn.execute(load_query("assembly_plan_list.sql")).fetchall()
+            rows = conn.execute(load_query("assembly_plan_list.sql"), (user_id, user_id)).fetchall()
         return [self._summary(row) for row in rows]
 
-    def get(self, plan_id: str) -> dict | None:
+    def get(self, plan_id: str, user_id: int | None = None) -> dict | None:
         with self.database.connection() as conn:
-            plan = conn.execute(load_query("assembly_plan_get.sql"), (plan_id,)).fetchone()
+            plan = conn.execute(load_query("assembly_plan_get.sql"), (plan_id, user_id, user_id)).fetchone()
             if not plan:
                 return None
             parts = conn.execute(load_query("assembly_parts_get.sql"), (plan_id,)).fetchall()
@@ -128,17 +129,23 @@ class AssemblyPlanStore:
             "notes": [self._note(row) for row in notes],
         }
 
-    def set_step_completed(self, plan_id: str, step_id: str, completed: bool) -> bool:
+    def set_step_completed(self, plan_id: str, step_id: str, completed: bool, user_id: int | None = None) -> bool:
         with self.database.connection() as conn:
-            row = conn.execute(load_query("assembly_step_completion_update.sql"), (bool(completed), step_id, plan_id)).fetchone()
+            row = conn.execute(
+                load_query("assembly_step_completion_update.sql"),
+                (bool(completed), step_id, plan_id, user_id, user_id),
+            ).fetchone()
             if row:
                 conn.execute(load_query("assembly_plan_touch.sql"), (plan_id,))
         return bool(row)
 
-    def add_note(self, plan_id: str, role: str, message: str) -> dict:
+    def add_note(self, plan_id: str, role: str, message: str, user_id: int | None = None) -> dict:
         with self.database.connection() as conn:
-            row = conn.execute(load_query("assembly_note_insert.sql"), (plan_id, role, message)).fetchone()
-            conn.execute(load_query("assembly_plan_touch.sql"), (plan_id,))
+            row = conn.execute(load_query("assembly_note_insert.sql"), (plan_id, role, message, plan_id, user_id, user_id)).fetchone()
+            if row:
+                conn.execute(load_query("assembly_plan_touch.sql"), (plan_id,))
+        if not row:
+            raise ValueError("Assembly plan not found.")
         return self._note(row)
 
     def _source_notes(self, raw_sources: list[dict]) -> list[dict]:
@@ -202,6 +209,8 @@ class AssemblyPlanStore:
             "componentType": row["component_type"],
             "confidence": self._optional_float(row["confidence"]),
             "status": row["status"],
+            "userId": row.get("user_id"),
+            "createdBy": row.get("created_by"),
             "stepCount": int(row["step_count"] or 0),
             "completedStepCount": int(row["completed_step_count"] or 0),
             "createdAt": self._timestamp(row["created_at"]),
@@ -218,6 +227,7 @@ class AssemblyPlanStore:
             "summary": row["summary"] or "",
             "confidence": self._optional_float(row["confidence"]),
             "status": row["status"],
+            "userId": row.get("user_id"),
             "createdBy": row["created_by"],
             "createdAt": self._timestamp(row["created_at"]),
             "updatedAt": self._timestamp(row["updated_at"]),

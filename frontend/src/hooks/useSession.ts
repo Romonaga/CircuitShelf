@@ -17,6 +17,7 @@ function readStoredSession(): SessionUser | null {
       return null;
     }
     return {
+      userId: typeof parsed.userId === "number" ? parsed.userId : undefined,
       username: parsed.username,
       isAdmin: Boolean(parsed.isAdmin),
       token: parsed.token,

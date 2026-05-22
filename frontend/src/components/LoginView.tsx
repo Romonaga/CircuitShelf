@@ -21,6 +21,7 @@ export function LoginView({ siteName, onLogin }: { siteName: string; onLogin: (s
         return;
       }
       onLogin({
+        userId: result.userId,
         username: result.username || username,
         isAdmin: Boolean(result.isAdmin),
         token: result.token || ""
