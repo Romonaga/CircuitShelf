@@ -1,8 +1,10 @@
 import os
 import tempfile
 import unittest
+from io import BytesIO
 
 import fitz
+from PIL import Image
 
 from pdf_visuals import (
     link_chunks_to_rendered_pages,
@@ -47,6 +49,34 @@ class PdfVisualTests(unittest.TestCase):
 
         self.assertFalse(render)
 
+    def test_visual_page_detection_allows_raster_pages_with_signal(self):
+        render, hits = should_render_visual_page(
+            text="Circuit diagram with transistor wiring",
+            drawing_count=0,
+            image_count=2,
+            min_drawings=100,
+            raster_coverage=1.0,
+            render_raster_pages=True,
+            min_raster_coverage=0.8,
+        )
+
+        self.assertTrue(render)
+        self.assertIn("diagram", hits)
+        self.assertIn("circuit", hits)
+
+    def test_visual_page_detection_skips_raster_pages_without_signal(self):
+        render, _ = should_render_visual_page(
+            text="Distributed by example vendor",
+            drawing_count=0,
+            image_count=2,
+            min_drawings=100,
+            raster_coverage=1.0,
+            render_raster_pages=True,
+            min_raster_coverage=0.8,
+        )
+
+        self.assertFalse(render)
+
     def test_render_pdf_visual_pages_outputs_png(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = os.path.join(tmpdir, "pinout.pdf")
@@ -64,6 +94,35 @@ class PdfVisualTests(unittest.TestCase):
         self.assertEqual(rendered[0].image_key, "pinout.pdf_page1_render")
         self.assertEqual(rendered[0].page_number, 1)
         self.assertIn("Package Dimensions", rendered[0].searchable_text)
+        self.assertTrue(rendered[0].image_bytes.startswith(b"\x89PNG"))
+
+    def test_render_pdf_visual_pages_outputs_raster_page_png(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "scanned.pdf")
+            image = Image.new("RGB", (300, 300), color="white")
+            image_bytes = BytesIO()
+            image.save(image_bytes, format="PNG")
+
+            doc = fitz.open()
+            page = doc.new_page(width=300, height=300)
+            page.insert_image(page.rect, stream=image_bytes.getvalue())
+            page.insert_text((20, 25), "Circuit diagram for transistor wiring")
+            doc.save(path)
+            doc.close()
+
+            rendered = render_pdf_visual_pages(
+                path,
+                min_drawings=100,
+                max_pages=2,
+                zoom=1.0,
+                render_raster_pages=True,
+                min_raster_coverage=0.8,
+            )
+
+        self.assertEqual(len(rendered), 1)
+        self.assertEqual(rendered[0].image_key, "scanned.pdf_page1_render")
+        self.assertEqual(rendered[0].page_number, 1)
+        self.assertIn("Circuit diagram", rendered[0].searchable_text)
         self.assertTrue(rendered[0].image_bytes.startswith(b"\x89PNG"))
 
     def test_visual_references_detects_figure_and_package_terms(self):

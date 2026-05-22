@@ -110,6 +110,9 @@ def should_render_visual_page(
     drawing_count: int,
     image_count: int,
     min_drawings: int,
+    raster_coverage: float = 0.0,
+    render_raster_pages: bool = False,
+    min_raster_coverage: float = 0.8,
     keywords: Iterable[str] = VISUAL_PAGE_KEYWORDS,
 ) -> tuple[bool, list[str]]:
     hits = visual_keyword_hits(text, keywords)
@@ -117,7 +120,26 @@ def should_render_visual_page(
         return True, hits
     if drawing_count >= min_drawings * 2:
         return True, hits
+    if render_raster_pages and image_count > 0 and raster_coverage >= min_raster_coverage and hits:
+        return True, hits
     return False, hits
+
+
+def page_image_coverage(page: fitz.Page) -> float:
+    area = page.rect.width * page.rect.height
+    if area <= 0:
+        return 0.0
+
+    covered = 0.0
+    for image in page.get_images(full=True):
+        xref = image[0]
+        try:
+            for rect in page.get_image_rects(xref):
+                clipped = rect & page.rect
+                covered += max(0.0, clipped.width) * max(0.0, clipped.height)
+        except Exception:
+            continue
+    return min(1.0, covered / area)
 
 
 def render_pdf_visual_pages(
@@ -126,6 +148,8 @@ def render_pdf_visual_pages(
     max_pages: int = 8,
     min_drawings: int = 100,
     zoom: float = 1.5,
+    render_raster_pages: bool = False,
+    min_raster_coverage: float = 0.8,
     keywords: Iterable[str] = VISUAL_PAGE_KEYWORDS,
 ) -> list[RenderedPdfPage]:
     if max_pages <= 0:
@@ -139,29 +163,39 @@ def render_pdf_visual_pages(
             text = page.get_text().strip()
             drawing_count = len(page.get_drawings())
             image_count = len(page.get_images(full=True))
+            raster_coverage = page_image_coverage(page)
             render, hits = should_render_visual_page(
                 text=text,
                 drawing_count=drawing_count,
                 image_count=image_count,
                 min_drawings=min_drawings,
+                raster_coverage=raster_coverage,
+                render_raster_pages=render_raster_pages,
+                min_raster_coverage=min_raster_coverage,
                 keywords=keywords,
             )
             if not render:
                 continue
-            score = drawing_count + (len(hits) * min_drawings)
-            candidates.append((score, page_number, page_index, text, drawing_count, hits))
+            raster_score = int(raster_coverage * min_drawings) if render_raster_pages else 0
+            score = drawing_count + raster_score + (len(hits) * min_drawings)
+            candidates.append((score, page_number, page_index, text, drawing_count, raster_coverage, hits))
 
         selected = sorted(candidates, key=lambda item: (-item[0], item[1]))[:max_pages]
         selected.sort(key=lambda item: item[1])
 
         rendered_pages = []
         matrix = fitz.Matrix(float(zoom), float(zoom))
-        for _, page_number, page_index, text, drawing_count, hits in selected:
+        for _, page_number, page_index, text, drawing_count, raster_coverage, hits in selected:
             page = pdf[page_index]
             pixmap = page.get_pixmap(matrix=matrix, alpha=False)
             output = BytesIO()
             output.write(pixmap.tobytes("png"))
-            hit_summary = ", ".join(hits[:5]) if hits else "dense vector drawing"
+            if hits:
+                hit_summary = ", ".join(hits[:5])
+            elif drawing_count:
+                hit_summary = "dense vector drawing"
+            else:
+                hit_summary = f"raster page coverage {raster_coverage:.0%}"
             caption = f"Rendered page {page_number} from {base_name} ({hit_summary})"
             searchable_text = f"{caption}\n{text}".strip()
             image_key = rendered_page_image_key(path, page_number)

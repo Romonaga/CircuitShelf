@@ -98,6 +98,8 @@ settings_store.seed_setting("PDF_RENDER_VECTOR_PAGES", True, "Render vector-heav
 settings_store.seed_setting("PDF_RENDER_MAX_PAGES_PER_DOC", 8, "Maximum rendered visual PDF pages stored per document.")
 settings_store.seed_setting("PDF_RENDER_MIN_DRAWINGS", 100, "Minimum vector drawing count before a PDF page is considered visual.")
 settings_store.seed_setting("PDF_RENDER_ZOOM", 1.5, "Scale used when rendering visual PDF pages.")
+settings_store.seed_setting("PDF_RENDER_RASTER_PAGES", True, "Render raster-heavy scanned PDF pages as searchable images.")
+settings_store.seed_setting("PDF_RENDER_MIN_RASTER_COVERAGE", 0.8, "Minimum page image coverage before a PDF page is considered raster-heavy.")
 applied_settings = settings_store.apply_to_config(config)
 if seeded_settings or applied_settings:
     trace_logger.info(
@@ -173,6 +175,8 @@ PDF_RENDER_VECTOR_PAGES = config.get("PDF_RENDER_VECTOR_PAGES", True)
 PDF_RENDER_MAX_PAGES_PER_DOC = config.get("PDF_RENDER_MAX_PAGES_PER_DOC", 8)
 PDF_RENDER_MIN_DRAWINGS = config.get("PDF_RENDER_MIN_DRAWINGS", 100)
 PDF_RENDER_ZOOM = config.get("PDF_RENDER_ZOOM", 1.5)
+PDF_RENDER_RASTER_PAGES = config.get("PDF_RENDER_RASTER_PAGES", True)
+PDF_RENDER_MIN_RASTER_COVERAGE = config.get("PDF_RENDER_MIN_RASTER_COVERAGE", 0.8)
 POST_TIMEOUT = config.get("POST_TIMEOUT", 60)
 REACT_DIST_DIR = config.get("REACT_DIST_DIR", "frontend/dist")
 QUERY_RETRIES = config.get("QUERY_RETRIES", 3)
@@ -665,9 +669,11 @@ def add_pdf_rendered_pages(path, target_state):
             max_pages=int(PDF_RENDER_MAX_PAGES_PER_DOC or 0),
             min_drawings=int(PDF_RENDER_MIN_DRAWINGS or 100),
             zoom=float(PDF_RENDER_ZOOM or 1.5),
+            render_raster_pages=bool(PDF_RENDER_RASTER_PAGES),
+            min_raster_coverage=float(PDF_RENDER_MIN_RASTER_COVERAGE or 0.8),
         )
     except Exception as exc:
-        trace_logger.warning(f"⚠️ Could not render vector PDF pages for {path}: {exc}")
+        trace_logger.warning(f"⚠️ Could not render visual PDF pages for {path}: {exc}")
         return 0
 
     for rendered_page in rendered_pages:

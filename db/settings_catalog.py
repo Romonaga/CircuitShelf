@@ -77,6 +77,8 @@ SETTING_UI = {
     "PDF_RENDER_MAX_PAGES_PER_DOC": ("ingestion", "Rendered PDF page limit", "Maximum visual PDF pages stored per document.", False),
     "PDF_RENDER_MIN_DRAWINGS": ("ingestion", "PDF drawing threshold", "Minimum vector drawing count before a PDF page is considered visually important.", True),
     "PDF_RENDER_ZOOM": ("ingestion", "PDF render scale", "Scale factor used when rendering visual PDF pages.", True),
+    "PDF_RENDER_RASTER_PAGES": ("ingestion", "Render raster PDF pages", "Store raster-heavy scanned PDF pages as searchable image assets.", False),
+    "PDF_RENDER_MIN_RASTER_COVERAGE": ("ingestion", "Raster page coverage", "Minimum page area covered by embedded images before a PDF page is considered raster-heavy.", True),
     "CHUNKING_MODE": ("chunking", "Chunking mode", "Strategy used to split documents before embedding.", False),
     "CHUNK_SIZE": ("chunking", "Target chunk size", "Approximate target size for generated text chunks.", False),
     "CHUNK_OVERLAP": ("chunking", "Chunk overlap", "Amount of neighboring context repeated between chunks.", False),
