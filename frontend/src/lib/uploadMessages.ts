@@ -22,6 +22,8 @@ export function uploadResultMessage(response: UploadDocumentsResponse): string {
   if (response.count <= 0) {
     return `${uploaded}${skipped}`;
   }
-  const indexing = response.indexing.started ? "started" : "is already running";
-  return `${uploaded}${skipped} Incremental indexing ${indexing}; uploads will appear in Review before retrieval.`;
+  if (response.indexing.started) {
+    return `${uploaded}${skipped} Incremental indexing started; uploads will appear in Review before retrieval.`;
+  }
+  return `${uploaded}${skipped} Indexing is already running; uploaded files are queued for the next check.`;
 }
