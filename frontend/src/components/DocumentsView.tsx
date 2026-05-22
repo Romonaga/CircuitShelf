@@ -3,6 +3,7 @@ import { getDocument, getDocuments, triggerIndexCheck, uploadDocuments } from ".
 import type { DocumentDetail, DocumentSummary, StatusPayload } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
+import { uploadResultMessage } from "../lib/uploadMessages";
 import { ErrorMessage } from "./ErrorMessage";
 import { IngestStatusPanel } from "./IngestStatusPanel";
 import { DatasheetIntelligencePanel } from "./DatasheetIntelligencePanel";
@@ -75,8 +76,7 @@ export function DocumentsView({
     setMessage("");
     try {
       const response = await uploadDocuments(uploadFiles, overwrite);
-      const fileWord = response.count === 1 ? "file" : "files";
-      setMessage(`${formatInteger(response.count)} ${fileWord} uploaded. Incremental indexing ${response.indexing.started ? "started" : "is already running"}; uploads will appear in Review before retrieval.`);
+      setMessage(uploadResultMessage(response));
       setUploadFiles([]);
       setUploadInputKey((key) => key + 1);
       onStatusChange();

@@ -2229,7 +2229,7 @@ def safe_upload_filename(filename: str) -> str:
     return name
 
 
-async def write_uploaded_documents(files: list[UploadFile], overwrite: bool) -> list[dict]:
+async def write_uploaded_documents(files: list[UploadFile], overwrite: bool) -> dict:
     if not files:
         raise ValueError("Upload must include at least one file.")
 
@@ -2239,19 +2239,22 @@ async def write_uploaded_documents(files: list[UploadFile], overwrite: bool) -> 
     seen_names = set()
     tmp_paths = []
     uploaded = []
+    skipped = []
 
     try:
         for file in files:
             filename = safe_upload_filename(file.filename or "")
             if filename in seen_names:
-                raise ValueError(f"Duplicate file selected: {filename}")
+                skipped.append({"filename": filename, "reason": "duplicate selection"})
+                continue
             seen_names.add(filename)
 
             destination = os.path.abspath(os.path.join(TRAINING_DIR, filename))
             if not destination.startswith(training_root + os.sep):
                 raise ValueError("Upload destination is outside the training directory.")
             if os.path.exists(destination) and not overwrite:
-                raise FileExistsError(f"A document with that name already exists: {filename}")
+                skipped.append({"filename": filename, "reason": "already exists"})
+                continue
 
             tmp_path = os.path.join(TRAINING_DIR, f".{filename}.{uuid.uuid4().hex}.upload")
             prepared.append((file, filename, destination, tmp_path))
@@ -2277,7 +2280,10 @@ async def write_uploaded_documents(files: list[UploadFile], overwrite: bool) -> 
 
         for item in uploaded:
             os.replace(item["tmpPath"], item["destination"])
-        return [{"filename": item["filename"], "bytes": item["bytes"]} for item in uploaded]
+        return {
+            "uploaded": [{"filename": item["filename"], "bytes": item["bytes"]} for item in uploaded],
+            "skipped": skipped,
+        }
     except Exception:
         for tmp_path in tmp_paths:
             if os.path.exists(tmp_path):
@@ -2571,23 +2577,25 @@ async def upload_document(
         return error
 
     try:
-        uploaded = await write_uploaded_documents([file], overwrite)
-    except FileExistsError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=409)
+        upload_result = await write_uploaded_documents([file], overwrite)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     except Exception as exc:
         trace_logger.error(f"❌ Document upload failed: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-    filename = uploaded[0]["filename"]
-    index_job = start_index_check(f"upload:{filename}")
+    uploaded_files = upload_result["uploaded"]
+    skipped_files = upload_result["skipped"]
+    filename = uploaded_files[0]["filename"] if uploaded_files else ""
+    index_job = start_index_check(f"upload:{filename}") if uploaded_files else {"started": False, "status": dict(index_status)}
     return {
         "ok": True,
         "filename": filename,
-        "bytes": uploaded[0]["bytes"],
-        "files": uploaded,
-        "count": 1,
+        "bytes": sum(item["bytes"] for item in uploaded_files),
+        "files": uploaded_files,
+        "skippedFiles": skipped_files,
+        "count": len(uploaded_files),
+        "skippedCount": len(skipped_files),
         "indexing": index_job,
     }
 
@@ -2603,22 +2611,24 @@ async def upload_documents(
         return error
 
     try:
-        uploaded = await write_uploaded_documents(files, overwrite)
-    except FileExistsError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=409)
+        upload_result = await write_uploaded_documents(files, overwrite)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     except Exception as exc:
         trace_logger.error(f"❌ Batch document upload failed: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
-    reason = f"upload-batch:{len(uploaded)}"
-    index_job = start_index_check(reason)
+    uploaded_files = upload_result["uploaded"]
+    skipped_files = upload_result["skipped"]
+    reason = f"upload-batch:{len(uploaded_files)}"
+    index_job = start_index_check(reason) if uploaded_files else {"started": False, "status": dict(index_status)}
     return {
         "ok": True,
-        "files": uploaded,
-        "count": len(uploaded),
-        "bytes": sum(item["bytes"] for item in uploaded),
+        "files": uploaded_files,
+        "skippedFiles": skipped_files,
+        "count": len(uploaded_files),
+        "skippedCount": len(skipped_files),
+        "bytes": sum(item["bytes"] for item in uploaded_files),
         "indexing": index_job,
     }
 

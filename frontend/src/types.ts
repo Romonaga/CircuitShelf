@@ -61,10 +61,17 @@ export interface UploadedDocument {
   bytes: number;
 }
 
+export interface SkippedDocumentUpload {
+  filename: string;
+  reason: string;
+}
+
 export interface UploadDocumentsResponse {
   ok: boolean;
   files: UploadedDocument[];
+  skippedFiles: SkippedDocumentUpload[];
   count: number;
+  skippedCount: number;
   bytes: number;
   filename?: string;
   indexing: {
