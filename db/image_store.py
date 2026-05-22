@@ -13,6 +13,7 @@ from psycopg.errors import UndefinedColumn, UndefinedTable
 
 from db.connection import Database
 from db.sql import load_query
+from db.text import clean_db_text
 from db.vector_store import vector_to_sql
 from ingest_manifest import FileRecord
 
@@ -153,18 +154,18 @@ class ImageStore:
                     doc_row["id"],
                     doc_row["id"],
                     page_number,
-                    image_key,
+                    clean_db_text(image_key),
                     ordinal,
                     stored_image_bytes,
-                    mime_type,
+                    clean_db_text(mime_type),
                     width,
                     height,
-                    image_captions.get(image_key, image_key),
-                    image_page_text.get(image_key, ""),
+                    clean_db_text(image_captions.get(image_key, image_key)),
+                    clean_db_text(image_page_text.get(image_key, "")),
                     score,
                     confidence,
                     hashlib.sha256(stored_image_bytes).hexdigest(),
-                    embedding_model,
+                    clean_db_text(embedding_model),
                     vector_to_sql(image_embeddings[image_key]) if image_key in image_embeddings else None,
                 ),
             )

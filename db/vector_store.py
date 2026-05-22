@@ -10,6 +10,7 @@ from psycopg.errors import UndefinedColumn, UndefinedTable
 
 from db.connection import Database
 from db.sql import load_query
+from db.text import clean_db_text
 from ingest_manifest import FileRecord
 
 
@@ -170,13 +171,13 @@ class VectorStore:
                 document_id = conn.execute(
                     load_query("vector_document_upsert.sql"),
                     (
-                        rel_path,
-                        os.path.basename(rel_path),
-                        Path(rel_path).suffix.lower(),
+                        clean_db_text(rel_path),
+                        clean_db_text(os.path.basename(rel_path)),
+                        clean_db_text(Path(rel_path).suffix.lower()),
                         record.size,
                         record.mtime_ns,
-                        record.sha256,
-                        status,
+                        clean_db_text(record.sha256, None),
+                        clean_db_text(status),
                         int(stats.get("rawChunkCount", 0) or 0),
                         int(stats.get("chunkCount", 0) or 0),
                         int(stats.get("droppedChunkCount", 0) or 0),
@@ -209,21 +210,21 @@ class VectorStore:
                     document_id,
                     page_id,
                     chunk_index,
-                    chunk,
+                    clean_db_text(chunk),
                     int(meta.get("token_count") or 0),
-                    meta.get("section") or "Unknown",
-                    meta.get("category") or "Uncategorized",
+                    clean_db_text(meta.get("section") or "Unknown"),
+                    clean_db_text(meta.get("category") or "Uncategorized"),
                     float(meta.get("quality_score", 0.0) or 0.0),
                     bool_from_meta(meta.get("chunk_type") == "ocr" or meta.get("is_ocr")),
                     bool_from_meta(meta.get("has_math")),
-                    meta.get("source_image_id"),
-                    self.embedding_model,
+                    clean_db_text(meta.get("source_image_id"), None),
+                    clean_db_text(self.embedding_model),
                     vector_to_sql(embedding),
                 ),
             ).fetchone()["id"]
 
             for flag in meta.get("quality_flags") or []:
-                conn.execute(load_query("vector_quality_flag_insert.sql"), (chunk_id, str(flag)))
+                conn.execute(load_query("vector_quality_flag_insert.sql"), (chunk_id, clean_db_text(flag)))
 
     def load_state_payload(self) -> tuple[list[str], list[str], list[dict], list[np.ndarray]]:
         with self.database.connection() as conn:

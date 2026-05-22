@@ -4,6 +4,7 @@ from psycopg.errors import UndefinedColumn, UndefinedTable
 
 from db.connection import Database
 from db.sql import load_query
+from db.text import clean_db_text
 
 
 class DatasheetIntelligenceStore:
@@ -30,11 +31,11 @@ class DatasheetIntelligenceStore:
             row = conn.execute(
                 load_query("datasheet_intelligence_summary_upsert.sql"),
                 (
-                    intelligence.get("componentName") or "",
-                    intelligence.get("componentType") or "component",
-                    intelligence.get("summary") or "",
+                    clean_db_text(intelligence.get("componentName") or ""),
+                    clean_db_text(intelligence.get("componentType") or "component"),
+                    clean_db_text(intelligence.get("summary") or ""),
                     float(intelligence.get("confidence") or 0.0),
-                    source_path,
+                    clean_db_text(source_path),
                 ),
             ).fetchone()
             if not row:
@@ -45,13 +46,13 @@ class DatasheetIntelligenceStore:
                     load_query("datasheet_intelligence_fact_insert.sql"),
                     (
                         intelligence_id,
-                        fact.get("type") or "note",
-                        fact.get("label") or "",
-                        fact.get("value") or "",
-                        fact.get("unit") or "",
+                        clean_db_text(fact.get("type") or "note"),
+                        clean_db_text(fact.get("label") or ""),
+                        clean_db_text(fact.get("value") or ""),
+                        clean_db_text(fact.get("unit") or ""),
                         fact.get("page"),
                         fact.get("chunkIndex"),
-                        fact.get("evidence") or "",
+                        clean_db_text(fact.get("evidence") or ""),
                         float(fact.get("confidence") or 0.0),
                     ),
                 )
@@ -61,11 +62,11 @@ class DatasheetIntelligenceStore:
                     (
                         intelligence_id,
                         int(pin.get("pin")),
-                        pin.get("label") or "",
-                        pin.get("function") or "",
+                        clean_db_text(pin.get("label") or ""),
+                        clean_db_text(pin.get("function") or ""),
                         pin.get("page"),
                         pin.get("chunkIndex"),
-                        pin.get("evidence") or "",
+                        clean_db_text(pin.get("evidence") or ""),
                     ),
                 )
         return self.get_for_source(source_path)
