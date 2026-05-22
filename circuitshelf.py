@@ -1374,38 +1374,37 @@ def get_or_build_index():
         except Exception as e:
             trace_logger.warning(f"🧹 DB catalog load failed, rebuilding from source documents: {e}")
 
-    load_documents_parallel(folder=TRAINING_DIR, files_selected=None)
-
-    builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
-    try:
-        build_result = builder.build()
-    except ValueError as e:
-        trace_logger.error(f"❌ DB catalog build failed: {e}")
-        return
-
-    vector_store.replace_catalog(
-        file_records=current_manifest,
-        chunks=state.get_chunks(),
-        sources=state.get_sources(),
-        metadata=state.get_metadata(),
-        embeddings=np.asarray(state.get_embeddings(), dtype="float32"),
+    state.replace_catalog(
+        chunks=[],
+        sources=[],
+        metadata=[],
+        embeddings=[],
+        image_store={},
+        image_captions={},
+        image_page_text={},
+        image_id_list=[],
+        index=None,
     )
-    persist_db_image_state(current_manifest)
-
+    if current_manifest:
+        set_index_status(
+            lastReason="startup",
+            lastResult="source_documents_waiting",
+            lastChanges={
+                "added": len(current_manifest),
+                "modified": 0,
+                "removed": 0,
+                "unchanged": 0,
+                "addedFiles": list(current_manifest.keys())[:20],
+                "modifiedFiles": [],
+                "removedFiles": [],
+            },
+        )
     duration = time.time() - start_time
-    SystemInit.log_build_info(
-        trace_logger,
-        state.get_chunks(),
-        state.get_embeddings(),
-        state.get_image_id_list(),
-        duration
-    )
     trace_logger.info(
-        f"📊 DB catalog built. Chunks: {build_result.chunks}, "
-        f"Embeddings: {len(state.get_embeddings())}, Images: {build_result.images}, "
-        f"Dropped chunks: {build_result.dropped_chunks}"
+        "✅ DB catalog is empty; serving empty state. "
+        f"{len(current_manifest)} source files are waiting for upload/manual indexing. "
+        f"Startup completed in {duration:.2f} sec"
     )
-    trace_logger.info(f"✅ DB rebuild completed in {duration:.2f} sec")
 
 
 @trace_timer("search_top_images")
