@@ -119,6 +119,42 @@ function imageProgress(progress: Record<string, string | number | boolean | null
   return formatDetailValue(progress.imageCandidates);
 }
 
+function chunkProgress(progress: Record<string, string | number | boolean | null | undefined>): string {
+  const chunks = progress.chunks;
+  const rawChunks = progress.rawChunks;
+  const dropped = progress.droppedChunks;
+  if (chunks !== undefined && rawChunks !== undefined) {
+    return `${formatDetailValue(chunks)} / ${formatDetailValue(rawChunks)}`;
+  }
+  if (chunks !== undefined && dropped !== undefined) {
+    return `${formatDetailValue(chunks)} kept`;
+  }
+  if (chunks !== undefined) {
+    return formatDetailValue(chunks);
+  }
+  if (rawChunks !== undefined) {
+    return formatDetailValue(rawChunks);
+  }
+  return "n/a";
+}
+
+function phaseTone(progress: Record<string, string | number | boolean | null | undefined>): string {
+  const phase = formatDetailValue(progress.documentPhase ?? "active").toLowerCase();
+  if (phase.includes("ocr")) {
+    return "ocr";
+  }
+  if (phase.includes("save") || phase.includes("persist")) {
+    return "save";
+  }
+  if (phase.includes("embed")) {
+    return "embed";
+  }
+  if (phase.includes("visual") || phase.includes("render")) {
+    return "visual";
+  }
+  return "active";
+}
+
 function compactPhase(progress: Record<string, string | number | boolean | null | undefined>): string {
   const phase = progress.documentPhase;
   if (!phase) {
@@ -196,18 +232,18 @@ export function IngestStatusPanel({
       </div>
       {workerBudget ? (
         <div className="ingest-worker-budget">
-          <span>Cores {formatInteger(workerBudget.cpuCores)}</span>
-          <span>Reserved {formatInteger(workerBudget.reservedCores)}</span>
-          <span>Usable {formatInteger(workerBudget.usableCores)}</span>
-          <span>Active doc workers {formatInteger(workerBudget.activeDocumentWorkers)}</span>
+          <span><small>Cores</small><strong>{formatInteger(workerBudget.cpuCores)}</strong></span>
+          <span><small>Reserved</small><strong>{formatInteger(workerBudget.reservedCores)}</strong></span>
+          <span><small>Usable</small><strong>{formatInteger(workerBudget.usableCores)}</strong></span>
+          <span><small>Doc workers</small><strong>{formatInteger(workerBudget.activeDocumentWorkers)}</strong></span>
         </div>
       ) : null}
       {isRunning && totalFiles ? (
         <div className="ingest-queue-summary">
-          <span>Done {formatInteger(processedFiles)}</span>
-          <span>Active {formatInteger(activeFiles)}</span>
-          <span>Waiting {formatInteger(waitingFiles)}</span>
-          <span>Total {formatInteger(totalFiles)}</span>
+          <span><small>Done</small><strong>{formatInteger(processedFiles)}</strong></span>
+          <span><small>Active</small><strong>{formatInteger(activeFiles)}</strong></span>
+          <span><small>Waiting</small><strong>{formatInteger(waitingFiles)}</strong></span>
+          <span><small>Total</small><strong>{formatInteger(totalFiles)}</strong></span>
         </div>
       ) : null}
       {isRunning && fileRows.length ? (
@@ -216,14 +252,18 @@ export function IngestStatusPanel({
             <span>File ({formatInteger(fileRows.length)})</span>
             <span>Phase</span>
             <span>Page</span>
+            <span>Chunks</span>
             <span>Images</span>
           </div>
           {fileRows.map(({ file, progress }) => (
             <div key={file} className="ingest-file-row">
               <strong title={file}>{file}</strong>
-              <span title={formatDetailValue(progress.documentPhase ?? "Active")}>{compactPhase(progress)}</span>
-              <span>{pageProgress(progress)}</span>
-              <span>{imageProgress(progress)}</span>
+              <span className={`ingest-phase-badge ${phaseTone(progress)}`} title={formatDetailValue(progress.documentPhase ?? "Active")}>
+                {compactPhase(progress)}
+              </span>
+              <span className="ingest-table-number">{pageProgress(progress)}</span>
+              <span className="ingest-table-number">{chunkProgress(progress)}</span>
+              <span className="ingest-table-number">{imageProgress(progress)}</span>
             </div>
           ))}
         </div>
