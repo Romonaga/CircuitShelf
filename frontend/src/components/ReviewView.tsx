@@ -11,6 +11,7 @@ import type { ReviewChunk, ReviewDocument, ReviewImage } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
 import { ErrorMessage } from "./ErrorMessage";
+import { LoadingSpinner } from "./LoadingSpinner";
 import { SectionHeader } from "./SectionHeader";
 
 export function ReviewView({
@@ -224,7 +225,7 @@ export function ReviewView({
         </div>
         {detailBusy ? (
           <div className="review-loading">
-            <span className="loading-spinner" aria-hidden="true" />
+            <LoadingSpinner />
             <span>Loading review details...</span>
           </div>
         ) : null}

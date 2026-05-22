@@ -1,5 +1,6 @@
 import type { IngestStatus } from "../types";
 import { formatInteger } from "../lib/format";
+import { LoadingSpinner } from "./LoadingSpinner";
 
 function formatDateTime(value?: string | null): string {
   if (!value) {
@@ -96,7 +97,8 @@ export function IngestStatusPanel({
   return (
     <div className={hasError ? "ingest-status-panel error" : isRunning ? "ingest-status-panel running" : "ingest-status-panel"}>
       <div className="ingest-status-heading">
-        <div>
+        <div className="ingest-status-title">
+          {isRunning ? <LoadingSpinner className="ingest-spinner" /> : null}
           <strong>{isRunning ? "Indexing documents..." : pending ? "Documents ready for review" : "Indexing idle"}</strong>
           <p>{formatReason(ingest.lastReason)}</p>
         </div>

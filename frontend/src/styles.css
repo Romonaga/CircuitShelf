@@ -1066,6 +1066,22 @@ nav {
   gap: 10px;
 }
 
+.ingest-status-title {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+}
+
+.ingest-status-title p {
+  grid-column: 1 / -1;
+}
+
+.ingest-spinner {
+  width: 16px;
+  height: 16px;
+}
+
 .ingest-status-heading strong {
   font-size: 0.94rem;
 }
