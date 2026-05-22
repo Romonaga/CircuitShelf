@@ -1,10 +1,36 @@
 import unittest
 
-from circuit_build_cards import build_circuit_build_card
+from circuit_build_cards import build_circuit_build_card, should_build_card
 from datasheet_intelligence import build_datasheet_intelligence
 
 
 class DatasheetIntelligenceTests(unittest.TestCase):
+    def test_beginner_project_recommendation_does_not_trigger_build_card(self):
+        self.assertFalse(should_build_card("what is a good beginer project."))
+
+        unrelated_intelligence = {
+            "source": "mosfet.pdf",
+            "displayName": "mosfet.pdf",
+            "componentName": "MOSFET",
+            "componentType": "transistor",
+            "summary": "Detected transistor details.",
+            "confidence": 0.8,
+            "facts": [],
+            "pinout": {"pins": [{"pin": 1, "function": "Gate", "page": 2}]},
+        }
+
+        card = build_circuit_build_card(
+            "what is a good beginner project",
+            [{"source": "training/mosfet.pdf", "displayName": "mosfet.pdf", "pages": [2], "chunkCount": 1}],
+            {"training/mosfet.pdf": unrelated_intelligence},
+        )
+
+        self.assertIsNone(card)
+
+    def test_specific_build_request_triggers_build_card(self):
+        self.assertTrue(should_build_card("build a 555 timer blinking LED"))
+        self.assertTrue(should_build_card("wire a 4n35 to an arduino"))
+
     def test_extracts_component_facts_and_pinout(self):
         chunks = [
             "4N35 optocoupler isolation device. Supply voltage 3 to 30 V. DIP-6 package.",

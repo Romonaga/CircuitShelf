@@ -7,14 +7,35 @@ import os
 from collections import OrderedDict
 
 
-BUILD_INTENT_PATTERN = re.compile(
-    r"\b(wire|wiring|connect|hook\s*up|build|breadboard|circuit|schematic|arduino|raspberry|gpio|pinout|project)\b",
+DIRECT_BUILD_INTENT_PATTERN = re.compile(
+    r"\b(wire|wiring|connect|hook\s*up|breadboard|pinout|schematic)\b",
+    re.IGNORECASE,
+)
+BUILD_ACTION_PATTERN = re.compile(r"\b(build|make|create|assemble)\b", re.IGNORECASE)
+BUILD_CONTEXT_PATTERN = re.compile(
+    r"\b("
+    r"arduino|raspberry|gpio|555|timer|op[\s-]?amp|optocoupler|transistor|mosfet|led|relay|sensor|"
+    r"adc|dac|ic|chip|pin|pins|datasheet|circuit|schematic|diagram|breadboard|"
+    r"[a-z]{1,8}\d{2,}[a-z0-9-]*|\d{3,}[a-z0-9-]*"
+    r")\b",
+    re.IGNORECASE,
+)
+PROJECT_RECOMMENDATION_PATTERN = re.compile(
+    r"("
+    r"\b(good|beginner|starter|first|simple|easy|recommend|suggest|idea|ideas)\b.{0,80}\bproject\b|"
+    r"\bproject\b.{0,80}\b(good|beginner|starter|first|simple|easy|recommend|suggest|idea|ideas)\b"
+    r")",
     re.IGNORECASE,
 )
 
 
 def should_build_card(question: str) -> bool:
-    return bool(BUILD_INTENT_PATTERN.search(question or ""))
+    text = question or ""
+    if PROJECT_RECOMMENDATION_PATTERN.search(text):
+        return False
+    if DIRECT_BUILD_INTENT_PATTERN.search(text):
+        return True
+    return bool(BUILD_ACTION_PATTERN.search(text) and BUILD_CONTEXT_PATTERN.search(text))
 
 
 def build_circuit_build_card(question: str, source_payload: list[dict], intelligence_by_source: dict[str, dict]) -> dict | None:
