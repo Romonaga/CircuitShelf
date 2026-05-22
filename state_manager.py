@@ -24,6 +24,7 @@ class StateManager:
         self.image_store = {}
         self.image_captions = {}
         self.image_page_text = {}
+        self.image_mime_types = {}
         self.image_id_list = []
 
         # === Query/Debug State ===
@@ -65,6 +66,7 @@ class StateManager:
             self.image_store.clear()
             self.image_captions.clear()
             self.image_page_text.clear()
+            self.image_mime_types.clear()
             self.image_id_list.clear()
             self.last_trace_data.clear()
             self.index = None
@@ -80,6 +82,7 @@ class StateManager:
         image_store=None,
         image_captions=None,
         image_page_text=None,
+        image_mime_types=None,
         image_id_list=None,
         index=None,
     ):
@@ -94,6 +97,8 @@ class StateManager:
                 self._replace(self.image_captions, image_captions)
             if image_page_text is not None:
                 self._replace(self.image_page_text, image_page_text)
+            if image_mime_types is not None:
+                self._replace(self.image_mime_types, image_mime_types)
             if image_id_list is not None:
                 self._replace(self.image_id_list, image_id_list)
             self.index = index
@@ -129,6 +134,12 @@ class StateManager:
     def set_image_page_text(self, data): self._safe(lambda: self._replace(self.image_page_text, data))
     def add_image_page_text(self, key, value):
         self._safe(lambda: self.image_page_text.__setitem__(key, value))
+
+    # === Image MIME Types ===
+    def get_image_mime_types(self): return self._safe(lambda: dict(self.image_mime_types))
+    def set_image_mime_types(self, data): self._safe(lambda: self._replace(self.image_mime_types, data))
+    def add_image_mime_type(self, key, value):
+        self._safe(lambda: self.image_mime_types.__setitem__(key, value))
 
     # === Image ID List ===
     def get_image_id_list(self): return self._safe(lambda: list(self.image_id_list))

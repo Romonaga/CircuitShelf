@@ -129,7 +129,7 @@ class ImageStore:
                 continue
 
             image_bytes = base64.b64decode(image_base64)
-            width, height = self._image_size(image_bytes)
+            stored_image_bytes, mime_type, width, height = self._prepare_image_for_storage(image_bytes)
             ordinals[rel_path] += 1
             ordinal = ordinals[rel_path]
 
@@ -141,15 +141,15 @@ class ImageStore:
                     page_number,
                     image_key,
                     ordinal,
-                    image_bytes,
-                    "image/png",
+                    stored_image_bytes,
+                    mime_type,
                     width,
                     height,
                     image_captions.get(image_key, image_key),
                     image_page_text.get(image_key, ""),
                     score,
                     confidence,
-                    hashlib.sha256(image_bytes).hexdigest(),
+                    hashlib.sha256(stored_image_bytes).hexdigest(),
                     embedding_model,
                     vector_to_sql(image_embeddings[image_key]) if image_key in image_embeddings else None,
                 ),
@@ -191,19 +191,21 @@ class ImageStore:
             rows = conn.execute(load_query("image_search.sql"), (vector, vector, int(top_k))).fetchall()
         return [dict(row) for row in rows]
 
-    def load_state_payload(self) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    def load_state_payload(self) -> tuple[dict[str, str], dict[str, str], dict[str, str], dict[str, str]]:
         with self.database.connection() as conn:
             rows = conn.execute(load_query("image_load.sql")).fetchall()
 
         image_store: dict[str, str] = {}
         captions: dict[str, str] = {}
         page_text: dict[str, str] = {}
+        mime_types: dict[str, str] = {}
         for row in rows:
             key = row["image_key"]
             image_store[key] = row["image_base64"]
             captions[key] = row["caption"] or key
             page_text[key] = row["ocr_text"] or ""
-        return image_store, captions, page_text
+            mime_types[key] = row["image_mime_type"] or "image/png"
+        return image_store, captions, page_text, mime_types
 
     def list_review_images(self, source_path: str) -> list[dict]:
         with self.database.connection() as conn:
@@ -301,3 +303,49 @@ class ImageStore:
                 return image.size
         except Exception:
             return None, None
+
+    def _prepare_image_for_storage(self, image_bytes: bytes) -> tuple[bytes, str, int | None, int | None]:
+        width, height = self._image_size(image_bytes)
+        optimized = self._to_webp_if_smaller(image_bytes)
+        if optimized:
+            if self.logger:
+                saved = len(image_bytes) - len(optimized)
+                self.logger.debug(
+                    f"Compressed image asset from {len(image_bytes)} to {len(optimized)} bytes "
+                    f"({saved / max(1, len(image_bytes)):.1%} smaller)."
+                )
+            return optimized, "image/webp", width, height
+        return image_bytes, self._detect_mime_type(image_bytes), width, height
+
+    @staticmethod
+    def _to_webp_if_smaller(image_bytes: bytes) -> bytes | None:
+        try:
+            with Image.open(BytesIO(image_bytes)) as image:
+                image.load()
+                has_alpha = image.mode in {"RGBA", "LA"} or "transparency" in image.info
+                output = BytesIO()
+                if has_alpha:
+                    converted = image.convert("RGBA")
+                    converted.save(output, format="WEBP", lossless=True, method=6)
+                else:
+                    converted = image.convert("RGB")
+                    converted.save(output, format="WEBP", quality=88, method=6)
+                candidate = output.getvalue()
+        except Exception:
+            return None
+        return candidate if candidate and len(candidate) < len(image_bytes) else None
+
+    @staticmethod
+    def _detect_mime_type(image_bytes: bytes) -> str:
+        try:
+            with Image.open(BytesIO(image_bytes)) as image:
+                image_format = (image.format or "").upper()
+        except Exception:
+            return "application/octet-stream"
+        if image_format == "JPEG":
+            return "image/jpeg"
+        if image_format == "WEBP":
+            return "image/webp"
+        if image_format == "PNG":
+            return "image/png"
+        return f"image/{image_format.lower()}" if image_format else "application/octet-stream"

@@ -478,6 +478,11 @@ def prune_training_files_from_state(rel_paths):
         for key, value in state.get_image_page_text().items()
         if not matches_any(key)
     }
+    image_mime_types = {
+        key: value
+        for key, value in state.get_image_mime_types().items()
+        if not matches_any(key)
+    }
     image_id_list = [
         img_id for img_id in state.get_image_id_list()
         if not matches_any(img_id)
@@ -491,6 +496,7 @@ def prune_training_files_from_state(rel_paths):
         image_store=image_store,
         image_captions=image_captions,
         image_page_text=image_page_text,
+        image_mime_types=image_mime_types,
         image_id_list=image_id_list,
     )
 
@@ -501,10 +507,11 @@ def prune_training_files_from_state(rel_paths):
 
 
 def load_db_image_state():
-    image_data, captions, page_text = image_store.load_state_payload()
+    image_data, captions, page_text, mime_types = image_store.load_state_payload()
     state.set_image_store(image_data)
     state.set_image_captions(captions)
     state.set_image_page_text(page_text)
+    state.set_image_mime_types(mime_types)
     builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
     return builder.build_image_index()
 
@@ -519,6 +526,7 @@ def refresh_active_state_from_db():
         image_store={},
         image_captions={},
         image_page_text={},
+        image_mime_types={},
         image_id_list=[],
     )
     return load_db_image_state()
@@ -1449,6 +1457,7 @@ def get_or_build_index():
                         image_store={},
                         image_captions={},
                         image_page_text={},
+                        image_mime_types={},
                         image_id_list=[],
                         index=None,
                     )
@@ -1503,6 +1512,7 @@ def get_or_build_index():
         image_store={},
         image_captions={},
         image_page_text={},
+        image_mime_types={},
         image_id_list=[],
         index=None,
     )
@@ -2006,6 +2016,7 @@ def build_image_markdown_blocks(question, selected_chunks=None):
             image_blocks = []
 
         img_data = state.image_store.get(img_id)
+        mime_type = state.image_mime_types.get(img_id, "image/png")
         ocr_text = state.image_page_text.get(img_id, "")
         if not img_data:
             continue
@@ -2020,7 +2031,7 @@ def build_image_markdown_blocks(question, selected_chunks=None):
 <details style="margin-bottom: 1em;">
 <summary>📷 {caption}</summary>
 
-<p><img src="data:image/png;base64,{img_data}" alt="{img_id}" style="max-width: 100%; height: auto;" /></p>
+<p><img src="data:{mime_type};base64,{img_data}" alt="{img_id}" style="max-width: 100%; height: auto;" /></p>
 
 <div style="margin-left: 1.0em;">
 <details>
@@ -2462,6 +2473,7 @@ def review_image_payload(row):
         "page": row["page_number"],
         "width": int(row["width_px"] or 0),
         "height": int(row["height_px"] or 0),
+        "imageMimeType": row["image_mime_type"] or "image/png",
         "imageBase64": row["image_base64"],
     }
 
@@ -2775,6 +2787,7 @@ def build_document_detail(doc_name):
     image_store_payload = state.get_image_store()
     image_captions = state.get_image_captions()
     image_text = state.get_image_page_text()
+    image_mime_types = state.get_image_mime_types()
 
     for image_id, image_base64 in sorted(image_store_payload.items()):
         if not image_asset_belongs_to_document(image_id, doc_name):
@@ -2784,6 +2797,7 @@ def build_document_detail(doc_name):
             "imageKey": image_id,
             "caption": image_captions.get(image_id, image_id),
             "page": page,
+            "imageMimeType": image_mime_types.get(image_id, "image/png"),
             "imageBase64": image_base64,
             "ocrText": image_text.get(image_id, ""),
         }

@@ -112,6 +112,7 @@ export interface DocumentImage {
   imageKey: string;
   caption: string;
   page?: number | string | null;
+  imageMimeType?: string;
   imageBase64: string;
   ocrText?: string;
 }
@@ -275,5 +276,6 @@ export interface ReviewImage {
   page?: number | string | null;
   width: number;
   height: number;
+  imageMimeType?: string;
   imageBase64: string;
 }

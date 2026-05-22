@@ -1,5 +1,6 @@
 SELECT image_key,
        encode(image_bytes, 'base64') AS image_base64,
+       image_mime_type,
        caption,
        ocr_text
 FROM document_images

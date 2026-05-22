@@ -239,7 +239,7 @@ export function ReviewView({
                   {image.page ? <span>Page {image.page}</span> : null}
                   <span>{formatInteger(image.width)} x {formatInteger(image.height)}</span>
                 </div>
-                <img src={`data:image/png;base64,${image.imageBase64}`} alt={image.caption} />
+                <img src={`data:${image.imageMimeType || "image/png"};base64,${image.imageBase64}`} alt={image.caption} />
               </article>
             ))}
             {selectedDocument && !detailBusy && !images.length ? <div className="empty-state compact">No image assets were extracted for this document.</div> : null}

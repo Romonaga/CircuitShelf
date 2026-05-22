@@ -1,7 +1,9 @@
 import unittest
+from io import BytesIO
 
 from db.image_store import ImageStore
 from ingest_manifest import FileRecord
+from PIL import Image
 
 
 class ImageStoreHelperTests(unittest.TestCase):
@@ -40,6 +42,30 @@ class ImageStoreHelperTests(unittest.TestCase):
         self.assertEqual(page, 4)
         self.assertEqual(score, 0.87)
         self.assertEqual(confidence, 92.5)
+
+    def test_prepares_large_image_as_smaller_webp(self):
+        store = ImageStore(None, "training")
+        image = Image.effect_noise((300, 300), 80).convert("RGB")
+        raw = BytesIO()
+        image.save(raw, format="PNG")
+
+        stored_bytes, mime_type, width, height = store._prepare_image_for_storage(raw.getvalue())
+
+        self.assertEqual((width, height), (300, 300))
+        self.assertEqual(mime_type, "image/webp")
+        self.assertLess(len(stored_bytes), len(raw.getvalue()))
+
+    def test_keeps_original_when_webp_is_not_smaller(self):
+        store = ImageStore(None, "training")
+        image = Image.effect_noise((100, 100), 80).convert("RGB")
+        raw = BytesIO()
+        image.save(raw, format="JPEG", quality=60)
+
+        stored_bytes, mime_type, width, height = store._prepare_image_for_storage(raw.getvalue())
+
+        self.assertEqual((width, height), (100, 100))
+        self.assertEqual(mime_type, "image/jpeg")
+        self.assertEqual(stored_bytes, raw.getvalue())
 
 
 if __name__ == "__main__":
