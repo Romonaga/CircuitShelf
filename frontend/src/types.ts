@@ -1,5 +1,5 @@
 export type RetrievalStrategy = "Vector only" | "Vector + CrossEncoder" | string;
-export type View = "ask" | "bench" | "documents" | "review" | "trace" | "status" | "settings";
+export type View = "ask" | "bench" | "inventory" | "documents" | "review" | "trace" | "status" | "settings";
 
 export interface SessionUser {
   userId?: number;
@@ -289,6 +289,64 @@ export interface BuildAssemblyPlanResponse {
   confidence?: number | null;
   averageQueryTime?: number | null;
   error?: string;
+}
+
+export interface InventoryPart {
+  id: string;
+  userId?: number;
+  displayName: string;
+  normalizedName?: string;
+  partType: string;
+  quantity: number;
+  location: string;
+  notes: string;
+  aliases: string[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface InventoryPartInput {
+  displayName: string;
+  partType: string;
+  quantity: number;
+  location: string;
+  notes: string;
+  aliases: string[];
+}
+
+export interface ProjectCandidatePart {
+  id?: string;
+  displayName?: string;
+  name?: string;
+  partType?: string;
+  type?: string;
+  quantity?: number;
+  location?: string;
+}
+
+export interface ProjectCandidate {
+  id: string;
+  kind: "project_chunk" | "component_reference" | string;
+  title: string;
+  objective: string;
+  summary: string;
+  source: string;
+  displayName: string;
+  page?: number | null;
+  chunkIndex?: number | null;
+  matchedParts: ProjectCandidatePart[];
+  matchedPartCount: number;
+  requiredParts: ProjectCandidatePart[];
+  missingParts: ProjectCandidatePart[];
+  suggestedSubstitutions: Array<Record<string, string>>;
+  buildable: boolean;
+  score: number;
+}
+
+export interface ProjectFinderResponse {
+  inventoryCount: number;
+  termCount?: number;
+  candidates: ProjectCandidate[];
 }
 
 export interface DocumentDetail {

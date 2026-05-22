@@ -15,6 +15,9 @@ import type {
   ReviewDocument,
   ReviewImage,
   LogTailPayload,
+  InventoryPart,
+  InventoryPartInput,
+  ProjectFinderResponse,
   StatusPayload,
   UploadDocumentsResponse
 } from "./types";
@@ -159,6 +162,27 @@ export function askAssemblyAssistant(planId: string, message: string, model: str
       body: JSON.stringify({ message, model })
     }
   );
+}
+
+export function getInventoryParts(): Promise<{ parts: InventoryPart[] }> {
+  return requestJson<{ parts: InventoryPart[] }>("/api/inventory/parts");
+}
+
+export function saveInventoryPart(part: InventoryPartInput): Promise<{ part: InventoryPart }> {
+  return requestJson<{ part: InventoryPart }>("/api/inventory/parts", {
+    method: "POST",
+    body: JSON.stringify(part)
+  });
+}
+
+export function deleteInventoryPart(partId: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/inventory/parts/${encodeURIComponent(partId)}`, {
+    method: "DELETE"
+  });
+}
+
+export function getProjectCandidates(limit = 24): Promise<ProjectFinderResponse> {
+  return requestJson<ProjectFinderResponse>(`/api/inventory/project-candidates?limit=${encodeURIComponent(String(limit))}`);
 }
 
 export function getDocuments(): Promise<{ documents: DocumentSummary[] }> {

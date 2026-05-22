@@ -64,6 +64,7 @@ from db.assembly_plan_store import AssemblyPlanStore
 from db.conversation_store import ConversationStore
 from db.datasheet_intelligence_store import DatasheetIntelligenceStore
 from db.image_store import ImageStore
+from db.lab_inventory import LabInventoryStore, ProjectFinderStore
 from db.query_log_store import QueryLogStore
 from db.response_cache_store import PostgresResponseCache
 from db.runtime_config_store import RuntimeConfigStore
@@ -127,6 +128,8 @@ vector_store = VectorStore(database, config.get("TRAINING_DIR", "training"), con
 image_store = ImageStore(database, config.get("TRAINING_DIR", "training"), trace_logger)
 intelligence_store = DatasheetIntelligenceStore(database, trace_logger)
 assembly_plan_store = AssemblyPlanStore(database, config.get("TRAINING_DIR", "training"), trace_logger)
+lab_inventory_store = LabInventoryStore(database, trace_logger)
+project_finder_store = ProjectFinderStore(database, lab_inventory_store, trace_logger)
 db_response_cache = PostgresResponseCache(
     database,
     capacity=config.get("RESPONSE_CACHE_CAPACITY", 200),
@@ -148,6 +151,8 @@ if not assembly_plan_store.available():
     raise RuntimeError("Postgres assembly plan store is unavailable. Run database migrations before starting CircuitShelf.")
 if not user_preferences_store.available():
     raise RuntimeError("Postgres user preferences store is unavailable. Run database migrations before starting CircuitShelf.")
+if not lab_inventory_store.available():
+    raise RuntimeError("Postgres lab inventory store is unavailable. Run database migrations before starting CircuitShelf.")
 trace_logger.info("🛠️ Configuration and logger successfully initialized.")
 
 # === Decorators ===
@@ -3084,6 +3089,46 @@ async def conversation_delete(conversation_id: str, req: Request):
     if not removed:
         return JSONResponse({"error": "Conversation not found."}, status_code=404)
     return {"ok": True}
+
+
+@app.get("/api/inventory/parts")
+async def inventory_parts(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    return {"parts": lab_inventory_store.list_parts(user_id_for_user(user))}
+
+
+@app.post("/api/inventory/parts")
+async def inventory_part_upsert(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    data = await req.json()
+    try:
+        part = lab_inventory_store.upsert_part(user_id_for_user(user), data)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"part": part}
+
+
+@app.delete("/api/inventory/parts/{part_id}")
+async def inventory_part_delete(part_id: str, req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    removed = lab_inventory_store.delete_part(user_id_for_user(user), part_id)
+    if not removed:
+        return JSONResponse({"error": "Inventory part not found."}, status_code=404)
+    return {"ok": True}
+
+
+@app.get("/api/inventory/project-candidates")
+async def inventory_project_candidates(req: Request, limit: int = 24):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    return project_finder_store.find(user_id_for_user(user), limit=max(1, min(int(limit), 80)))
 
 
 @app.get("/api/settings")

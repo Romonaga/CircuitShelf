@@ -3,6 +3,7 @@ import { AppShell } from "./components/AppShell";
 import { AskView } from "./components/AskView";
 import { BenchView } from "./components/BenchView";
 import { DocumentsView } from "./components/DocumentsView";
+import { InventoryView } from "./components/InventoryView";
 import { LoginView } from "./components/LoginView";
 import { ReviewView } from "./components/ReviewView";
 import { StatusView } from "./components/StatusView";
@@ -54,6 +55,9 @@ export default function App() {
       </div>
       <div hidden={activeView !== "bench"}>
         <BenchView config={config} isActive={activeView === "bench"} />
+      </div>
+      <div hidden={activeView !== "inventory"}>
+        <InventoryView config={config} isActive={activeView === "inventory"} />
       </div>
       <div hidden={activeView !== "documents"}>
         <DocumentsView
