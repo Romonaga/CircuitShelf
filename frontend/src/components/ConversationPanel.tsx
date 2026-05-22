@@ -7,7 +7,8 @@ export function ConversationPanel({
   loading,
   onNew,
   onSelect,
-  onDelete
+  onDelete,
+  className = ""
 }: {
   conversations: ConversationSummary[];
   activeConversationId?: string | null;
@@ -15,9 +16,10 @@ export function ConversationPanel({
   onNew: () => void;
   onSelect: (conversationId: string) => void;
   onDelete: (conversationId: string) => void;
+  className?: string;
 }) {
   return (
-    <div className="conversation-panel">
+    <div className={["conversation-panel", className].filter(Boolean).join(" ")}>
       <div className="conversation-toolbar">
         <h3>Conversations</h3>
         <button className="ghost-button compact-button" type="button" onClick={onNew}>

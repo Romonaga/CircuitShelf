@@ -185,6 +185,15 @@ export function AskView({ config }: { config: AppConfig }) {
           title="Ask the shelf"
           description="Grounded answers from indexed books, datasheets, notes, OCR text, and images."
         />
+        <ConversationPanel
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          loading={conversationsBusy}
+          onNew={startNewConversation}
+          onSelect={selectConversation}
+          onDelete={removeConversation}
+          className="ask-conversation-panel"
+        />
         <textarea
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
@@ -194,13 +203,6 @@ export function AskView({ config }: { config: AppConfig }) {
         <div className="query-actions">
           <button className="primary-button" disabled={!canSubmit}>
             {askButtonText}
-          </button>
-          <button
-            className="ghost-button"
-            type="button"
-            onClick={startNewConversation}
-          >
-            New conversation
           </button>
         </div>
         <ErrorMessage message={error} />
@@ -288,14 +290,6 @@ export function AskView({ config }: { config: AppConfig }) {
       </section>
 
       <section className="history-panel">
-        <ConversationPanel
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          loading={conversationsBusy}
-          onNew={startNewConversation}
-          onSelect={selectConversation}
-          onDelete={removeConversation}
-        />
         <SectionHeader title="Conversation" description={`${Math.max(chatHistory.length - 1, 0)} earlier turns`} />
         <ChatHistory turns={chatHistory.slice(0, -1)} />
       </section>

@@ -975,6 +975,15 @@ nav {
   border-bottom: 1px solid var(--line);
 }
 
+.ask-conversation-panel {
+  margin: 0;
+  padding: 0 0 14px;
+}
+
+.ask-conversation-panel .conversation-list {
+  max-height: 180px;
+}
+
 .conversation-toolbar {
   display: flex;
   align-items: center;
