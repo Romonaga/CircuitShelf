@@ -206,7 +206,9 @@ INGEST_WATCH_INTERVAL_SECONDS: 300
 
 ## Database Migrations
 
-Postgres is the canonical application store for users, settings, ingest metadata, source catalog data, text embeddings, image embeddings, response-cache records, and query logs.
+Postgres is the canonical application store for users, settings, structured runtime configuration, ingest metadata, source catalog data, text embeddings, image embeddings, response-cache records, and query logs. YAML/bootstrap config is only used to start the app and seed empty runtime tables on a fresh install.
+
+Structured runtime tables include LLM model choices, query synonyms, prompt-security banned phrases, rerank profiles, chunk categories, and equation-detection patterns. Startup loads those tables back into the runtime config before chunking, retrieval, and chat are initialized.
 
 Schema changes are versioned as numbered SQL migrations in `db/migrations/` and tracked by the `schema_migrations` table. Once a migration has been applied in a shared database, add a new numbered migration instead of editing the old one.
 

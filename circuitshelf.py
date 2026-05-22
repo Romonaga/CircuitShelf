@@ -62,6 +62,7 @@ from db.datasheet_intelligence_store import DatasheetIntelligenceStore
 from db.image_store import ImageStore
 from db.query_log_store import QueryLogStore
 from db.response_cache_store import PostgresResponseCache
+from db.runtime_config_store import RuntimeConfigStore
 from db.settings import AppSettingsStore
 from db.users import UserStore
 from db.vector_store import VectorStore
@@ -102,10 +103,14 @@ settings_store.seed_setting("PDF_RENDER_ZOOM", 1.5, "Scale used when rendering v
 settings_store.seed_setting("PDF_RENDER_RASTER_PAGES", True, "Render raster-heavy scanned PDF pages as searchable images.")
 settings_store.seed_setting("PDF_RENDER_MIN_RASTER_COVERAGE", 0.8, "Minimum page image coverage before a PDF page is considered raster-heavy.")
 applied_settings = settings_store.apply_to_config(config)
-if seeded_settings or applied_settings:
+runtime_config_store = RuntimeConfigStore(database, trace_logger)
+seeded_runtime_config = runtime_config_store.seed_from_config(config.config)
+applied_runtime_config = runtime_config_store.apply_to_config(config)
+if seeded_settings or applied_settings or seeded_runtime_config or applied_runtime_config:
     trace_logger.info(
         f"⚙️ DB settings active. Seeded: {seeded_settings}, "
-        f"prompts: {prompt_seeded}, loaded: {applied_settings}"
+        f"prompts: {prompt_seeded}, loaded: {applied_settings}, "
+        f"runtime seeded: {seeded_runtime_config}, runtime tables: {sorted(applied_runtime_config.keys())}"
     )
 user_store = UserStore(database, trace_logger)
 query_log_store = QueryLogStore(database, trace_logger)
