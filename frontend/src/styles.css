@@ -1151,6 +1151,34 @@ nav {
   overflow-wrap: anywhere;
 }
 
+.log-tail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.log-tail-follow {
+  display: grid;
+  width: auto;
+  min-height: 38px;
+  grid-template-columns: 16px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  font-weight: 700;
+}
+
+.log-tail-follow input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
 .log-tail-window {
   min-height: 320px;
   max-height: 520px;

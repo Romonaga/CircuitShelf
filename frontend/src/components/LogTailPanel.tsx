@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatInteger } from "../lib/format";
 import type { LogTailPayload } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
@@ -16,13 +16,14 @@ export function LogTailPanel({
   onRefresh: () => void;
 }) {
   const logRef = useRef<HTMLPreElement | null>(null);
+  const [followTail, setFollowTail] = useState(true);
 
   useEffect(() => {
     const logWindow = logRef.current;
-    if (logWindow) {
+    if (logWindow && followTail) {
       logWindow.scrollTop = logWindow.scrollHeight;
     }
-  }, [tail?.updatedAt]);
+  }, [followTail, tail?.updatedAt]);
 
   const lineText = tail?.lines.length ? tail.lines.join("\n") : tail?.exists === false ? "Log file does not exist yet." : "No log lines available.";
 
@@ -37,16 +38,22 @@ export function LogTailPanel({
             {tail?.truncated ? " | tail truncated" : ""}
           </p>
         </div>
-        <button className="ghost-button" type="button" onClick={onRefresh} disabled={loading}>
-          {loading ? (
-            <>
-              <LoadingSpinner className="button-spinner" />
-              Loading
-            </>
-          ) : (
-            "Refresh log"
-          )}
-        </button>
+        <div className="log-tail-actions">
+          <label className="log-tail-follow">
+            <input type="checkbox" checked={followTail} onChange={(event) => setFollowTail(event.target.checked)} />
+            Follow tail
+          </label>
+          <button className="ghost-button" type="button" onClick={onRefresh} disabled={loading}>
+            {loading ? (
+              <>
+                <LoadingSpinner className="button-spinner" />
+                Loading
+              </>
+            ) : (
+              "Refresh log"
+            )}
+          </button>
+        </div>
       </div>
       <ErrorMessage message={error || tail?.error || ""} />
       <pre ref={logRef} className="log-tail-window">
