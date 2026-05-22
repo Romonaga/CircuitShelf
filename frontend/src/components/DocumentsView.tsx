@@ -7,6 +7,7 @@ import { uploadResultMessage } from "../lib/uploadMessages";
 import { ErrorMessage } from "./ErrorMessage";
 import { IngestStatusPanel } from "./IngestStatusPanel";
 import { DatasheetIntelligencePanel } from "./DatasheetIntelligencePanel";
+import { DocumentPageInspector } from "./DocumentPageInspector";
 import { SectionHeader } from "./SectionHeader";
 
 export function DocumentsView({
@@ -223,34 +224,7 @@ export function DocumentsView({
               ))}
             </div>
             <div className="page-detail">
-              <div className="document-images">
-                {selectedPageDetail?.images.map((image) => (
-                  <article key={image.imageKey} className="document-image-card">
-                    <div className="chunk-meta">
-                      <strong>{image.caption}</strong>
-                      <span>{image.imageKey}</span>
-                    </div>
-                    <img src={`data:image/png;base64,${image.imageBase64}`} alt={image.caption} />
-                  </article>
-                ))}
-                {selectedPageDetail && !selectedPageDetail.images.length ? (
-                  <div className="empty-state compact">No rendered images for this page.</div>
-                ) : null}
-              </div>
-              <div className="chunk-table">
-                {selectedPageDetail?.chunks.map((chunk) => (
-                  <article key={chunk.index} className="chunk-row">
-                    <div className="chunk-meta">
-                      <strong>#{chunk.index}</strong>
-                      <span>{chunk.section}</span>
-                      <span>{chunk.category}</span>
-                      <span>{formatInteger(chunk.tokens)} tokens</span>
-                      {chunk.sourceImageId ? <span>Linked image: {chunk.sourceImageId}</span> : null}
-                    </div>
-                    <p>{chunk.preview}</p>
-                  </article>
-                ))}
-              </div>
+              {selectedPageDetail ? <DocumentPageInspector page={selectedPageDetail} /> : null}
             </div>
           </div>
         ) : (
