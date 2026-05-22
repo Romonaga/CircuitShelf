@@ -53,8 +53,10 @@ export default function App() {
       </div>
       <div hidden={activeView !== "documents"}>
         <DocumentsView
+          isActive={activeView === "documents"}
           isAdmin={Boolean(user?.isAdmin)}
           status={status}
+          refreshSignal={`${status?.sources ?? 0}:${status?.chunks ?? 0}:${status?.imageIds ?? 0}`}
           onStatusChange={refreshStatus}
           onOpenReview={() => setActiveView("review")}
         />

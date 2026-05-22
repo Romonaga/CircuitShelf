@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDocument, getDocuments, triggerIndexCheck, uploadDocuments } from "../api";
 import type { DocumentDetail, DocumentSummary, StatusPayload } from "../types";
 import { errorMessage } from "../lib/errors";
@@ -10,13 +10,17 @@ import { DatasheetIntelligencePanel } from "./DatasheetIntelligencePanel";
 import { SectionHeader } from "./SectionHeader";
 
 export function DocumentsView({
+  isActive,
   isAdmin,
   status,
+  refreshSignal,
   onStatusChange,
   onOpenReview
 }: {
+  isActive: boolean;
   isAdmin: boolean;
   status: StatusPayload | null;
+  refreshSignal: string;
   onStatusChange: () => void;
   onOpenReview: () => void;
 }) {
@@ -32,6 +36,11 @@ export function DocumentsView({
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadInputKey, setUploadInputKey] = useState(0);
   const [overwrite, setOverwrite] = useState(false);
+  const selectedRef = useRef("");
+
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   const filteredDocuments = useMemo(() => {
     const needle = filter.toLowerCase();
@@ -53,19 +62,20 @@ export function DocumentsView({
     try {
       const response = await getDocuments();
       setDocuments(response.documents);
-      if (!selected && response.documents.length) {
-        setSelected(response.documents[0].source);
-      }
+      const nextSelected = response.documents.find((document) => document.source === selectedRef.current) || response.documents[0];
+      setSelected(nextSelected?.source || "");
     } catch (err) {
       setError(errorMessage(err, "Could not load documents"));
     } finally {
       setBusy(false);
     }
-  }, [selected]);
+  }, []);
 
   useEffect(() => {
-    void loadDocuments();
-  }, [loadDocuments]);
+    if (isActive || refreshSignal) {
+      void loadDocuments();
+    }
+  }, [isActive, loadDocuments, refreshSignal]);
 
   async function submitUpload() {
     if (!uploadFiles.length) {

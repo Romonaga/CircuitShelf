@@ -1196,6 +1196,7 @@ nav {
   display: grid;
   grid-template-columns: 170px minmax(0, 1fr);
   gap: 12px;
+  overflow: hidden;
 }
 
 .page-strip {
@@ -1232,25 +1233,36 @@ nav {
 .page-detail {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(180px, min(34vh, 360px)) minmax(0, 1fr);
   gap: 10px;
+  overflow: hidden;
 }
 
 .document-images {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
   display: grid;
+  align-content: start;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 10px;
-  max-height: 360px;
   overflow: auto;
-}
-
-.document-image-card {
-  display: grid;
-  gap: 8px;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
+}
+
+.document-image-card {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  overflow: hidden;
 }
 
 .document-image-card img {
