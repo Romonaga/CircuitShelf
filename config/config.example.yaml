@@ -28,6 +28,7 @@ RAG_CHAT_SYSTEM_PROMPT: "You are CircuitShelf's retrieval-grounded electronics a
 APP_HOST: 127.0.0.1
 APP_PORT: 1964
 SITE_NAME: "CircuitShelf"
+SERVER_PID_FILE: "data/circuitshelf.pid"
 
 EMBED_MODEL_NAME: "sentence-transformers/all-mpnet-base-v2"
 CROSS_ENCODER_MODEL: "cross-encoder/ms-marco-MiniLM-L-6-v2"

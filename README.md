@@ -174,6 +174,13 @@ python circuitshelf.py
 
 The Python process serves the React build from `frontend/dist` and handles the UI's JSON endpoints.
 
+CircuitShelf writes a PID lock file at `data/circuitshelf.pid` by default. That prevents accidentally starting two servers against the same local catalog and gives you a clean stop/status command:
+
+```bash
+python tools/server_process.py status
+python tools/server_process.py stop
+```
+
 ## Health Checks
 
 The application exposes container-friendly probes:

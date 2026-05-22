@@ -69,6 +69,7 @@ from db.runtime_config_store import RuntimeConfigStore
 from db.settings import AppSettingsStore
 from db.users import UserStore
 from db.vector_store import VectorStore
+from process_lock import ProcessLockError, acquire_process_lock
 from response_cache import (
     ResponseCacheEntry,
     ResponseCacheKey,
@@ -1484,7 +1485,7 @@ def persist_incremental_document(extracted, current_manifest):
         rel_paths=[source],
         progress_file=source,
     )
-    vector_store.set_sources_status([source], "needs_review")
+    mark_source_ready_for_review(source)
     final_details = {
         **summarize_document_ingest_stats(document_stats),
         **image_result,
@@ -1496,6 +1497,13 @@ def persist_incremental_document(extracted, current_manifest):
     )
     trace_logger.info(f"✅ {source} is ready for review.")
     return build_result, final_details
+
+
+def mark_source_ready_for_review(source):
+    ready_sources = vector_store.set_sources_status([source], "needs_review")
+    if source not in ready_sources:
+        raise RuntimeError(f"{source} could not be marked ready for review.")
+    return ready_sources
 
 
 def run_incremental_ingest(changes, current_manifest):
@@ -1686,7 +1694,7 @@ def reindex_review_source(source):
     )
     image_result = persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=[source])
     update_index_progress(stage="readying_review", details={**summarize_document_ingest_stats(document_stats), **image_result})
-    vector_store.set_sources_status([source], "needs_review")
+    mark_source_ready_for_review(source)
     return build_result
 
 
@@ -3539,13 +3547,19 @@ if __name__ == "__main__":
 
     app_host = config.get("APP_HOST", config.get("API_HOST", "127.0.0.1"))
     app_port = config.get("APP_PORT", config.get("API_PORT", 1964))
+    server_pid_file = config.get("SERVER_PID_FILE", "data/circuitshelf.pid")
 
-    cleanup_stale_tesseract_temp_files()
-    get_or_build_index()
+    try:
+        with acquire_process_lock(server_pid_file, name="CircuitShelf"):
+            cleanup_stale_tesseract_temp_files()
+            get_or_build_index()
 
-    mount_react_app()
-    trace_logger.info(f"🌐 CircuitShelf available at http://{app_host}:{app_port}")
-    start_app_server(app_host, app_port)
+            mount_react_app()
+            trace_logger.info(f"🌐 CircuitShelf available at http://{app_host}:{app_port}")
+            start_app_server(app_host, app_port)
+    except ProcessLockError as exc:
+        trace_logger.error(str(exc))
+        raise SystemExit(1) from exc
 
 
 
