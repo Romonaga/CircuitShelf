@@ -5,6 +5,7 @@ import type {
   QueryRequest,
   QueryResponse,
   AppSetting,
+  RemoveDocumentResponse,
   ReviewChunk,
   ReviewDocument,
   ReviewImage,
@@ -130,6 +131,13 @@ export function reindexReviewDocument(source: string): Promise<{ ok: boolean; ch
 
 export function removeReviewDocument(source: string): Promise<{ ok: boolean }> {
   return requestJson<{ ok: boolean }>("/api/review/document/remove", {
+    method: "POST",
+    body: JSON.stringify({ source, deleteFile: true })
+  });
+}
+
+export function removeIndexedDocument(source: string): Promise<RemoveDocumentResponse> {
+  return requestJson<RemoveDocumentResponse>("/api/document/remove", {
     method: "POST",
     body: JSON.stringify({ source, deleteFile: true })
   });

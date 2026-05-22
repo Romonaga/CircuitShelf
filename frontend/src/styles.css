@@ -415,6 +415,46 @@ nav {
   border-width: 2px;
 }
 
+.document-context-menu {
+  position: fixed;
+  z-index: 50;
+  display: grid;
+  gap: 6px;
+  width: 238px;
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+}
+
+.document-context-title {
+  padding: 6px 8px 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-context-menu button {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 8px 10px;
+}
+
+.danger-menu-item {
+  color: #991b1b;
+  border-color: transparent;
+  background: #fff5f5;
+}
+
+.danger-menu-item:hover {
+  border-color: #fecaca;
+  background: #fee2e2;
+}
+
 .loading-spinner {
   width: 18px;
   height: 18px;

@@ -2636,16 +2636,43 @@ async def review_document_remove(req: Request):
     data = await req.json()
     source = data.get("source", "")
     delete_file = bool(data.get("deleteFile", True))
+    result, status_code = remove_document_from_store(source, delete_file=delete_file)
+    if status_code != 200:
+        return JSONResponse(result, status_code=status_code)
+    return result
+
+
+@app.post("/api/document/remove")
+async def indexed_document_remove(req: Request):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+    data = await req.json()
+    source = data.get("source", "")
+    delete_file = bool(data.get("deleteFile", True))
+    result, status_code = remove_document_from_store(source, delete_file=delete_file)
+    if status_code != 200:
+        return JSONResponse(result, status_code=status_code)
+    return result
+
+
+def remove_document_from_store(source: str, *, delete_file: bool = True) -> tuple[dict, int]:
+    if not source:
+        return {"error": "Document source is required."}, 400
+
     row = vector_store.delete_document(source)
     if not row:
-        return JSONResponse({"error": "Document not found."}, status_code=404)
+        return {"error": "Document not found."}, 404
     prune_training_files_from_state([source])
+    deleted_file = False
     if delete_file:
         target = os.path.abspath(os.path.join(TRAINING_DIR, source))
         training_root = os.path.abspath(TRAINING_DIR)
         if target.startswith(training_root + os.sep) and os.path.exists(target):
             os.remove(target)
-    return {"ok": True, "document": dict(row)}
+            deleted_file = True
+    trace_logger.info(f"🧹 Removed document from store: {source} | deleted source file: {deleted_file}")
+    return {"ok": True, "document": dict(row), "deletedFile": deleted_file}, 200
 
 
 @app.post("/api/query")

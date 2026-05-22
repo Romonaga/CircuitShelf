@@ -80,6 +80,15 @@ export interface UploadDocumentsResponse {
   };
 }
 
+export interface RemoveDocumentResponse {
+  ok: boolean;
+  document?: {
+    source_path?: string;
+    display_name?: string;
+  };
+  deletedFile: boolean;
+}
+
 export interface SourceChunk {
   index?: number | null;
   page?: number | string | null;

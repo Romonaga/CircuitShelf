@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getDocument, getDocuments, triggerIndexCheck, uploadDocuments } from "../api";
+import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getDocument, getDocuments, removeIndexedDocument, triggerIndexCheck, uploadDocuments } from "../api";
 import type { DocumentDetail, DocumentSummary, StatusPayload } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
 import { uploadResultMessage } from "../lib/uploadMessages";
 import { ErrorMessage } from "./ErrorMessage";
+import { DocumentContextMenu, type DocumentContextMenuState } from "./DocumentContextMenu";
 import { IngestStatusPanel } from "./IngestStatusPanel";
 import { DocumentPageInspector } from "./DocumentPageInspector";
 import { DocumentStatsPanel } from "./DocumentStatsPanel";
@@ -35,6 +36,8 @@ export function DocumentsView({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [detailBusy, setDetailBusy] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [contextMenu, setContextMenu] = useState<DocumentContextMenuState | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadInputKey, setUploadInputKey] = useState(0);
@@ -112,6 +115,43 @@ export function DocumentsView({
       setError(errorMessage(err, "Could not start index check"));
     } finally {
       setBusy(false);
+    }
+  }
+
+  function openDocumentContextMenu(event: MouseEvent, document: DocumentSummary) {
+    if (!isAdmin) {
+      return;
+    }
+    event.preventDefault();
+    setSelected(document.source);
+    setContextMenu({ document, x: event.clientX, y: event.clientY });
+  }
+
+  async function removeDocument(document: DocumentSummary) {
+    const displayName = document.displayName ?? document.source;
+    const confirmed = window.confirm(
+      `Remove ${displayName} from CircuitShelf?\n\nThis removes its database rows and deletes the source file from the training folder so it is not re-indexed.`
+    );
+    if (!confirmed) {
+      setContextMenu(null);
+      return;
+    }
+
+    setRemoving(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await removeIndexedDocument(document.source);
+      setMessage(`${displayName} removed from CircuitShelf${result.deletedFile ? " and deleted from training." : "."}`);
+      setContextMenu(null);
+      setDetail(null);
+      setSelectedPage(null);
+      await loadDocuments();
+      onStatusChange();
+    } catch (err) {
+      setError(errorMessage(err, "Could not remove document"));
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -196,6 +236,7 @@ export function DocumentsView({
               key={document.source}
               className={document.source === selected ? "document-row active" : "document-row"}
               onClick={() => setSelected(document.source)}
+              onContextMenu={(event) => openDocumentContextMenu(event, document)}
             >
               <span className="document-row-title">
                 {document.displayName ?? document.source}
@@ -207,6 +248,14 @@ export function DocumentsView({
             </button>
           ))}
         </div>
+        {isAdmin ? (
+          <DocumentContextMenu
+            menu={contextMenu}
+            removing={removing}
+            onClose={() => setContextMenu(null)}
+            onRemove={(document) => void removeDocument(document)}
+          />
+        ) : null}
       </div>
       <div className="chunk-panel">
         <SectionHeader
