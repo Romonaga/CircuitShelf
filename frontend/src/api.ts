@@ -8,6 +8,7 @@ import type {
   ReviewChunk,
   ReviewDocument,
   ReviewImage,
+  LogTailPayload,
   StatusPayload,
   UploadDocumentsResponse
 } from "./types";
@@ -148,6 +149,10 @@ export function getTrace(): Promise<Record<string, unknown>> {
 
 export function getStatus(): Promise<StatusPayload> {
   return requestJson<StatusPayload>("/api/status");
+}
+
+export function getStatusLogTail(lines = 200): Promise<LogTailPayload> {
+  return requestJson<LogTailPayload>(`/api/status/log-tail?lines=${encodeURIComponent(String(lines))}`);
 }
 
 export function getSettings(): Promise<{ settings: AppSetting[] }> {

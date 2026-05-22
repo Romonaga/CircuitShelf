@@ -424,6 +424,20 @@ nav {
   animation: spin 0.8s linear infinite;
 }
 
+.button-spinner {
+  width: 14px;
+  height: 14px;
+  margin-right: 7px;
+  border-color: rgba(255, 255, 255, 0.55);
+  border-top-color: currentColor;
+  vertical-align: -2px;
+}
+
+.ghost-button .button-spinner {
+  border-color: var(--line-strong);
+  border-top-color: var(--accent);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -883,6 +897,47 @@ nav {
   white-space: pre-wrap;
   font-size: 0.84rem;
   line-height: 1.5;
+}
+
+.log-tail-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.log-tail-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.log-tail-toolbar h3 {
+  margin: 0 0 4px;
+}
+
+.log-tail-toolbar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+.log-tail-window {
+  min-height: 320px;
+  max-height: 520px;
+  margin: 0;
+  padding: 12px;
+  color: #dce9ff;
+  border-radius: 8px;
+  background: #101827;
+  overflow: auto;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .document-list-panel {

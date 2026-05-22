@@ -56,6 +56,7 @@ from pinout_extractor import extract_pinout_map
 from datasheet_intelligence import build_datasheet_intelligence
 from circuit_build_cards import build_circuit_build_card
 from ingest_manifest import IngestManifest
+from log_tail import tail_text_file
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
 from db.connection import Database, database_url_from_config
 from db.datasheet_intelligence_store import DatasheetIntelligenceStore
@@ -204,6 +205,7 @@ TRAINING_DIR = config.get("TRAINING_DIR", "training")
 
 # === Stats and logging ===
 BUILD_INDEX_LOG_FILE = config.get("BUILD_INDEX_LOG_FILE")
+TRACE_LOG_FILE = config.get("TRACE_LOG_FILE", "logs/trace.log")
 TESSERACT_TEMP_MAX_AGE_SECONDS = 3600
 
 
@@ -2870,6 +2872,26 @@ async def status():
     return build_runtime_status()
 
 
+@app.get("/api/status/log-tail")
+async def status_log_tail(req: Request, lines: int = Query(200, ge=20, le=1000)):
+    _, error = require_admin_user(req)
+    if error:
+        return error
+
+    flush_trace_log()
+    tail = tail_text_file(current_trace_log_file(), max_lines=lines)
+    return {
+        "path": tail.path,
+        "exists": tail.exists,
+        "sizeBytes": tail.size_bytes,
+        "lines": tail.lines,
+        "truncated": tail.truncated,
+        "error": tail.error,
+        "lineCount": len(tail.lines),
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def mount_react_app():
     dist_dir = os.path.abspath(REACT_DIST_DIR)
     index_html = os.path.join(dist_dir, "index.html")
@@ -2894,6 +2916,14 @@ def flush_trace_log():
     for handler in trace_logger.handlers:
         if hasattr(handler, 'flush'):
             handler.flush()
+
+
+def current_trace_log_file():
+    for handler in trace_logger.handlers:
+        base_filename = getattr(handler, "baseFilename", None)
+        if base_filename:
+            return base_filename
+    return TRACE_LOG_FILE
             
 
 

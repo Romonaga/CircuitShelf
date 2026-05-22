@@ -1,9 +1,23 @@
 import type { StatusPayload } from "../types";
 import { formatNumber, formatObject } from "../lib/format";
+import { useLogTail } from "../hooks/useLogTail";
+import { LogTailPanel } from "./LogTailPanel";
 import { SectionHeader } from "./SectionHeader";
 import { Stat } from "./Stat";
 
-export function StatusView({ status, refresh }: { status: StatusPayload | null; refresh: () => void }) {
+export function StatusView({
+  status,
+  refresh,
+  isActive,
+  isAdmin
+}: {
+  status: StatusPayload | null;
+  refresh: () => void;
+  isActive: boolean;
+  isAdmin: boolean;
+}) {
+  const logTail = useLogTail(isActive && isAdmin);
+
   return (
     <section className="single-panel">
       <SectionHeader
@@ -27,6 +41,7 @@ export function StatusView({ status, refresh }: { status: StatusPayload | null; 
       <pre className="json-view">{formatObject(status?.cacheStats)}</pre>
       <h3>Ingestion</h3>
       <pre className="json-view">{formatObject(status?.ingest)}</pre>
+      {isAdmin ? <LogTailPanel tail={logTail.tail} loading={logTail.loading} error={logTail.error} onRefresh={logTail.refresh} /> : null}
     </section>
   );
 }

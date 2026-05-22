@@ -197,6 +197,17 @@ export interface StatusPayload {
   ingest?: IngestStatus;
 }
 
+export interface LogTailPayload {
+  path: string;
+  exists: boolean;
+  sizeBytes: number;
+  lines: string[];
+  truncated: boolean;
+  error?: string | null;
+  lineCount: number;
+  updatedAt: string;
+}
+
 export type SettingValueType = "text" | "integer" | "numeric" | "boolean";
 export type SettingValue = string | number | boolean;
 

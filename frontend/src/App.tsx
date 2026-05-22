@@ -74,7 +74,7 @@ export default function App() {
         <TraceView />
       </div>
       <div hidden={activeView !== "status"}>
-        <StatusView status={status} refresh={refreshStatus} />
+        <StatusView status={status} refresh={refreshStatus} isActive={activeView === "status"} isAdmin={Boolean(user?.isAdmin)} />
       </div>
       {user?.isAdmin ? (
         <div hidden={activeView !== "settings"}>
