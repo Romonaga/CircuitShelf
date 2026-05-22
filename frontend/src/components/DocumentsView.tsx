@@ -226,14 +226,6 @@ export function DocumentsView({
             </button>
           </div>
         ) : null}
-        {isAdmin ? (
-          <IngestStatusPanel
-            ingest={status?.ingest}
-            workerBudget={status?.ingestWorkerBudget}
-            pendingReview={status?.pendingReview}
-            onOpenReview={onOpenReview}
-          />
-        ) : null}
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter documents" />
         {message ? <p className="success-message">{message}</p> : null}
         <ErrorMessage message={error} />
@@ -265,6 +257,14 @@ export function DocumentsView({
         ) : null}
       </div>
       <div className="chunk-panel">
+        {isAdmin ? (
+          <IngestStatusPanel
+            ingest={status?.ingest}
+            workerBudget={status?.ingestWorkerBudget}
+            pendingReview={status?.pendingReview}
+            onOpenReview={onOpenReview}
+          />
+        ) : null}
         <SectionHeader
           title={documents.find((document) => document.source === selected)?.displayName ?? selected ?? "No document selected"}
           description={detailBusy ? "Loading document details..." : `${formatInteger(detail?.chunks.length ?? 0)} chunks | ${formatInteger(detail?.images.length ?? 0)} images`}
