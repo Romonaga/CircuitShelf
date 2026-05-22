@@ -170,7 +170,15 @@ export function ReviewView({
   return (
     <section className="view-grid docs-grid">
       <div className="document-list-panel">
-        <SectionHeader title="Review" description={busy ? "Loading..." : `${formatInteger(documents.length)} pending documents`} />
+        <SectionHeader
+          title="Review"
+          description={busy ? "Loading..." : `${formatInteger(documents.length)} pending documents`}
+          actions={
+            <button className="ghost-button" type="button" onClick={loadDocuments} disabled={busy || actionBusy}>
+              {busy ? "Refreshing..." : "Refresh"}
+            </button>
+          }
+        />
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter review queue" />
         {message ? <p className="success-message">{message}</p> : null}
         <ErrorMessage message={error} />

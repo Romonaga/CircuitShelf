@@ -37,7 +37,7 @@ function formatReason(reason?: string | null): string {
 function formatStage(stage?: string | null): string {
   const labels: Record<string, string> = {
     scanning: "Scanning training folder",
-    processing_documents: "Extracting text and images",
+    processing_documents: "Processing documents",
     embedding_chunks: "Embedding text chunks",
     persisting_chunks: "Saving text chunks",
     persisting_images: "Saving image assets",
@@ -203,7 +203,7 @@ export function IngestStatusPanel({
       {isRunning && fileRows.length ? (
         <div className="ingest-file-grid">
           <div className="ingest-file-grid-heading">
-            <span>File</span>
+            <span>File ({formatInteger(fileRows.length)})</span>
             <span>Phase</span>
             <span>Page</span>
             <span>Images</span>

@@ -427,8 +427,8 @@ def update_index_progress(*, stage=None, current_file=None, finished_file=None, 
             active_files = [name for name in active_files if name != finished_file]
             file_progress.pop(finished_file, None)
             index_status["processedFiles"] = int(index_status.get("processedFiles") or 0) + 1
-        index_status["currentFiles"] = active_files[:10]
-        index_status["fileProgress"] = {name: file_progress.get(name, {}) for name in active_files[:10]}
+        index_status["currentFiles"] = active_files
+        index_status["fileProgress"] = {name: file_progress.get(name, {}) for name in active_files}
         return dict(index_status)
 
 
@@ -672,12 +672,13 @@ def persist_db_image_state(file_records, target_state=None, rel_paths=None, prog
     image_ids = target_state.get_image_id_list()
     image_payload = target_state.get_image_store()
     total_images = len(image_payload)
-    update_index_detail(
-        savedImages=0,
-        totalImagesToSave=total_images,
-        skippedImages=0,
-        indexedImageTexts=len(image_ids),
-    )
+    if not progress_file:
+        update_index_detail(
+            savedImages=0,
+            totalImagesToSave=total_images,
+            skippedImages=0,
+            indexedImageTexts=len(image_ids),
+        )
     if progress_file:
         update_index_progress(
             current_file=progress_file,
@@ -690,7 +691,8 @@ def persist_db_image_state(file_records, target_state=None, rel_paths=None, prog
         )
     image_embeddings = {}
     if image_ids:
-        update_index_detail(imageEmbeddingTexts=0, imageEmbeddingTotal=len(image_ids))
+        if not progress_file:
+            update_index_detail(imageEmbeddingTexts=0, imageEmbeddingTotal=len(image_ids))
         if progress_file:
             update_index_progress(
                 current_file=progress_file,
@@ -706,7 +708,8 @@ def persist_db_image_state(file_records, target_state=None, rel_paths=None, prog
             convert_to_numpy=True,
         ).astype("float32")
         image_embeddings = {key: encoded[idx] for idx, key in enumerate(image_ids)}
-        update_index_detail(imageEmbeddingTexts=len(image_ids), imageEmbeddingTotal=len(image_ids))
+        if not progress_file:
+            update_index_detail(imageEmbeddingTexts=len(image_ids), imageEmbeddingTotal=len(image_ids))
         if progress_file:
             update_index_progress(
                 current_file=progress_file,
@@ -717,11 +720,6 @@ def persist_db_image_state(file_records, target_state=None, rel_paths=None, prog
             )
 
     def report_image_save_progress(saved_images, total_images, skipped_images=0, current_image=None):
-        update_index_detail(
-            savedImages=saved_images,
-            totalImagesToSave=total_images,
-            skippedImages=skipped_images,
-        )
         if progress_file:
             update_index_progress(
                 current_file=progress_file,
@@ -732,6 +730,12 @@ def persist_db_image_state(file_records, target_state=None, rel_paths=None, prog
                     "skippedImages": skipped_images,
                     "currentImage": current_image,
                 },
+            )
+        else:
+            update_index_detail(
+                savedImages=saved_images,
+                totalImagesToSave=total_images,
+                skippedImages=skipped_images,
             )
 
     payload = {
@@ -1430,16 +1434,9 @@ def persist_incremental_document(extracted, current_manifest):
     raw_image_counts = count_state_images_by_document(ingested_state.get_image_store().keys(), [source])
     raw_ocr_image_counts = count_state_images_by_document(ingested_state.get_image_page_text().keys(), [source])
     update_index_progress(
-        stage="embedding_chunks",
         current_file=source,
         file_details={
             "documentPhase": "Embedding text",
-            "rawChunks": sum(raw_chunk_counts.values()),
-            "extractedImages": sum(raw_image_counts.values()),
-            "ocrImageTexts": sum(raw_ocr_image_counts.values()),
-        },
-        details={
-            "currentDocument": source,
             "rawChunks": sum(raw_chunk_counts.values()),
             "extractedImages": sum(raw_image_counts.values()),
             "ocrImageTexts": sum(raw_ocr_image_counts.values()),
@@ -1448,21 +1445,12 @@ def persist_incremental_document(extracted, current_manifest):
     builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
     build_result = builder.build()
     update_index_progress(
-        stage="persisting_chunks",
         current_file=source,
         file_details={
             "documentPhase": "Saving text chunks",
             "chunks": build_result.chunks,
             "droppedChunks": build_result.dropped_chunks,
             "indexedImageTexts": build_result.images,
-        },
-        details={
-            "currentDocument": source,
-            "chunks": build_result.chunks,
-            "droppedChunks": build_result.dropped_chunks,
-            "extractedImages": sum(raw_image_counts.values()),
-            "indexedImageTexts": build_result.images,
-            "ocrImageTexts": sum(raw_ocr_image_counts.values()),
         },
     )
     document_stats = collect_document_ingest_stats(
@@ -1483,17 +1471,9 @@ def persist_incremental_document(extracted, current_manifest):
         document_stats=document_stats,
     )
     update_index_progress(
-        stage="persisting_images",
         current_file=source,
         file_details={
             "documentPhase": "Saving images",
-            "extractedImages": sum(raw_image_counts.values()),
-            "indexedImageTexts": build_result.images,
-        },
-        details={
-            "currentDocument": source,
-            "chunks": build_result.chunks,
-            "droppedChunks": build_result.dropped_chunks,
             "extractedImages": sum(raw_image_counts.values()),
             "indexedImageTexts": build_result.images,
         },

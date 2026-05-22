@@ -1467,11 +1467,12 @@ nav {
 }
 
 .ingest-file-grid {
+  max-height: 260px;
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .ingest-file-grid-heading,
@@ -1484,7 +1485,12 @@ nav {
 }
 
 .ingest-file-grid-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 4px;
   color: var(--muted);
+  background: #ffffff;
   font-size: 0.64rem;
   font-weight: 800;
   text-transform: uppercase;
