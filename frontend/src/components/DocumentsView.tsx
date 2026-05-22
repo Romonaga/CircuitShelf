@@ -78,12 +78,6 @@ export function DocumentsView({
     }
   }, [isActive, loadDocuments, refreshSignal]);
 
-  useEffect(() => {
-    if (!status?.ingest?.running && message.toLowerCase().includes("started")) {
-      setMessage("");
-    }
-  }, [message, status?.ingest?.running]);
-
   async function submitUpload() {
     if (!uploadFiles.length) {
       return;

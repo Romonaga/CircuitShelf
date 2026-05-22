@@ -1103,6 +1103,7 @@ nav {
 .ingest-status-grid,
 .ingest-change-list,
 .ingest-current-files,
+.ingest-note,
 .ingest-error {
   color: var(--muted);
   font-size: 0.82rem;
@@ -1148,6 +1149,10 @@ nav {
   border-radius: 999px;
   background: var(--panel-soft);
   text-align: center;
+}
+
+.ingest-note {
+  margin: 0;
 }
 
 .ingest-error {

@@ -234,6 +234,7 @@ export interface IngestStatus {
     addedFiles?: string[];
     modifiedFiles?: string[];
     removedFiles?: string[];
+    unchangedFiles?: string[];
   } | null;
   nextCheckAt?: string | null;
   details?: Record<string, string | number | boolean | null | undefined>;

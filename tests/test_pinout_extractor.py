@@ -32,7 +32,74 @@ class PinoutExtractorTests(unittest.TestCase):
 
         self.assertEqual(len(pinout["pins"]), 2)
         self.assertEqual(pinout["pins"][0]["function"], "VCC")
-        self.assertEqual(pinout["pins"][1]["function"], "GND")
+        self.assertEqual(pinout["pins"][1]["function"], "Ground")
+
+    def test_extracts_datasheet_pin_description_table(self):
+        chunks = [
+            """PIN CONFIGURATIONS
+PIN DESCRIPTIONS
+DEVICE
+ANALOG/
+DIGITAL
+INPUT/
+PIN #
+ADS1113
+ADS1114
+ADS1115
+OUTPUT
+DESCRIPTION
+1
+ADDR
+ADDR
+ADDR
+Digital Input
+I2C slave address select
+2
+NC(1)
+ALERT/RDY
+ALERT/RDY
+Digital Output
+Digital comparator output or conversion ready
+3
+GND
+GND
+GND
+Analog
+Ground
+8
+VDD
+VDD
+VDD
+Analog
+Power supply: 2.0V to 5.5V
+9
+SDA
+SDA
+SDA
+Digital I/O
+Serial data
+10
+SCL
+SCL
+SCL
+Digital Input
+Serial clock input"""
+        ]
+        metadata = [{"source": "ads1115.pdf", "page": 4}]
+
+        pinout = extract_pinout_map(chunks, metadata, "ads1115.pdf")
+
+        self.assertEqual(
+            [(pin["pin"], pin["function"], pin["page"]) for pin in pinout["pins"]],
+            [
+                (1, "ADDR", 4),
+                (2, "ALERT/RDY", 4),
+                (3, "Ground", 4),
+                (8, "VDD", 4),
+                (9, "SDA", 4),
+                (10, "SCL", 4),
+            ],
+        )
 
 
 if __name__ == "__main__":

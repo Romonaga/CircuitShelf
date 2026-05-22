@@ -80,6 +80,48 @@ class DatasheetIntelligenceTests(unittest.TestCase):
 
         self.assertEqual(card["componentName"], "4N35")
 
+    def test_ads_datasheet_is_detected_as_adc_with_pinout(self):
+        chunks = [
+            """ADS1115
+16-Bit Analog-to-Digital Converter
+PIN CONFIGURATIONS
+PIN DESCRIPTIONS
+PIN #
+ADS1113
+ADS1114
+ADS1115
+OUTPUT
+DESCRIPTION
+1
+ADDR
+ADDR
+ADDR
+Digital Input
+I2C slave address select
+8
+VDD
+VDD
+VDD
+Analog
+Power supply: 2.0V to 5.5V
+10
+SCL
+SCL
+SCL
+Digital Input
+Serial clock input"""
+        ]
+        metadata = [{"source": "ads1115.pdf", "parent_source": "ads1115.pdf", "page": 4}]
+
+        intelligence = build_datasheet_intelligence(chunks, metadata, "ads1115.pdf", "ads1115.pdf")
+
+        self.assertEqual(intelligence["componentName"], "ADS1115")
+        self.assertEqual(intelligence["componentType"], "analog-to-digital converter")
+        self.assertEqual(
+            [(pin["pin"], pin["function"]) for pin in intelligence["pinout"]["pins"]],
+            [(1, "ADDR"), (8, "VDD"), (10, "SCL")],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

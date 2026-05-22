@@ -11,6 +11,7 @@ from pinout_extractor import extract_pinout_map
 
 
 PART_PATTERNS = [
+    re.compile(r"\bADS\d{3,5}[A-Z0-9]*\b", re.IGNORECASE),
     re.compile(r"\b(?:NE|LM|TL|SN|ATmega|ATtiny|PC|TLP|CD|74HC|74LS|2N|BC|IRF|IRL)\s?-?[A-Z0-9]{2,8}\b", re.IGNORECASE),
     re.compile(r"\bL\d{2,5}[A-Z0-9]*\b", re.IGNORECASE),
     re.compile(r"\b4N(?:25|26|27|28|32|33|35|36|37)\b", re.IGNORECASE),
@@ -108,7 +109,8 @@ def _detect_component_type(text: str, component_name: str) -> str:
     rules = [
         ("optocoupler", ("optocoupler", "opto-coupler", "phototransistor", "isolation")),
         ("timer", ("555", "timer", "monostable", "astable")),
-        ("microcontroller", ("microcontroller", "gpio", "adc", "pwm", "arduino")),
+        ("analog-to-digital converter", ("adc", "analog-to-digital", "a/d converter", "converter", "conversion register")),
+        ("microcontroller", ("microcontroller", "gpio", "pwm", "arduino")),
         ("voltage regulator", ("voltage regulator", "linear regulator", "ldo")),
         ("op amp", ("operational amplifier", "op amp", "op-amp")),
         ("transistor", ("transistor", "collector", "emitter", "base")),

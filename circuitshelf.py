@@ -398,6 +398,7 @@ def file_changes_payload(changes):
         "addedFiles": changes.added[:20],
         "modifiedFiles": changes.modified[:20],
         "removedFiles": changes.removed[:20],
+        "unchangedFiles": changes.unchanged[:20],
     }
 
 
@@ -2183,6 +2184,11 @@ def get_or_build_datasheet_intelligence(doc_name):
     rel_path = document_intelligence_rel_path(doc_name)
     stored = intelligence_store.get_for_source(rel_path)
     if stored_intelligence_is_usable(stored):
+        if not stored.get("pinout", {}).get("pins"):
+            refreshed = build_datasheet_intelligence_for_document(doc_name)
+            if refreshed.get("pinout", {}).get("pins"):
+                intelligence_store.upsert(rel_path, refreshed)
+                return refreshed
         return stored
 
     intelligence = build_datasheet_intelligence_for_document(doc_name)

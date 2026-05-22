@@ -2,6 +2,15 @@ import type { IngestStatus } from "../types";
 import { formatInteger } from "../lib/format";
 import { LoadingSpinner } from "./LoadingSpinner";
 
+function fileListSummary(files?: string[]): string {
+  if (!files?.length) {
+    return "";
+  }
+  const visible = files.slice(0, 3).join(", ");
+  const hidden = files.length - 3;
+  return hidden > 0 ? `${visible}, +${formatInteger(hidden)} more` : visible;
+}
+
 function formatDateTime(value?: string | null): string {
   if (!value) {
     return "n/a";
@@ -128,12 +137,17 @@ export function IngestStatusPanel({
         </div>
       ) : null}
       {changes ? (
-        <div className="ingest-change-list">
-          <span>Added {formatInteger(changes.added)}</span>
-          <span>Modified {formatInteger(changes.modified)}</span>
-          <span>Removed {formatInteger(changes.removed)}</span>
-          <span>Unchanged {formatInteger(changes.unchanged)}</span>
-        </div>
+        <>
+          <div className="ingest-change-list">
+            <span>Added {formatInteger(changes.added)}</span>
+            <span>Modified {formatInteger(changes.modified)}</span>
+            <span>Removed {formatInteger(changes.removed)}</span>
+            <span>Unchanged {formatInteger(changes.unchanged)}</span>
+          </div>
+          {changes.unchangedFiles?.length ? (
+            <p className="ingest-note">Skipped unchanged: {fileListSummary(changes.unchangedFiles)}</p>
+          ) : null}
+        </>
       ) : null}
       {hasError ? <p className="ingest-error">{ingest.lastError}</p> : null}
     </div>
