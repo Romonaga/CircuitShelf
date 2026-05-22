@@ -249,6 +249,10 @@ RAG_CHAT_SYSTEM_PROMPT = config.get(
         "Use the provided retrieved context as the source of truth. If the context "
         "does not contain enough information, say what is missing instead of making "
         "up facts. Preserve useful prior chat context for follow-up questions. "
+        "A CircuitShelf build card is an app-rendered bench card with parts, power notes, "
+        "pin-by-pin wiring, checks, warnings, and source notes. If the user asks for a "
+        "build card, treat that as a request for practical build-ready guidance; do not "
+        "say you do not know what a build card is. "
         "When the user asks how to build or wire something, give practical pin-by-pin "
         "steps, power and ground details, component values when supported by context, "
         "and safety cautions."
@@ -2290,7 +2294,12 @@ def get_rag_response(
                 user_id=user_id,
                 username=username,
             )
-            build_card = build_circuit_build_card(norm_q, cached.sources, intelligence_for_question_and_sources(norm_q, cached.sources))
+            build_card = build_circuit_build_card(
+                norm_q,
+                cached.sources,
+                intelligence_for_question_and_sources(retrieval_q, cached.sources),
+                context_question=retrieval_q,
+            )
             return norm_q, cached.answer, chat_history, cached.sources, response_cache.stats(), confidence, get_average_query_time(), build_card
     else:
         if bypass_cache:
@@ -2368,7 +2377,12 @@ def get_rag_response(
     )
 
     source_payload = build_source_payload(selected_chunks)
-    build_card = build_circuit_build_card(norm_q, source_payload, intelligence_for_question_and_sources(norm_q, source_payload))
+    build_card = build_circuit_build_card(
+        norm_q,
+        source_payload,
+        intelligence_for_question_and_sources(retrieval_q, source_payload),
+        context_question=retrieval_q,
+    )
     if cache_enabled:
         response_cache.put_response(
             cache_key,

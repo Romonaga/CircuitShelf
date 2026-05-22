@@ -30,6 +30,8 @@ class DatasheetIntelligenceTests(unittest.TestCase):
     def test_specific_build_request_triggers_build_card(self):
         self.assertTrue(should_build_card("build a 555 timer blinking LED"))
         self.assertTrue(should_build_card("wire a 4n35 to an arduino"))
+        self.assertTrue(should_build_card("give me a build card"))
+        self.assertTrue(should_build_card("make a beginner 555 project and include a build card"))
 
     def test_extracts_component_facts_and_pinout(self):
         chunks = [
@@ -142,6 +144,44 @@ class DatasheetIntelligenceTests(unittest.TestCase):
             },
         )
 
+        self.assertEqual(card["componentName"], "NE555")
+
+    def test_followup_build_card_uses_conversation_context_for_component(self):
+        mosfet = {
+            "source": "training/mosfet.pdf",
+            "displayName": "mosfet.pdf",
+            "componentName": "MOSFET",
+            "componentType": "transistor",
+            "summary": "",
+            "confidence": 0.7,
+            "facts": [],
+            "pinout": {"pins": []},
+        }
+        timer = {
+            "source": "training/ne555.pdf",
+            "displayName": "ne555.pdf",
+            "componentName": "NE555",
+            "componentType": "timer",
+            "summary": "NE555 timer.",
+            "confidence": 0.9,
+            "facts": [],
+            "pinout": {"pins": [{"pin": 1, "function": "GND", "page": 2}]},
+        }
+
+        card = build_circuit_build_card(
+            "give me a build card",
+            [
+                {"source": "training/mosfet.pdf"},
+                {"source": "training/ne555.pdf"},
+            ],
+            {
+                "training/mosfet.pdf": mosfet,
+                "training/ne555.pdf": timer,
+            },
+            context_question="Previous user question: what is a good beginner project with a 555 timer?\nCurrent user question: give me a build card",
+        )
+
+        self.assertIsNotNone(card)
         self.assertEqual(card["componentName"], "NE555")
 
     def test_ads_datasheet_is_detected_as_adc_with_pinout(self):

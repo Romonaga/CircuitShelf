@@ -11,6 +11,10 @@ DIRECT_BUILD_INTENT_PATTERN = re.compile(
     r"\b(wire|wiring|connect|hook\s*up|breadboard|pinout|schematic)\b",
     re.IGNORECASE,
 )
+BUILD_CARD_REQUEST_PATTERN = re.compile(
+    r"\b(build|bench|wiring|assembly|project)\s*card\b|\bcard\s+for\b",
+    re.IGNORECASE,
+)
 BUILD_ACTION_PATTERN = re.compile(r"\b(build|make|create|assemble)\b", re.IGNORECASE)
 BUILD_CONTEXT_PATTERN = re.compile(
     r"\b("
@@ -31,6 +35,8 @@ PROJECT_RECOMMENDATION_PATTERN = re.compile(
 
 def should_build_card(question: str) -> bool:
     text = question or ""
+    if BUILD_CARD_REQUEST_PATTERN.search(text):
+        return True
     if PROJECT_RECOMMENDATION_PATTERN.search(text):
         return False
     if DIRECT_BUILD_INTENT_PATTERN.search(text):
@@ -38,17 +44,24 @@ def should_build_card(question: str) -> bool:
     return bool(BUILD_ACTION_PATTERN.search(text) and BUILD_CONTEXT_PATTERN.search(text))
 
 
-def build_circuit_build_card(question: str, source_payload: list[dict], intelligence_by_source: dict[str, dict]) -> dict | None:
+def build_circuit_build_card(
+    question: str,
+    source_payload: list[dict],
+    intelligence_by_source: dict[str, dict],
+    *,
+    context_question: str | None = None,
+) -> dict | None:
     if not should_build_card(question):
         return None
 
-    intelligence = _first_intelligence(question, source_payload, intelligence_by_source)
+    ranking_question = context_question or question
+    intelligence = _first_intelligence(ranking_question, source_payload, intelligence_by_source)
     if not intelligence:
         return None
 
     component = intelligence.get("componentName") or intelligence.get("displayName") or "component"
     component_type = intelligence.get("componentType") or "component"
-    lower = f"{question} {component} {component_type}".lower()
+    lower = f"{ranking_question} {component} {component_type}".lower()
     pins = intelligence.get("pinout", {}).get("pins", [])
     wiring = _specific_wiring(lower, pins) or _pinout_wiring(pins)
     facts = intelligence.get("facts", [])

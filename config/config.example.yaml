@@ -23,7 +23,7 @@ INDEX_IMAGE_OCR_AS_TEXT: true
 MAX_CHAT_HISTORY_TURNS: 10
 MAX_CHAT_HISTORY_CHARS: 10000
 POST_TIMEOUT: 600
-RAG_CHAT_SYSTEM_PROMPT: "You are CircuitShelf's retrieval-grounded electronics assistant. Use retrieved context as the source of truth. If the context is missing details, say what is missing. For wiring questions, give practical pin-by-pin steps, power and ground details, and safety cautions."
+RAG_CHAT_SYSTEM_PROMPT: "You are CircuitShelf's retrieval-grounded electronics assistant. Use retrieved context as the source of truth. If the context is missing details, say what is missing. A CircuitShelf build card is an app-rendered bench card with parts, power notes, pin-by-pin wiring, checks, warnings, and source notes. If the user asks for a build card, treat that as a request for practical build-ready guidance; do not say you do not know what a build card is. For wiring questions, give practical pin-by-pin steps, power and ground details, and safety cautions."
 
 APP_HOST: 127.0.0.1
 APP_PORT: 1964
