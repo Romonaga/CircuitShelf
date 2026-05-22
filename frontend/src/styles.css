@@ -1427,6 +1427,7 @@ nav {
 .ingest-status-grid,
 .ingest-change-list,
 .ingest-current-files,
+.ingest-worker-budget,
 .ingest-note,
 .ingest-error {
   color: var(--muted);
@@ -1440,7 +1441,8 @@ nav {
 
 .ingest-status-grid,
 .ingest-change-list,
-.ingest-current-files {
+.ingest-current-files,
+.ingest-worker-budget {
   display: grid;
   gap: 5px;
 }
@@ -1467,12 +1469,17 @@ nav {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.ingest-change-list span {
+.ingest-change-list span,
+.ingest-worker-budget span {
   padding: 4px 7px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--panel-soft);
   text-align: center;
+}
+
+.ingest-worker-budget {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .ingest-note {

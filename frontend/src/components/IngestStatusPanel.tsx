@@ -1,4 +1,4 @@
-import type { IngestStatus } from "../types";
+import type { IngestStatus, IngestWorkerBudget } from "../types";
 import { formatInteger } from "../lib/format";
 import { LoadingSpinner } from "./LoadingSpinner";
 
@@ -88,10 +88,12 @@ function formatDetailValue(value: string | number | boolean | null | undefined):
 
 export function IngestStatusPanel({
   ingest,
+  workerBudget,
   pendingReview,
   onOpenReview
 }: {
   ingest?: IngestStatus | null;
+  workerBudget?: IngestWorkerBudget | null;
   pendingReview?: number;
   onOpenReview?: () => void;
 }) {
@@ -133,6 +135,14 @@ export function IngestStatusPanel({
         <span>Result: {ingest.lastResult || "waiting"}</span>
         <span>Next check: {formatDateTime(ingest.nextCheckAt)}</span>
       </div>
+      {workerBudget ? (
+        <div className="ingest-worker-budget">
+          <span>Cores {formatInteger(workerBudget.cpuCores)}</span>
+          <span>Reserved {formatInteger(workerBudget.reservedCores)}</span>
+          <span>Usable {formatInteger(workerBudget.usableCores)}</span>
+          <span>Active workers {formatInteger(workerBudget.activeDocumentWorkers)}</span>
+        </div>
+      ) : null}
       {isRunning && currentFiles.length ? (
         <div className="ingest-current-files">
           <strong>Processing</strong>

@@ -226,7 +226,14 @@ export function DocumentsView({
             </button>
           </div>
         ) : null}
-        {isAdmin ? <IngestStatusPanel ingest={status?.ingest} pendingReview={status?.pendingReview} onOpenReview={onOpenReview} /> : null}
+        {isAdmin ? (
+          <IngestStatusPanel
+            ingest={status?.ingest}
+            workerBudget={status?.ingestWorkerBudget}
+            pendingReview={status?.pendingReview}
+            onOpenReview={onOpenReview}
+          />
+        ) : null}
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter documents" />
         {message ? <p className="success-message">{message}</p> : null}
         <ErrorMessage message={error} />

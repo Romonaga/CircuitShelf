@@ -292,13 +292,15 @@ export interface StatusPayload {
   imageEmbeddings: number;
   pendingReview?: number;
   cacheStats: unknown;
-  ingestWorkerBudget?: {
-    cpuCores: number;
-    reservedCores: number;
-    usableCores: number;
-    activeDocumentWorkers: number;
-  };
+  ingestWorkerBudget?: IngestWorkerBudget;
   ingest?: IngestStatus;
+}
+
+export interface IngestWorkerBudget {
+  cpuCores: number;
+  reservedCores: number;
+  usableCores: number;
+  activeDocumentWorkers: number;
 }
 
 export interface LogTailPayload {
