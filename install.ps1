@@ -170,7 +170,7 @@ else {
     Write-Info "Keeping existing $ConfigFile"
 }
 
-foreach ($Directory in @("training", "data", "cache", "logs", "extracted_images", "trainingdata")) {
+foreach ($Directory in @("training", "data", "cache", "logs", "trainingdata")) {
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
 }
 

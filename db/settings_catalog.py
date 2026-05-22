@@ -91,7 +91,6 @@ SETTING_UI = {
     "LRU_CACHE_SIZE": ("retrieval", "Response cache size", "Maximum number of cached query responses kept by the runtime cache.", True),
     "USE_MULTITHREAD_OCR": ("ocr", "Parallel OCR", "Run OCR work with multiple threads during ingestion.", False),
     "INDEX_IMAGE_OCR_AS_TEXT": ("ocr", "Index OCR text", "Treat useful image OCR output as searchable text.", False),
-    "SAVE_EXTRACTED_IMAGES": ("ocr", "Save extracted images", "Write extracted document images to disk while indexing.", True),
     "TESSERACT_CMD": ("ocr", "Tesseract command", "Path to the Tesseract executable.", True),
     "MAX_OCR_THREADS": ("ocr", "OCR thread limit", "Maximum OCR threads used when parallel OCR is enabled.", True),
     "OCR_INDEX_TEXT_MIN_CHARS": ("ocr", "OCR index minimum characters", "Minimum useful OCR text length before image text is indexed.", True),

@@ -15,6 +15,7 @@ import time
 import base64
 import zipfile
 import uuid
+import tempfile
 import fitz  # PyMuPDF
 import pytesseract
 import nltk
@@ -164,7 +165,6 @@ if os.name == 'nt':
 
 
 # === System Configuration ===
-SAVE_EXTRACTED_IMAGES = config.get("SAVE_EXTRACTED_IMAGES", False)
 INDEX_IMAGE_OCR_AS_TEXT = config.get("INDEX_IMAGE_OCR_AS_TEXT", False)
 OCR_INDEX_TEXT_MIN_CHARS = config.get("OCR_INDEX_TEXT_MIN_CHARS", 80)
 USE_MULTITHREAD_OCR = config.get("USE_MULTITHREAD_OCR", False)
@@ -187,12 +187,12 @@ MD_EXT = config.get("MD_EXT")
 
 # === Directory Info ===
 PROMPT_DIR = config.get("PROMPT_DIR", "prompts")
-EXTRACTED_IMAGES_DIR = config.get("EXTRACTED_IMAGES_DIR", "extracted_images")
 TRAINING_DIR = config.get("TRAINING_DIR", "training")
 
 
 # === Stats and logging ===
 BUILD_INDEX_LOG_FILE = config.get("BUILD_INDEX_LOG_FILE")
+TESSERACT_TEMP_MAX_AGE_SECONDS = 3600
 
 
 # === LLM model and training values ===
@@ -286,6 +286,42 @@ def build_ingest_manifest():
         excluded_dirs=config.get("TRAINING_EXCLUDE_DIRS", []),
         hash_files=config.get("INGEST_HASH_FILES", False),
     )
+
+
+def cleanup_stale_tesseract_temp_files(max_age_seconds=TESSERACT_TEMP_MAX_AGE_SECONDS):
+    temp_dir = tempfile.gettempdir()
+    now = time.time()
+    removed = 0
+    failures = 0
+
+    try:
+        names = os.listdir(temp_dir)
+    except OSError as exc:
+        trace_logger.warning(f"Could not inspect temp directory for stale Tesseract files: {exc}")
+        return {"removed": 0, "failures": 1}
+
+    for name in names:
+        if not name.startswith("tess_"):
+            continue
+
+        path = os.path.join(temp_dir, name)
+        try:
+            if not os.path.isfile(path):
+                continue
+            age_seconds = now - os.path.getmtime(path)
+            if age_seconds < max_age_seconds:
+                continue
+            os.remove(path)
+            removed += 1
+        except OSError as exc:
+            failures += 1
+            trace_logger.debug(f"Could not remove stale Tesseract temp file {path}: {exc}")
+
+    if removed or failures:
+        trace_logger.info(
+            f"Cleaned stale Tesseract temp files. Removed: {removed}, failures: {failures}"
+        )
+    return {"removed": removed, "failures": failures}
 
 
 def utc_now_iso():
@@ -614,51 +650,11 @@ def add_pdf_rendered_pages(path, target_state):
         )
         target_state.add_image_caption(rendered_page.image_key, rendered_page.caption)
         target_state.add_image_page_text(rendered_page.image_key, rendered_page.searchable_text)
-        if SAVE_EXTRACTED_IMAGES:
-            _ = save_image_text(
-                rendered_page.image_bytes,
-                rendered_page.searchable_text,
-                rendered_page.image_key,
-                EXTRACTED_IMAGES_DIR,
-            )
 
     if rendered_pages:
         trace_logger.info(f"🖼️ Rendered {len(rendered_pages)} vector-heavy PDF pages for {os.path.basename(path)}")
     return len(rendered_pages)
 
-
-@trace_timer("save_image_text")
-def save_image_text(image_data, image_text, base_name, output_dir, img_extension="png", txt_extension="txt") -> str:
-   
-    img_file_name = ""
-    txt_file_name = ""
-
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    try:
-
-        img_file_name = f"{base_name}.{img_extension}"
-        img_file_path = os.path.join(output_dir, img_file_name)
-        with open(img_file_path, "wb") as img_file:
-            img_file.write(image_data)
-            trace_logger.debug(f"✅ Saved image: {img_file_path}")
-
-    except Exception as e:
-        trace_logger.warning(f"❌ Failed to save: {img_file_name}  image to Dir: {output_dir} Error: {e}")
-        
-    try:
-
-        txt_file_name = f"{base_name}.{txt_extension}"
-        txt_file_path = os.path.join(output_dir, txt_file_name)
-        with open(txt_file_path, "w", encoding="utf-8") as txt_file:
-            txt_file.write(image_text)
-            trace_logger.debug(f"✅ Saved text: {txt_file_path}")
-
-    except Exception as e:
-        trace_logger.warning(f"❌ Failed to save: {txt_file_name}  image to Dir: {output_dir} Error: {e}")
-    
-    return img_file_name
 
 @trace_timer("load_pdf_text")
 def load_pdf_text(path, target_state=None):
@@ -709,10 +705,6 @@ def load_pdf_text(path, target_state=None):
 
         target_state.add_image_store(img_name, base64.b64encode(web_image_bytes).decode("utf-8"))
         target_state.add_image_caption(img_name, f"Image from {os.path.basename(path)}, page {page_num+1}")
-
-        # Save the image using the save_image helper
-        if SAVE_EXTRACTED_IMAGES:
-            _ = save_image_text(web_image_bytes, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
 
         target_state.add_image_page_text(img_name, ocr_text)
         if INDEX_IMAGE_OCR_AS_TEXT and len(ocr_text) >= OCR_INDEX_TEXT_MIN_CHARS:
@@ -785,9 +777,6 @@ def extract_images_from_docx_textboxes(path):
                             state.add_image_caption(img_name, f"Textbox image in {base_doc}")
                             state.add_image_page_text(img_name, ocr_text)
 
-                            if SAVE_EXTRACTED_IMAGES:
-                                _ = save_image_text(web_img_data, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
-
                             score = ocr_result["score"]
                             confidence = ocr_result["confidence"]
                             
@@ -830,11 +819,6 @@ def extract_images_from_docx_textboxes(path):
     except Exception as e:
         trace_logger.warning(f"❌ Failed to extract DOCX textbox images from {path}: {e}")
         return [], []
-    
-def encode_image_to_base64(image_path):
-    with open(image_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode("utf-8")
-
 def extract_page_number(s):
     match = re.search(r'_page(\d+)', s)
     return int(match.group(1)) if match else 0
@@ -944,10 +928,6 @@ def process_image_file(fpath, state, trace_logger, chunker, token_utils=None):
         state.add_image_id(img_name)
 
         trace_logger.info(f"🧠 OCR accepted for {img_name}: {len(ocr_text)} chars | score: {score:.2f}{format_confidence(confidence)}")
-
-        # Save OCR text
-        if SAVE_EXTRACTED_IMAGES:
-            save_image_text(web_img_data, ocr_text, img_name, EXTRACTED_IMAGES_DIR)
 
         # Chunk OCR text
         use_adaptive = config.get("USE_ADAPTIVE_CHUNKING", False)
@@ -1321,6 +1301,7 @@ def check_for_training_changes(reason="watch"):
             details={},
         )
     finally:
+        cleanup_stale_tesseract_temp_files()
         INDEX_JOB_LOCK.release()
 
 
@@ -2827,6 +2808,7 @@ if __name__ == "__main__":
     app_host = config.get("APP_HOST", config.get("API_HOST", "127.0.0.1"))
     app_port = config.get("APP_PORT", config.get("API_PORT", 1964))
 
+    cleanup_stale_tesseract_temp_files()
     get_or_build_index()
 
     mount_react_app()

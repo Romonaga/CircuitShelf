@@ -155,7 +155,7 @@ else
   info "Keeping existing $CONFIG_FILE"
 fi
 
-mkdir -p training data cache logs extracted_images trainingdata
+mkdir -p training data cache logs trainingdata
 
 current_database_url="$(read_config_value DATABASE_URL)"
 if [[ -n "${DATABASE_URL:-}" ]]; then

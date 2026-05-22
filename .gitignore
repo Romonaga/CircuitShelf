@@ -22,7 +22,6 @@ cache/
 data/
 rew_data/
 logs/
-extracted_images/
 trainingdata/
 complexity_analysis.csv
 
