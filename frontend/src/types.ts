@@ -5,6 +5,7 @@ export interface SessionUser {
   username: string;
   isAdmin: boolean;
   token: string;
+  lastActivityAt?: number;
 }
 
 export interface AppConfig {
@@ -15,6 +16,7 @@ export interface AppConfig {
   retrievalStrategies: RetrievalStrategy[];
   statusPollIntervalSeconds: number;
   activeStatusPollIntervalSeconds: number;
+  sessionTimeoutSeconds: number;
   defaults: QueryOptions;
 }
 

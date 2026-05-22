@@ -97,7 +97,7 @@ class UserStore:
             conn.execute(load_query("user_sessions_insert.sql"), (user.username, token_hash, int(ttl_seconds)))
         return UserSession(token=token, username=user.username, is_admin=user.is_admin)
 
-    def get_session(self, token: str) -> AuthenticatedUser | None:
+    def get_session(self, token: str, *, ttl_seconds: int | None = None) -> AuthenticatedUser | None:
         if not token:
             return None
         token_hash = self._token_hash(token)
@@ -106,7 +106,9 @@ class UserStore:
                 row = conn.execute(load_query("user_sessions_find.sql"), (token_hash,)).fetchone()
                 if not row:
                     return None
-                conn.execute(load_query("user_sessions_touch.sql"), (token_hash,))
+                ttl = int(ttl_seconds or 0)
+                if ttl > 0:
+                    conn.execute(load_query("user_sessions_touch.sql"), (ttl, token_hash))
             return AuthenticatedUser(username=str(row["username"]), is_admin=bool(row["is_admin"]))
         except Exception as exc:
             if self.logger:

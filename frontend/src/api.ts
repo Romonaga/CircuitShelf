@@ -37,6 +37,9 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok || data.error) {
+    if (response.status === 401) {
+      window.dispatchEvent(new Event("circuitshelf-auth-expired"));
+    }
     throw new Error(data.error || `Request failed with status ${response.status}`);
   }
   return data as T;

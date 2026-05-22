@@ -88,6 +88,7 @@ for prompt_key, prompt_path in prompt_files.items():
                 prompt_seeded += 1
 settings_store.seed_setting("STATUS_POLL_INTERVAL_SECONDS", 15, "Browser status refresh interval while indexing is idle.")
 settings_store.seed_setting("STATUS_POLL_ACTIVE_INTERVAL_SECONDS", 3, "Browser status refresh interval while indexing is running.")
+settings_store.seed_setting("SESSION_TIMEOUT_SECONDS", 28800, "Seconds of idle time before a browser login session expires.")
 settings_store.seed_setting("INGEST_WATCH_INTERVAL_SECONDS", 300, "Seconds between automatic document-change checks.")
 settings_store.seed_setting("PDF_RENDER_VECTOR_PAGES", True, "Render vector-heavy PDF pages as searchable images.")
 settings_store.seed_setting("PDF_RENDER_MAX_PAGES_PER_DOC", 8, "Maximum rendered visual PDF pages stored per document.")
@@ -2073,8 +2074,12 @@ def bearer_token_from_request(req: Request) -> str:
     return ""
 
 
+def session_timeout_seconds() -> int:
+    return max(60, int(config.get("SESSION_TIMEOUT_SECONDS", config.get("SESSION_TTL_SECONDS", 28800))))
+
+
 def require_admin_user(req: Request):
-    user = user_store.get_session(bearer_token_from_request(req))
+    user = user_store.get_session(bearer_token_from_request(req), ttl_seconds=session_timeout_seconds())
     if not user:
         return None, JSONResponse({"error": "Authentication required."}, status_code=401)
     if not user.is_admin:
@@ -2205,7 +2210,7 @@ async def login(req: Request):
     password = data.get("password", "")
     user = verify_user(username, password)
     if user:
-        session = user_store.create_session(user, ttl_seconds=int(config.get("SESSION_TTL_SECONDS", 604800)))
+        session = user_store.create_session(user, ttl_seconds=session_timeout_seconds())
         return {"ok": True, "username": session.username, "isAdmin": session.is_admin, "token": session.token}
     return {"ok": False, "error": "Invalid credentials"}
 
@@ -2226,6 +2231,7 @@ async def app_config():
         "retrievalStrategies": ["Vector only", "Vector + CrossEncoder"],
         "statusPollIntervalSeconds": max(5, int(config.get("STATUS_POLL_INTERVAL_SECONDS", 15))),
         "activeStatusPollIntervalSeconds": max(1, int(config.get("STATUS_POLL_ACTIVE_INTERVAL_SECONDS", 3))),
+        "sessionTimeoutSeconds": session_timeout_seconds(),
         "defaults": {
             "topK": 15,
             "distanceThreshold": 4.0,
