@@ -165,6 +165,8 @@ export function IngestStatusPanel({
   const totalFiles = ingest.totalFiles ?? 0;
   const processedFiles = ingest.processedFiles ?? 0;
   const fileRows = activeFileRows(ingest);
+  const activeFiles = fileRows.length;
+  const waitingFiles = Math.max(totalFiles - processedFiles - activeFiles, 0);
   const details = Object.entries(ingest.details ?? {}).filter(([, value]) => value !== undefined);
 
   return (
@@ -197,7 +199,15 @@ export function IngestStatusPanel({
           <span>Cores {formatInteger(workerBudget.cpuCores)}</span>
           <span>Reserved {formatInteger(workerBudget.reservedCores)}</span>
           <span>Usable {formatInteger(workerBudget.usableCores)}</span>
-          <span>Active workers {formatInteger(workerBudget.activeDocumentWorkers)}</span>
+          <span>Active doc workers {formatInteger(workerBudget.activeDocumentWorkers)}</span>
+        </div>
+      ) : null}
+      {isRunning && totalFiles ? (
+        <div className="ingest-queue-summary">
+          <span>Done {formatInteger(processedFiles)}</span>
+          <span>Active {formatInteger(activeFiles)}</span>
+          <span>Waiting {formatInteger(waitingFiles)}</span>
+          <span>Total {formatInteger(totalFiles)}</span>
         </div>
       ) : null}
       {isRunning && fileRows.length ? (
