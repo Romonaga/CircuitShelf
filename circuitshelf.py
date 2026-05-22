@@ -275,6 +275,7 @@ index_status = {
     "running": False,
     "stage": "idle",
     "currentFiles": [],
+    "fileProgress": {},
     "processedFiles": 0,
     "totalFiles": 0,
     "lastStartedAt": None,
@@ -381,9 +382,10 @@ def seconds_until_next_ingest_check(interval=None):
     return max(0, next_check - datetime.now(timezone.utc).timestamp())
 
 
-def update_index_progress(*, stage=None, current_file=None, finished_file=None, total_files=None, details=None):
+def update_index_progress(*, stage=None, current_file=None, finished_file=None, total_files=None, details=None, file_details=None):
     with INDEX_PROGRESS_LOCK:
         active_files = list(index_status.get("currentFiles") or [])
+        file_progress = dict(index_status.get("fileProgress") or {})
         if total_files is not None:
             index_status["totalFiles"] = int(total_files)
         if stage is not None:
@@ -392,10 +394,17 @@ def update_index_progress(*, stage=None, current_file=None, finished_file=None, 
             index_status["details"] = details
         if current_file and current_file not in active_files:
             active_files.append(current_file)
+            file_progress.setdefault(current_file, {})
+        if current_file and file_details is not None:
+            current_progress = dict(file_progress.get(current_file) or {})
+            current_progress.update({key: value for key, value in file_details.items() if value is not None})
+            file_progress[current_file] = current_progress
         if finished_file:
             active_files = [name for name in active_files if name != finished_file]
+            file_progress.pop(finished_file, None)
             index_status["processedFiles"] = int(index_status.get("processedFiles") or 0) + 1
         index_status["currentFiles"] = active_files[:10]
+        index_status["fileProgress"] = {name: file_progress.get(name, {}) for name in active_files[:10]}
         return dict(index_status)
 
 
@@ -1249,7 +1258,7 @@ def load_documents_parallel(
             detail_progress = None
             if progress_callback:
                 def detail_progress(**details):
-                    progress_callback(stage="processing_documents", details=details)
+                    progress_callback(stage="processing_documents", current_file=fname, file_details=details)
 
             process_file_by_type(
                 fpath,
@@ -1478,6 +1487,7 @@ def check_for_training_changes(reason="watch"):
         running=True,
         stage="scanning",
         currentFiles=[],
+        fileProgress={},
         processedFiles=0,
         totalFiles=0,
         lastStartedAt=utc_now_iso(),
@@ -1501,6 +1511,7 @@ def check_for_training_changes(reason="watch"):
                 running=False,
                 stage="idle",
                 currentFiles=[],
+                fileProgress={},
                 processedFiles=0,
                 totalFiles=0,
                 lastFinishedAt=utc_now_iso(),
@@ -1514,6 +1525,7 @@ def check_for_training_changes(reason="watch"):
             processedFiles=0,
             totalFiles=len(changes.changed_or_added),
             currentFiles=[],
+            fileProgress={},
         )
         build_result, final_details = run_incremental_ingest(changes, current_manifest)
         duration = time.time() - start_time
@@ -1530,6 +1542,7 @@ def check_for_training_changes(reason="watch"):
             running=False,
             stage="idle",
             currentFiles=[],
+            fileProgress={},
             processedFiles=len(changes.changed_or_added),
             totalFiles=len(changes.changed_or_added),
             lastFinishedAt=utc_now_iso(),
@@ -1543,6 +1556,7 @@ def check_for_training_changes(reason="watch"):
             running=False,
             stage="failed",
             currentFiles=[],
+            fileProgress={},
             lastFinishedAt=utc_now_iso(),
             lastResult="failed",
             lastError=str(exc),

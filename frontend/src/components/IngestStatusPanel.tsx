@@ -86,6 +86,24 @@ function formatDetailValue(value: string | number | boolean | null | undefined):
   return value === null || value === undefined || value === "" ? "n/a" : String(value);
 }
 
+function activeFileRows(ingest: IngestStatus) {
+  const currentFiles = ingest.currentFiles ?? [];
+  const progress = ingest.fileProgress ?? {};
+  return currentFiles.map((file) => ({ file, progress: progress[file] ?? {} }));
+}
+
+function pageProgress(progress: Record<string, string | number | boolean | null | undefined>): string {
+  const page = progress.pdfPage;
+  const pages = progress.pdfPages;
+  if (page && pages) {
+    return `${formatDetailValue(page)} / ${formatDetailValue(pages)}`;
+  }
+  if (page) {
+    return formatDetailValue(page);
+  }
+  return "n/a";
+}
+
 export function IngestStatusPanel({
   ingest,
   workerBudget,
@@ -107,7 +125,7 @@ export function IngestStatusPanel({
   const hasError = Boolean(ingest.lastError);
   const totalFiles = ingest.totalFiles ?? 0;
   const processedFiles = ingest.processedFiles ?? 0;
-  const currentFiles = ingest.currentFiles ?? [];
+  const fileRows = activeFileRows(ingest);
   const details = Object.entries(ingest.details ?? {}).filter(([, value]) => value !== undefined);
 
   return (
@@ -143,11 +161,21 @@ export function IngestStatusPanel({
           <span>Active workers {formatInteger(workerBudget.activeDocumentWorkers)}</span>
         </div>
       ) : null}
-      {isRunning && currentFiles.length ? (
-        <div className="ingest-current-files">
-          <strong>Processing</strong>
-          {currentFiles.map((file) => (
-            <span key={file}>{file}</span>
+      {isRunning && fileRows.length ? (
+        <div className="ingest-file-grid">
+          <div className="ingest-file-grid-heading">
+            <span>File</span>
+            <span>Phase</span>
+            <span>Page</span>
+            <span>Images</span>
+          </div>
+          {fileRows.map(({ file, progress }) => (
+            <div key={file} className="ingest-file-row">
+              <strong title={file}>{file}</strong>
+              <span>{formatDetailValue(progress.documentPhase ?? "Active")}</span>
+              <span>{pageProgress(progress)}</span>
+              <span>{formatDetailValue(progress.imageCandidates)}</span>
+            </div>
           ))}
         </div>
       ) : null}

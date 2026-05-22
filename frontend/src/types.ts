@@ -337,6 +337,7 @@ export interface IngestStatus {
   running: boolean;
   stage?: string | null;
   currentFiles?: string[];
+  fileProgress?: Record<string, Record<string, string | number | boolean | null | undefined>>;
   processedFiles?: number;
   totalFiles?: number;
   lastStartedAt?: string | null;
