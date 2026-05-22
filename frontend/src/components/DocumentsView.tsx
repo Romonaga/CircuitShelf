@@ -5,6 +5,7 @@ import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
 import { ErrorMessage } from "./ErrorMessage";
 import { IngestStatusPanel } from "./IngestStatusPanel";
+import { DatasheetIntelligencePanel } from "./DatasheetIntelligencePanel";
 import { SectionHeader } from "./SectionHeader";
 
 export function DocumentsView({
@@ -182,6 +183,7 @@ export function DocumentsView({
           title={documents.find((document) => document.source === selected)?.displayName ?? selected ?? "No document selected"}
           description={`${formatInteger(detail?.chunks.length ?? 0)} chunks | ${formatInteger(detail?.images.length ?? 0)} images`}
         />
+        <DatasheetIntelligencePanel intelligence={detail?.intelligence} />
         {detail?.pinout.pins.length ? (
           <div className="pinout-panel">
             <strong>Detected Pinout</strong>

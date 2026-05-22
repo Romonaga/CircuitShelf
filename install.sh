@@ -189,7 +189,7 @@ info "Building frontend"
 npm --prefix frontend run build
 
 info "Running backend smoke checks"
-"$VENV_DIR/bin/python" -m py_compile circuitshelf.py db/connection.py db/users.py db/sql.py tools/db_migrate.py tools/db_user.py
+"$VENV_DIR/bin/python" -m py_compile circuitshelf.py datasheet_intelligence.py circuit_build_cards.py db/connection.py db/users.py db/sql.py db/datasheet_intelligence_store.py tools/db_migrate.py tools/db_user.py
 
 cat <<'EOF'
 

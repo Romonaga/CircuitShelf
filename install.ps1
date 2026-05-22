@@ -213,7 +213,7 @@ Write-Info "Building frontend"
 & npm --prefix frontend run build
 
 Write-Info "Running backend smoke checks"
-& $VenvPython -m py_compile circuitshelf.py db/connection.py db/users.py db/sql.py tools/db_migrate.py tools/db_user.py
+& $VenvPython -m py_compile circuitshelf.py datasheet_intelligence.py circuit_build_cards.py db/connection.py db/users.py db/sql.py db/datasheet_intelligence_store.py tools/db_migrate.py tools/db_user.py
 
 Write-Host @"
 

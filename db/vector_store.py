@@ -70,6 +70,12 @@ class VectorStore:
             for row in rows
         }
 
+    def find_document_sources_by_term(self, term: str, *, limit: int = 5) -> list[str]:
+        pattern = f"%{term}%"
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("vector_documents_find_by_term.sql"), (pattern, pattern, int(limit))).fetchall()
+        return [row["source_path"] for row in rows]
+
     def counts(self) -> dict[str, int]:
         with self.database.connection() as conn:
             row = conn.execute(load_query("vector_catalog_counts.sql")).fetchone()

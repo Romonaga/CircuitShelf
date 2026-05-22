@@ -164,6 +164,21 @@ class ImageStore:
             "referenced": int(row["referenced_images"] or 0),
         }
 
+    def load_missing_embedding_inputs(self, *, limit: int = 256) -> list[dict]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("image_missing_embeddings_load.sql"), (int(limit),)).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_embeddings(self, image_embeddings: dict[str, Any], embedding_model: str) -> None:
+        if not image_embeddings:
+            return
+        with self.database.connection() as conn:
+            for image_key, embedding in image_embeddings.items():
+                conn.execute(
+                    load_query("image_embedding_update.sql"),
+                    (embedding_model, vector_to_sql(embedding), image_key),
+                )
+
     def has_missing_catalog_entries(self) -> bool:
         if not self.available():
             return False

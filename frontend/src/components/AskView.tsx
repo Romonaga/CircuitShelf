@@ -4,6 +4,7 @@ import type { AppConfig, ChatTurn, QueryOptions, QueryResponse } from "../types"
 import { errorMessage } from "../lib/errors";
 import { formatNumber } from "../lib/format";
 import { AnswerRenderer } from "./AnswerRenderer";
+import { BuildCard } from "./BuildCard";
 import { ChatHistory } from "./ChatHistory";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
@@ -167,6 +168,7 @@ export function AskView({ config }: { config: AppConfig }) {
           title="Answer"
           description={`Confidence ${formatNumber(result?.confidence)} | Average ${formatNumber(result?.averageQueryTime)}s`}
         />
+        <BuildCard card={result?.buildCard} />
         <div className={result?.answer ? "answer-text" : "empty-state"}>
           {result?.answer ? <AnswerRenderer content={result.answer} /> : "Ask a question to see the generated answer."}
         </div>

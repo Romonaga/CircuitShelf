@@ -52,9 +52,12 @@ from ocr_utils import run_ocr
 from pdf_visuals import link_chunks_to_rendered_pages, render_pdf_visual_pages
 from index_builder import IndexBuilder
 from pinout_extractor import extract_pinout_map
+from datasheet_intelligence import build_datasheet_intelligence
+from circuit_build_cards import build_circuit_build_card
 from ingest_manifest import IngestManifest
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
 from db.connection import Database, database_url_from_config
+from db.datasheet_intelligence_store import DatasheetIntelligenceStore
 from db.image_store import ImageStore
 from db.query_log_store import QueryLogStore
 from db.response_cache_store import PostgresResponseCache
@@ -104,6 +107,7 @@ user_store = UserStore(database, trace_logger)
 query_log_store = QueryLogStore(database, trace_logger)
 vector_store = VectorStore(database, config.get("TRAINING_DIR", "training"), config.get("EMBED_MODEL_NAME"), trace_logger)
 image_store = ImageStore(database, config.get("TRAINING_DIR", "training"), trace_logger)
+intelligence_store = DatasheetIntelligenceStore(database, trace_logger)
 db_response_cache = PostgresResponseCache(
     database,
     capacity=config.get("RESPONSE_CACHE_CAPACITY", 200),
@@ -113,6 +117,8 @@ if not vector_store.available():
     raise RuntimeError("Postgres vector store is unavailable. Run database migrations before starting CircuitShelf.")
 if not image_store.available():
     raise RuntimeError("Postgres image store is unavailable. Run database migrations before starting CircuitShelf.")
+if not intelligence_store.available():
+    raise RuntimeError("Postgres datasheet intelligence store is unavailable. Run database migrations before starting CircuitShelf.")
 if not db_response_cache.available():
     raise RuntimeError("Postgres response cache is unavailable. Run database migrations before starting CircuitShelf.")
 if not query_log_store.available():
@@ -469,6 +475,23 @@ def persist_db_image_state(file_records, target_state=None, rel_paths=None):
         image_store.replace_catalog(**payload)
     else:
         image_store.upsert_sources(**payload, rel_paths=set(rel_paths))
+
+
+def backfill_missing_image_embeddings(limit=512):
+    missing = image_store.load_missing_embedding_inputs(limit=limit)
+    if not missing:
+        return 0
+    trace_logger.info(f"🖼️ Backfilling {len(missing)} missing DB image embeddings.")
+    encoded = embedder.encode(
+        [row["embedding_text"] for row in missing],
+        batch_size=config.get("EMBED_BATCH_SIZE", 32),
+        convert_to_numpy=True,
+    ).astype("float32")
+    image_store.update_embeddings(
+        {row["image_key"]: encoded[idx] for idx, row in enumerate(missing)},
+        EMBED_MODEL_NAME,
+    )
+    return len(missing)
 
 
 def ocr_image_bytes(image_bytes, image_id):
@@ -1070,7 +1093,12 @@ def load_documents_parallel(
 
 
 def run_incremental_ingest(changes, current_manifest):
-    delete_rel_paths = changes.changed_or_removed
+    if changes.removed:
+        trace_logger.info(
+            f"📚 Ignoring {len(changes.removed)} missing training files because the DB catalog is authoritative. "
+            "Use Admin Remove to delete documents from CircuitShelf."
+        )
+    delete_rel_paths = changes.modified
     changed_rel_paths = changes.changed_or_added
 
     trace_logger.info(
@@ -1202,7 +1230,7 @@ def check_for_training_changes(reason="watch"):
         if build_result:
             result = f"review_ready {build_result.chunks} changed chunks"
         elif changes.removed and not changes.changed_or_added:
-            result = f"removed {len(changes.removed)} documents"
+            result = f"ignored {len(changes.removed)} missing source files"
         return set_index_status(
             running=False,
             stage="idle",
@@ -1320,9 +1348,9 @@ def get_or_build_index():
                         "Run an index check to repair missing image rows."
                     )
                 if image_counts["stored"] > image_counts["embeddings"]:
-                    trace_logger.info("🖼️ Backfilling DB image embeddings from stored OCR text.")
-                    persist_db_image_state(current_manifest)
-                    image_count = load_db_image_state()
+                    backfilled = backfill_missing_image_embeddings()
+                    if backfilled:
+                        image_count = load_db_image_state()
                 duration = time.time() - start_time
                 SystemInit.log_build_info(trace_logger, chunks, embeddings, state.get_image_id_list(), duration)
                 trace_logger.info(f"✅ DB catalog loaded in {duration:.2f} sec with {image_count} image entries")
@@ -1680,7 +1708,8 @@ def get_rag_response(
                 confidence_score=confidence,
                 selected_chunks=[],
             )
-            return norm_q, cached.answer, chat_history, cached.sources, response_cache.stats(), confidence, get_average_query_time()
+            build_card = build_circuit_build_card(norm_q, cached.sources, intelligence_for_question_and_sources(norm_q, cached.sources))
+            return norm_q, cached.answer, chat_history, cached.sources, response_cache.stats(), confidence, get_average_query_time(), build_card
     else:
         if bypass_cache:
             trace_logger.debug("Response cache bypassed by request option.")
@@ -1713,7 +1742,7 @@ def get_rag_response(
             max_turns=MAX_CHAT_HISTORY_TURNS,
             max_chars=MAX_CHAT_HISTORY_CHARS,
         )
-        return norm_q, response, chat_history, "", response_cache.stats(), "0.00", get_average_query_time()
+        return norm_q, response, chat_history, [], response_cache.stats(), "0.00", get_average_query_time(), None
 
     dedup_hits = deduplicate_hits_by_index(all_hits)
     rerank_duration = None
@@ -1757,6 +1786,7 @@ def get_rag_response(
     )
 
     source_payload = build_source_payload(selected_chunks)
+    build_card = build_circuit_build_card(norm_q, source_payload, intelligence_for_question_and_sources(norm_q, source_payload))
     if cache_enabled:
         response_cache.put_response(
             cache_key,
@@ -1799,7 +1829,7 @@ def get_rag_response(
         selected_chunks=selected_chunks,
     )
 
-    return norm_q, final_answer, chat_history, source_payload, response_cache.stats(), confidence, get_average_query_time()
+    return norm_q, final_answer, chat_history, source_payload, response_cache.stats(), confidence, get_average_query_time(), build_card
 
 @trace_timer("extract_doc_and_page")
 def extract_doc_and_page(img_id):
@@ -1979,6 +2009,106 @@ def build_source_payload(selected_chunks):
     for doc in grouped.values():
         doc["pages"] = sorted(doc["pages"], key=lambda item: (not isinstance(item, (int, float)), item))
     return list(grouped.values())
+
+
+def document_intelligence_rel_path(source):
+    return vector_store.rel_path_for_source(source or "", {})
+
+
+def build_datasheet_intelligence_for_document(doc_name):
+    doc_chunks = []
+    doc_metadata = []
+    chunks = state.get_chunks()
+    metadata = state.get_metadata()
+    sources = state.get_sources()
+
+    for idx, source in enumerate(sources):
+        meta = metadata[idx] if idx < len(metadata) else {}
+        doc_source = document_source_from_metadata(source, meta)
+        if doc_source != doc_name:
+            continue
+        doc_chunks.append(chunks[idx] if idx < len(chunks) else "")
+        doc_metadata.append({**meta, "source": doc_name, "parent_source": doc_name})
+
+    image_text = state.get_image_page_text()
+    for image_id, text in image_text.items():
+        if text and image_asset_belongs_to_document(image_id, doc_name):
+            doc_chunks.append(text)
+            doc_metadata.append({
+                "source": doc_name,
+                "parent_source": doc_name,
+                "page": extract_page_number(image_id),
+                "source_image_id": image_id,
+            })
+
+    return build_datasheet_intelligence(
+        doc_chunks,
+        doc_metadata,
+        doc_name,
+        display_source_name(doc_name),
+    )
+
+
+def stored_intelligence_is_usable(stored):
+    if not stored:
+        return False
+    component_name = str(stored.get("componentName") or "").strip().upper()
+    if component_name in {"", "LOGIC", "INPUT", "OUTPUT", "COMMON", "ABSOLUTE", "MAXIMUM"}:
+        return False
+    return bool(stored.get("facts") or stored.get("pinout", {}).get("pins"))
+
+
+def get_or_build_datasheet_intelligence(doc_name):
+    rel_path = document_intelligence_rel_path(doc_name)
+    stored = intelligence_store.get_for_source(rel_path)
+    if stored_intelligence_is_usable(stored):
+        return stored
+
+    intelligence = build_datasheet_intelligence_for_document(doc_name)
+    stored = intelligence_store.replace_for_source(rel_path, intelligence)
+    if stored:
+        return stored
+    return intelligence
+
+
+def intelligence_for_sources(source_payload):
+    result = {}
+    for source in source_payload or []:
+        source_name = source.get("source")
+        if not source_name or source_name in result:
+            continue
+        try:
+            result[source_name] = get_or_build_datasheet_intelligence(source_name)
+        except Exception as exc:
+            trace_logger.warning(f"Datasheet intelligence unavailable for {source_name}: {exc}")
+    return result
+
+
+def question_component_terms(question):
+    terms = []
+    for match in re.finditer(r"\b[A-Za-z]*\d[A-Za-z0-9-]{1,24}\b", question or ""):
+        term = match.group(0).strip("-")
+        if len(term) >= 3:
+            terms.append(term)
+    return list(OrderedDict.fromkeys(terms))
+
+
+def intelligence_for_question_and_sources(question, source_payload):
+    result = {}
+    for term in question_component_terms(question):
+        for rel_path in vector_store.find_document_sources_by_term(term, limit=3):
+            source_name = os.path.join(TRAINING_DIR, rel_path)
+            if source_name in result:
+                result[source_name]["questionMatch"] = True
+                continue
+            try:
+                intelligence = get_or_build_datasheet_intelligence(source_name)
+                intelligence["questionMatch"] = True
+                result[source_name] = intelligence
+            except Exception as exc:
+                trace_logger.warning(f"Datasheet intelligence lookup failed for term {term}: {exc}")
+    result.update({key: value for key, value in intelligence_for_sources(source_payload).items() if key not in result})
+    return result
 
 
 def get_response_cache():
@@ -2370,7 +2500,7 @@ async def react_query(req: Request):
         if not question.strip():
             return {"error": "No question provided."}
 
-        _, answer, chat_history, sources, cache_stats, confidence, avg_time = await run_in_threadpool(
+        _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card = await run_in_threadpool(
             get_rag_response,
             question=question,
             chat_history=data.get("chatHistory", []),
@@ -2391,6 +2521,7 @@ async def react_query(req: Request):
             "cacheStats": cache_stats,
             "confidence": confidence,
             "averageQueryTime": avg_time,
+            "buildCard": build_card,
         }
     except Exception as e:
         trace_logger.error(f"❌ [API] React query failed: {e}")
@@ -2547,13 +2678,15 @@ def build_document_detail(doc_name):
             pinout_chunks.append(image["ocrText"])
             pinout_metadata.append({"source": doc_name, "page": image.get("page")})
     pinout = extract_pinout_map(pinout_chunks, pinout_metadata, doc_name)
+    intelligence = get_or_build_datasheet_intelligence(doc_name)
     return {
         "document": doc_name,
         "displayName": display_source_name(doc_name),
         "chunks": rows,
         "images": image_assets,
         "pages": sorted(pages.values(), key=lambda item: int(item["page"])),
-        "pinout": pinout,
+        "pinout": intelligence.get("pinout") if intelligence.get("pinout", {}).get("pins") else pinout,
+        "intelligence": intelligence,
     }
 
 

@@ -42,6 +42,7 @@ export interface QueryResponse {
   answer: string;
   chatHistory: ChatTurn[];
   sources: SourceSummary[];
+  buildCard?: CircuitBuildCard | null;
   cacheStats: unknown;
   confidence: number | null;
   averageQueryTime: number | null;
@@ -128,6 +129,43 @@ export interface DocumentPinout {
   pins: DocumentPin[];
 }
 
+export interface DatasheetFact {
+  type: string;
+  label: string;
+  value: string;
+  unit?: string;
+  page?: number | string | null;
+  chunkIndex?: number | null;
+  evidence?: string;
+  confidence?: number;
+}
+
+export interface DatasheetIntelligence {
+  source: string;
+  displayName: string;
+  componentName: string;
+  componentType: string;
+  summary: string;
+  confidence: number;
+  facts: DatasheetFact[];
+  pinout: DocumentPinout;
+  updatedAt?: string | null;
+}
+
+export interface CircuitBuildCard {
+  title: string;
+  componentName: string;
+  componentType: string;
+  summary: string;
+  confidence: number;
+  parts: Array<{ name: string; detail: string }>;
+  power: string[];
+  wiring: Array<{ from: string; to: string; note: string; page?: number | string | null }>;
+  checks: string[];
+  warnings: string[];
+  sourceNotes: Array<{ source: string; pages: Array<number | string>; chunks: number }>;
+}
+
 export interface DocumentDetail {
   document: string;
   displayName: string;
@@ -135,6 +173,7 @@ export interface DocumentDetail {
   images: DocumentImage[];
   pages: DocumentPage[];
   pinout: DocumentPinout;
+  intelligence?: DatasheetIntelligence | null;
 }
 
 export interface StatusPayload {
