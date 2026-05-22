@@ -1413,6 +1413,11 @@ def extract_document_for_incremental_ingest(source):
 
         elapsed = time.time() - start
         trace_logger.info(f"✅ Thread-{thread_id} extracted {source} in {elapsed:.2f}s")
+        update_index_progress(
+            stage="processing_documents",
+            current_file=source,
+            file_details={"documentPhase": "Waiting to save"},
+        )
         return {
             "source": source,
             "state": ingested_state,

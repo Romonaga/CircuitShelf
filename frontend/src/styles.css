@@ -1592,6 +1592,12 @@ nav {
   color: #8a5a12;
 }
 
+.ingest-phase-badge.waiting {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+}
+
 .ingest-table-number {
   font-variant-numeric: tabular-nums;
 }

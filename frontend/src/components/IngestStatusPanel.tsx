@@ -152,6 +152,9 @@ function phaseTone(progress: Record<string, string | number | boolean | null | u
   if (phase.includes("visual") || phase.includes("render")) {
     return "visual";
   }
+  if (phase.includes("waiting")) {
+    return "waiting";
+  }
   return "active";
 }
 
@@ -174,6 +177,7 @@ function compactPhase(progress: Record<string, string | number | boolean | null 
     embedding_chunks: "Embedding",
     persisting_chunks: "Saving text",
     persisting_images: "Saving images",
+    waiting_to_save: "Waiting save",
     readying_review: "Review"
   };
   return labels[text] ?? labels[normalized] ?? formatStage(text);
@@ -201,8 +205,8 @@ export function IngestStatusPanel({
   const totalFiles = ingest.totalFiles ?? 0;
   const processedFiles = ingest.processedFiles ?? 0;
   const fileRows = activeFileRows(ingest);
-  const activeFiles = fileRows.length;
-  const waitingFiles = Math.max(totalFiles - processedFiles - activeFiles, 0);
+  const trackedFiles = fileRows.length;
+  const notStartedFiles = Math.max(totalFiles - processedFiles - trackedFiles, 0);
   const details = Object.entries(ingest.details ?? {}).filter(([, value]) => value !== undefined);
 
   return (
@@ -241,8 +245,8 @@ export function IngestStatusPanel({
       {isRunning && totalFiles ? (
         <div className="ingest-queue-summary">
           <span><small>Done</small><strong>{formatInteger(processedFiles)}</strong></span>
-          <span><small>Active</small><strong>{formatInteger(activeFiles)}</strong></span>
-          <span><small>Waiting</small><strong>{formatInteger(waitingFiles)}</strong></span>
+          <span><small>Tracked</small><strong>{formatInteger(trackedFiles)}</strong></span>
+          <span><small>Not started</small><strong>{formatInteger(notStartedFiles)}</strong></span>
           <span><small>Total</small><strong>{formatInteger(totalFiles)}</strong></span>
         </div>
       ) : null}
