@@ -57,6 +57,7 @@ from circuit_build_cards import build_circuit_build_card
 from ingest_manifest import IngestManifest
 from ingest_workers import detected_cpu_count, document_worker_count, ocr_worker_count, reserved_core_count, usable_core_count
 from log_tail import tail_text_file
+from log_retention import cleanup_old_logs
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
 from db.connection import Database, database_url_from_config
 from db.assembly_plan_store import AssemblyPlanStore
@@ -98,6 +99,7 @@ settings_store.seed_setting("STATUS_POLL_INTERVAL_SECONDS", 15, "Browser status 
 settings_store.seed_setting("STATUS_POLL_ACTIVE_INTERVAL_SECONDS", 3, "Browser status refresh interval while indexing is running.")
 settings_store.seed_setting("SESSION_TIMEOUT_SECONDS", 28800, "Seconds of idle time before a browser login session expires.")
 settings_store.seed_setting("INGEST_WATCH_INTERVAL_SECONDS", 300, "Seconds between automatic document-change checks.")
+settings_store.seed_setting("LOG_RETENTION_DAYS", 14, "Days to keep trace log files. Set to 0 to disable automatic cleanup.")
 settings_store.seed_setting("PDF_RENDER_VECTOR_PAGES", True, "Render vector-heavy PDF pages as searchable images.")
 settings_store.seed_setting("PDF_RENDER_MAX_PAGES_PER_DOC", 8, "Maximum rendered visual PDF pages stored per document.")
 settings_store.seed_setting("PDF_RENDER_MIN_DRAWINGS", 100, "Minimum vector drawing count before a PDF page is considered visual.")
@@ -209,6 +211,7 @@ TRAINING_DIR = config.get("TRAINING_DIR", "training")
 # === Stats and logging ===
 BUILD_INDEX_LOG_FILE = config.get("BUILD_INDEX_LOG_FILE")
 TRACE_LOG_FILE = config.get("TRACE_LOG_FILE", "logs/trace.log")
+LOG_RETENTION_DAYS = config.get("LOG_RETENTION_DAYS", 14)
 TESSERACT_TEMP_MAX_AGE_SECONDS = 3600
 
 
@@ -344,6 +347,27 @@ def cleanup_stale_tesseract_temp_files(max_age_seconds=TESSERACT_TEMP_MAX_AGE_SE
             f"Cleaned stale Tesseract temp files. Removed: {removed}, failures: {failures}"
         )
     return {"removed": removed, "failures": failures}
+
+
+def cleanup_expired_trace_logs():
+    return cleanup_old_logs(
+        configured_log_file=TRACE_LOG_FILE,
+        active_log_file=current_trace_log_file(),
+        retention_days=LOG_RETENTION_DAYS,
+        logger=trace_logger,
+    )
+
+
+def run_index_housekeeping():
+    try:
+        cleanup_stale_tesseract_temp_files()
+    except Exception as exc:
+        trace_logger.warning(f"Index housekeeping could not clean stale Tesseract temp files: {exc}")
+
+    try:
+        cleanup_expired_trace_logs()
+    except Exception as exc:
+        trace_logger.warning(f"Index housekeeping could not clean expired trace logs: {exc}")
 
 
 def utc_now_iso():
@@ -1563,7 +1587,7 @@ def check_for_training_changes(reason="watch"):
             details={},
         )
     finally:
-        cleanup_stale_tesseract_temp_files()
+        run_index_housekeeping()
         INDEX_JOB_LOCK.release()
 
 

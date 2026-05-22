@@ -54,6 +54,7 @@ SETTING_UI = {
     "POST_TIMEOUT": ("server", "Ollama request timeout", "Seconds to wait for a model response before the request fails.", False),
     "QUERY_RETRIES": ("server", "Query retries", "How many times to retry a failed model request.", True),
     "QUERY_RETRY_DELAY": ("server", "Retry delay", "Seconds to wait between failed model request retries.", True),
+    "LOG_RETENTION_DAYS": ("server", "Log retention days", "Days to keep trace log files. Set to 0 to disable automatic cleanup.", False),
     "SESSION_TIMEOUT_SECONDS": ("security", "Session timeout", "Seconds of idle browser time allowed before a login session expires.", False),
     "LLM_MODEL_NAME": ("models", "Default chat model", "Ollama model used for answers unless a user chooses another model.", False),
     "OLLAMA_API_URL": ("models", "Ollama API URL", "Base Ollama API URL, usually http://localhost:11434/api.", False),
