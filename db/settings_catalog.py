@@ -24,7 +24,7 @@ SETTING_GROUPS = {
     },
     "ingestion": {
         "label": "Ingestion",
-        "description": "Document location, watcher behavior, and indexing worker limits.",
+        "description": "Document location, watcher behavior, and indexing behavior.",
     },
     "chunking": {
         "label": "Chunking",
@@ -69,7 +69,6 @@ SETTING_UI = {
     "TRAINING_RECURSIVE": ("ingestion", "Scan subfolders", "When enabled, ingestion includes supported documents in subfolders.", False),
     "INGEST_WATCH_ENABLED": ("ingestion", "Background watcher", "Automatically checks for new, changed, and removed documents.", False),
     "INGEST_WATCH_INTERVAL_SECONDS": ("ingestion", "Watcher interval", "Seconds between automatic document-change checks.", False),
-    "MAX_DOCUMENT_WORKERS": ("ingestion", "Document workers", "Maximum documents processed concurrently during ingestion.", True),
     "INGEST_HASH_FILES": ("ingestion", "Hash file contents", "Use content hashes for change detection instead of size and modified time.", True),
     "STATUS_POLL_INTERVAL_SECONDS": ("ingestion", "Idle status refresh", "Seconds between browser status refreshes while indexing is idle.", False),
     "STATUS_POLL_ACTIVE_INTERVAL_SECONDS": ("ingestion", "Active status refresh", "Seconds between browser status refreshes while indexing is running.", False),
@@ -94,7 +93,6 @@ SETTING_UI = {
     "USE_MULTITHREAD_OCR": ("ocr", "Parallel OCR", "Run OCR work with multiple threads during ingestion.", False),
     "INDEX_IMAGE_OCR_AS_TEXT": ("ocr", "Index OCR text", "Treat useful image OCR output as searchable text.", False),
     "TESSERACT_CMD": ("ocr", "Tesseract command", "Path to the Tesseract executable.", True),
-    "MAX_OCR_THREADS": ("ocr", "OCR thread limit", "Maximum OCR threads used when parallel OCR is enabled.", True),
     "OCR_INDEX_TEXT_MIN_CHARS": ("ocr", "OCR index minimum characters", "Minimum useful OCR text length before image text is indexed.", True),
     "OCR_MIN_CONFIDENCE": ("ocr", "OCR minimum confidence", "Minimum Tesseract confidence accepted for OCR text.", True),
     "OCR_USE_TESSERACT_CONFIDENCE": ("ocr", "Use Tesseract confidence", "Use Tesseract confidence scores when evaluating OCR quality.", True),

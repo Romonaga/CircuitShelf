@@ -292,6 +292,12 @@ export interface StatusPayload {
   imageEmbeddings: number;
   pendingReview?: number;
   cacheStats: unknown;
+  ingestWorkerBudget?: {
+    cpuCores: number;
+    reservedCores: number;
+    usableCores: number;
+    activeDocumentWorkers: number;
+  };
   ingest?: IngestStatus;
 }
 

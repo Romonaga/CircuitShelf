@@ -21,7 +21,6 @@ import pytesseract
 import nltk
 import numpy as np
 import pandas as pd
-import multiprocessing
 import threading
 import uvicorn
 import nltk
@@ -56,6 +55,7 @@ from pinout_extractor import extract_pinout_map
 from datasheet_intelligence import build_datasheet_intelligence
 from circuit_build_cards import build_circuit_build_card
 from ingest_manifest import IngestManifest
+from ingest_workers import detected_cpu_count, document_worker_count, ocr_worker_count, reserved_core_count, usable_core_count
 from log_tail import tail_text_file
 from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
 from db.connection import Database, database_url_from_config
@@ -181,7 +181,6 @@ if os.name == 'nt':
 INDEX_IMAGE_OCR_AS_TEXT = config.get("INDEX_IMAGE_OCR_AS_TEXT", False)
 OCR_INDEX_TEXT_MIN_CHARS = config.get("OCR_INDEX_TEXT_MIN_CHARS", 80)
 USE_MULTITHREAD_OCR = config.get("USE_MULTITHREAD_OCR", False)
-MAX_OCR_THREADS = config.get("MAX_OCR_THREADS", 1)
 PDF_RENDER_VECTOR_PAGES = config.get("PDF_RENDER_VECTOR_PAGES", True)
 PDF_RENDER_MAX_PAGES_PER_DOC = config.get("PDF_RENDER_MAX_PAGES_PER_DOC", 8)
 PDF_RENDER_MIN_DRAWINGS = config.get("PDF_RENDER_MIN_DRAWINGS", 100)
@@ -266,6 +265,8 @@ runtime_settings.register_callback("RERANK_PROFILES", lambda value: setattr(rera
 query_timings = deque(maxlen=100)
 INDEX_JOB_LOCK = threading.Lock()
 INDEX_PROGRESS_LOCK = threading.Lock()
+ACTIVE_DOCUMENT_WORKERS_LOCK = threading.Lock()
+ACTIVE_DOCUMENT_WORKERS = 0
 INGEST_WATCH_STOP = threading.Event()
 INGEST_WATCH_RESCHEDULE = threading.Event()
 INGEST_WATCH_THREAD = None
@@ -396,6 +397,30 @@ def update_index_progress(*, stage=None, current_file=None, finished_file=None, 
             index_status["processedFiles"] = int(index_status.get("processedFiles") or 0) + 1
         index_status["currentFiles"] = active_files[:10]
         return dict(index_status)
+
+
+def begin_document_worker() -> int:
+    global ACTIVE_DOCUMENT_WORKERS
+    with ACTIVE_DOCUMENT_WORKERS_LOCK:
+        ACTIVE_DOCUMENT_WORKERS += 1
+        return ACTIVE_DOCUMENT_WORKERS
+
+
+def finish_document_worker() -> int:
+    global ACTIVE_DOCUMENT_WORKERS
+    with ACTIVE_DOCUMENT_WORKERS_LOCK:
+        ACTIVE_DOCUMENT_WORKERS = max(0, ACTIVE_DOCUMENT_WORKERS - 1)
+        return ACTIVE_DOCUMENT_WORKERS
+
+
+def current_document_workers() -> int:
+    with ACTIVE_DOCUMENT_WORKERS_LOCK:
+        return max(1, ACTIVE_DOCUMENT_WORKERS)
+
+
+def active_document_worker_count() -> int:
+    with ACTIVE_DOCUMENT_WORKERS_LOCK:
+        return ACTIVE_DOCUMENT_WORKERS
 
 
 def file_changes_payload(changes):
@@ -697,9 +722,11 @@ def image_bytes_to_png_bytes(image_bytes, image_id="image"):
 def get_ocr_worker_count(item_count):
     if not USE_MULTITHREAD_OCR or item_count <= 1:
         return 1
-    configured_threads = max(1, int(MAX_OCR_THREADS or 1))
-    cpu_threads = max(1, multiprocessing.cpu_count())
-    return max(1, min(configured_threads, cpu_threads, item_count))
+    return ocr_worker_count(
+        item_count,
+        active_document_workers=current_document_workers(),
+        cpu_count=detected_cpu_count(),
+    )
 
 
 def ocr_pdf_image_job(job):
@@ -725,7 +752,11 @@ def run_pdf_image_ocr_jobs(image_jobs):
     if worker_count == 1:
         return [ocr_pdf_image_job(job) for job in image_jobs]
 
-    trace_logger.info(f"🧵 OCR processing {len(image_jobs)} PDF images with {worker_count} workers")
+    trace_logger.info(
+        f"🧵 OCR processing {len(image_jobs)} PDF images with {worker_count} workers "
+        f"({detected_cpu_count()} cores, reserving {reserved_core_count()} cores, "
+        f"{current_document_workers()} active document workers)"
+    )
     results = []
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = {executor.submit(ocr_pdf_image_job, job): job for job in image_jobs}
@@ -1160,11 +1191,12 @@ def load_documents_parallel(
 
     def process_file(fname):
         fpath = fname if os.path.isabs(fname) else os.path.join(folder, fname)
+        active_count = begin_document_worker()
         try:
             if progress_callback:
                 progress_callback(stage="processing_documents", current_file=fname)
             thread_id = threading.get_ident()
-            trace_logger.info(f"🛠️ Thread-{thread_id} started for {fname}")
+            trace_logger.info(f"🛠️ Thread-{thread_id} started for {fname} ({active_count} active document workers)")
             start = time.time()
 
             process_file_by_type(fpath, target_state, trace_logger, target_chunker, target_token_utils)
@@ -1177,9 +1209,14 @@ def load_documents_parallel(
         finally:
             if progress_callback:
                 progress_callback(stage="processing_documents", finished_file=fname)
+            finish_document_worker()
 
-    configured_workers = config.get("MAX_DOCUMENT_WORKERS", multiprocessing.cpu_count())
-    max_workers = max(1, min(configured_workers, multiprocessing.cpu_count(), len(file_list)))
+    cpu_count = detected_cpu_count()
+    max_workers = document_worker_count(len(file_list), cpu_count=cpu_count)
+    trace_logger.info(
+        f"⚙️ Ingest worker budget: {cpu_count} cores detected, reserving {reserved_core_count(cpu_count)}, "
+        f"{usable_core_count(cpu_count)} usable, {max_workers} document workers for {len(file_list)} files."
+    )
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(process_file, fname): fname for fname in file_list}
         for future in as_completed(futures):
@@ -2388,6 +2425,7 @@ def build_runtime_status():
     vector_counts = vector_store.counts()
     image_counts = image_store.counts()
     image_ids = state.get_image_id_list()
+    cpu_count = detected_cpu_count()
     return {
         "chunks": vector_counts.get("chunks", 0),
         "sources": vector_counts.get("documents", 0),
@@ -2398,6 +2436,12 @@ def build_runtime_status():
         "imageEmbeddings": image_counts.get("embeddings", 0),
         "pendingReview": vector_store.pending_review_count(),
         "cacheStats": get_response_cache().stats(),
+        "ingestWorkerBudget": {
+            "cpuCores": cpu_count,
+            "reservedCores": reserved_core_count(cpu_count),
+            "usableCores": usable_core_count(cpu_count),
+            "activeDocumentWorkers": active_document_worker_count() if index_status.get("running") else 0,
+        },
         "ingest": dict(index_status),
     }
 
