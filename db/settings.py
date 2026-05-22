@@ -28,6 +28,11 @@ SENSITIVE_KEYS = {
     "LLM_API_KEY",
 }
 
+DEPRECATED_KEYS = {
+    "EXTRACTED_IMAGES_DIR",
+    "SAVE_EXTRACTED_IMAGES",
+}
+
 class AppSettingsStore:
     def __init__(self, database: Database, logger=None):
         self.database = database
@@ -143,7 +148,7 @@ class AppSettingsStore:
         return len(db_settings)
 
     def _should_store(self, key: str, value: Any) -> bool:
-        if key in BOOTSTRAP_KEYS or key in SENSITIVE_KEYS:
+        if key in BOOTSTRAP_KEYS or key in SENSITIVE_KEYS or key in DEPRECATED_KEYS:
             return False
         return isinstance(value, (str, int, float, bool)) and value is not None
 
