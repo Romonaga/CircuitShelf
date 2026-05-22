@@ -1196,9 +1196,18 @@ nav {
 
 .document-list-panel {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   gap: 14px;
   max-height: calc(100vh - 48px);
+}
+
+.document-list-panel .ingest-status-panel {
+  max-height: min(42vh, 430px);
+  overflow: auto;
+}
+
+.document-list-panel .ingest-file-grid {
+  max-height: 170px;
 }
 
 .settings-list-panel {
