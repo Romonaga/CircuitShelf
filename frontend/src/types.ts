@@ -236,6 +236,7 @@ export interface IngestStatus {
     removedFiles?: string[];
   } | null;
   nextCheckAt?: string | null;
+  details?: Record<string, string | number | boolean | null | undefined>;
 }
 
 export interface ReviewDocument {

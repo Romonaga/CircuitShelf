@@ -285,6 +285,13 @@ class VectorStore:
             row = conn.execute(load_query("review_document_status_update.sql"), (status, reviewed_by, source_path)).fetchone()
         return dict(row) if row else None
 
+    def set_sources_status(self, source_paths: list[str], status: str) -> list[str]:
+        if not source_paths:
+            return []
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("review_documents_status_update_by_sources.sql"), (status, source_paths)).fetchall()
+        return [row["source_path"] for row in rows]
+
     def delete_document(self, source_path: str) -> dict | None:
         with self.database.connection() as conn:
             row = conn.execute(load_query("review_document_delete.sql"), (source_path,)).fetchone()

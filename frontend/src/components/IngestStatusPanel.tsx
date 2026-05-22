@@ -25,6 +25,19 @@ function formatReason(reason?: string | null): string {
 }
 
 function formatStage(stage?: string | null): string {
+  const labels: Record<string, string> = {
+    scanning: "Scanning training folder",
+    processing_documents: "Extracting text and images",
+    embedding_chunks: "Embedding text chunks",
+    persisting_chunks: "Saving text chunks",
+    persisting_images: "Saving extracted images",
+    readying_review: "Preparing review queue",
+    failed: "Failed",
+    idle: "Idle"
+  };
+  if (stage && labels[stage]) {
+    return labels[stage];
+  }
   if (!stage || stage === "idle") {
     return "Idle";
   }
@@ -32,6 +45,30 @@ function formatStage(stage?: string | null): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatDetailLabel(key: string): string {
+  const labels: Record<string, string> = {
+    documents: "Documents",
+    rawChunks: "Raw chunks",
+    chunks: "Chunks",
+    droppedChunks: "Dropped chunks",
+    imageCandidates: "Image OCR entries",
+    storedImages: "Stored images",
+    indexedImageTexts: "Indexed image texts",
+    ocrImageTexts: "OCR image texts"
+  };
+  return labels[key] ?? formatStage(key);
+}
+
+function formatDetailValue(value: string | number | boolean | null | undefined): string {
+  if (typeof value === "number") {
+    return formatInteger(value);
+  }
+  if (typeof value === "boolean") {
+    return value ? "yes" : "no";
+  }
+  return value === null || value === undefined || value === "" ? "n/a" : String(value);
 }
 
 export function IngestStatusPanel({
@@ -54,6 +91,7 @@ export function IngestStatusPanel({
   const totalFiles = ingest.totalFiles ?? 0;
   const processedFiles = ingest.processedFiles ?? 0;
   const currentFiles = ingest.currentFiles ?? [];
+  const details = Object.entries(ingest.details ?? {}).filter(([, value]) => value !== undefined);
 
   return (
     <div className={hasError ? "ingest-status-panel error" : isRunning ? "ingest-status-panel running" : "ingest-status-panel"}>
@@ -71,6 +109,9 @@ export function IngestStatusPanel({
       <div className="ingest-status-grid">
         <span>Stage: {formatStage(ingest.stage)}</span>
         {isRunning && totalFiles ? <span>Progress: {formatInteger(processedFiles)} / {formatInteger(totalFiles)} files</span> : null}
+        {details.map(([key, value]) => (
+          <span key={key}>{formatDetailLabel(key)}: {formatDetailValue(value)}</span>
+        ))}
         <span>Started: {formatDateTime(ingest.lastStartedAt)}</span>
         <span>Finished: {formatDateTime(ingest.lastFinishedAt)}</span>
         <span>Result: {ingest.lastResult || "waiting"}</span>

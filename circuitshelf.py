@@ -263,6 +263,7 @@ index_status = {
     "lastError": None,
     "lastChanges": None,
     "nextCheckAt": None,
+    "details": {},
 }
 
 
@@ -297,13 +298,15 @@ def set_index_status(**updates):
         return dict(index_status)
 
 
-def update_index_progress(*, stage=None, current_file=None, finished_file=None, total_files=None):
+def update_index_progress(*, stage=None, current_file=None, finished_file=None, total_files=None, details=None):
     with INDEX_PROGRESS_LOCK:
         active_files = list(index_status.get("currentFiles") or [])
         if total_files is not None:
             index_status["totalFiles"] = int(total_files)
         if stage is not None:
             index_status["stage"] = stage
+        if details is not None:
+            index_status["details"] = details
         if current_file and current_file not in active_files:
             active_files.append(current_file)
         if finished_file:
@@ -475,6 +478,11 @@ def persist_db_image_state(file_records, target_state=None, rel_paths=None):
         image_store.replace_catalog(**payload)
     else:
         image_store.upsert_sources(**payload, rel_paths=set(rel_paths))
+    return {
+        "storedImages": len(target_state.get_image_store()),
+        "indexedImageTexts": len(image_ids),
+        "ocrImageTexts": len(image_text),
+    }
 
 
 def backfill_missing_image_embeddings(limit=512):
@@ -1120,7 +1128,13 @@ def run_incremental_ingest(changes, current_manifest):
             target_token_utils=ingest_token_utils,
             progress_callback=update_index_progress,
         )
-        update_index_progress(stage="embedding_chunks")
+        update_index_progress(
+            stage="embedding_chunks",
+            details={
+                "documents": len(changed_rel_paths),
+                "rawChunks": len(ingested_state.get_chunks()),
+            },
+        )
         builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
         try:
             build_result = builder.build()
@@ -1129,6 +1143,15 @@ def run_incremental_ingest(changes, current_manifest):
             if delete_rel_paths:
                 vector_store.delete_sources(delete_rel_paths)
             return None
+        update_index_progress(
+            stage="persisting_chunks",
+            details={
+                "documents": len(changed_rel_paths),
+                "chunks": build_result.chunks,
+                "droppedChunks": build_result.dropped_chunks,
+                "imageCandidates": build_result.images,
+            },
+        )
         vector_store.replace_sources(
             delete_rel_paths=delete_rel_paths,
             file_records=current_manifest,
@@ -1136,10 +1159,27 @@ def run_incremental_ingest(changes, current_manifest):
             sources=ingested_state.get_sources(),
             metadata=ingested_state.get_metadata(),
             embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
-            status="needs_review",
+            status="pending",
         )
-        update_index_progress(stage="persisting_images")
-        persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=changed_rel_paths)
+        update_index_progress(
+            stage="persisting_images",
+            details={
+                "documents": len(changed_rel_paths),
+                "chunks": build_result.chunks,
+                "imageCandidates": build_result.images,
+            },
+        )
+        image_result = persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=changed_rel_paths)
+        update_index_progress(
+            stage="readying_review",
+            details={
+                "documents": len(changed_rel_paths),
+                "chunks": build_result.chunks,
+                **image_result,
+            },
+        )
+        ready_sources = vector_store.set_sources_status(list(changed_rel_paths), "needs_review")
+        trace_logger.info(f"✅ {len(ready_sources)} documents are ready for review.")
     elif delete_rel_paths:
         vector_store.delete_sources(delete_rel_paths)
 
@@ -1163,9 +1203,24 @@ def reindex_review_source(source):
         target_token_utils=ingest_token_utils,
         progress_callback=update_index_progress,
     )
-    update_index_progress(stage="embedding_chunks")
+    update_index_progress(
+        stage="embedding_chunks",
+        details={
+            "documents": 1,
+            "rawChunks": len(ingested_state.get_chunks()),
+        },
+    )
     builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
     build_result = builder.build()
+    update_index_progress(
+        stage="persisting_chunks",
+        details={
+            "documents": 1,
+            "chunks": build_result.chunks,
+            "droppedChunks": build_result.dropped_chunks,
+            "imageCandidates": build_result.images,
+        },
+    )
     vector_store.replace_sources(
         delete_rel_paths=[source],
         file_records=current_manifest,
@@ -1173,9 +1228,19 @@ def reindex_review_source(source):
         sources=ingested_state.get_sources(),
         metadata=ingested_state.get_metadata(),
         embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
-        status="needs_review",
+        status="pending",
     )
-    persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=[source])
+    update_index_progress(
+        stage="persisting_images",
+        details={
+            "documents": 1,
+            "chunks": build_result.chunks,
+            "imageCandidates": build_result.images,
+        },
+    )
+    image_result = persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=[source])
+    update_index_progress(stage="readying_review", details={"documents": 1, **image_result})
+    vector_store.set_sources_status([source], "needs_review")
     return build_result
 
 
@@ -1194,6 +1259,7 @@ def check_for_training_changes(reason="watch"):
         lastReason=reason,
         lastError=None,
         lastResult="running",
+        details={},
     )
     start_time = time.time()
     try:
@@ -1212,6 +1278,7 @@ def check_for_training_changes(reason="watch"):
                 lastFinishedAt=utc_now_iso(),
                 lastResult="no_changes",
                 lastChanges=file_changes_payload(changes),
+                details={},
             )
 
         set_index_status(
@@ -1240,6 +1307,7 @@ def check_for_training_changes(reason="watch"):
             lastFinishedAt=utc_now_iso(),
             lastResult=result,
             lastChanges=file_changes_payload(changes),
+            details={},
         )
     except Exception as exc:
         trace_logger.error(f"❌ Incremental index check failed for {reason}: {exc}")
@@ -1250,6 +1318,7 @@ def check_for_training_changes(reason="watch"):
             lastFinishedAt=utc_now_iso(),
             lastResult="failed",
             lastError=str(exc),
+            details={},
         )
     finally:
         INDEX_JOB_LOCK.release()

@@ -28,6 +28,7 @@ export function ReviewView({
   const [images, setImages] = useState<ReviewImage[]>([]);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
+  const [detailBusy, setDetailBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -72,9 +73,14 @@ export function ReviewView({
     if (!selected) {
       setChunks([]);
       setImages([]);
+      setDetailBusy(false);
       return;
     }
     let active = true;
+    setDetailBusy(true);
+    setChunks([]);
+    setImages([]);
+    setError("");
     Promise.all([getReviewDocument(selected), getReviewDocumentImages(selected)])
       .then(([documentResponse, imageResponse]) => {
         if (active) {
@@ -82,7 +88,16 @@ export function ReviewView({
           setImages(imageResponse.images);
         }
       })
-      .catch((err) => setError(errorMessage(err, "Could not load review details")));
+      .catch((err) => {
+        if (active) {
+          setError(errorMessage(err, "Could not load review details"));
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setDetailBusy(false);
+        }
+      });
     return () => {
       active = false;
     };
@@ -185,18 +200,18 @@ export function ReviewView({
           actions={
             selectedDocument ? (
               <div className="review-actions">
-                <button className="primary-button" onClick={() => approveSelected(true)} disabled={actionBusy}>
+                <button className="primary-button" onClick={() => approveSelected(true)} disabled={actionBusy || detailBusy}>
                   Approve with images
                 </button>
                 {selectedDocument.imageCount > 0 ? (
-                  <button className="ghost-button" onClick={() => approveSelected(false)} disabled={actionBusy}>
+                  <button className="ghost-button" onClick={() => approveSelected(false)} disabled={actionBusy || detailBusy}>
                     Approve text only
                   </button>
                 ) : null}
-                <button className="ghost-button" onClick={reindexSelected} disabled={actionBusy}>
+                <button className="ghost-button" onClick={reindexSelected} disabled={actionBusy || detailBusy}>
                   Re-index
                 </button>
-                <button className="ghost-button danger-button" onClick={removeSelected} disabled={actionBusy}>
+                <button className="ghost-button danger-button" onClick={removeSelected} disabled={actionBusy || detailBusy}>
                   Remove
                 </button>
               </div>
@@ -207,6 +222,12 @@ export function ReviewView({
           <span>{formatInteger(chunks.length)} parsed text chunks</span>
           <span>{formatInteger(images.length)} stored images</span>
         </div>
+        {detailBusy ? (
+          <div className="review-loading">
+            <span className="loading-spinner" aria-hidden="true" />
+            <span>Loading review details...</span>
+          </div>
+        ) : null}
         <div className="review-images">
           {images.map((image) => (
             <article key={image.imageKey} className="review-image-card">
@@ -218,7 +239,7 @@ export function ReviewView({
               <img src={`data:image/png;base64,${image.imageBase64}`} alt={image.caption} />
             </article>
           ))}
-          {selectedDocument && !images.length ? <div className="empty-state compact">No image assets were extracted for this document.</div> : null}
+          {selectedDocument && !detailBusy && !images.length ? <div className="empty-state compact">No image assets were extracted for this document.</div> : null}
         </div>
         <div className="chunk-table">
           {chunks.map((chunk) => (
@@ -238,7 +259,7 @@ export function ReviewView({
               {chunk.qualityFlags.length ? <small>{chunk.qualityFlags.join(", ")}</small> : null}
             </article>
           ))}
-          {!chunks.length ? <div className="empty-state">Select a document to inspect review chunks.</div> : null}
+          {!detailBusy && !chunks.length ? <div className="empty-state">Select a document to inspect review chunks.</div> : null}
         </div>
       </div>
     </section>
