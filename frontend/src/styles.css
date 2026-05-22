@@ -1244,64 +1244,29 @@ nav {
   overflow: hidden;
 }
 
-.inspector-tabs {
+.document-page-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-}
-
-.tab-button {
-  min-height: 34px;
-  padding: 0 12px;
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #ffffff;
-  font-weight: 750;
-}
-
-.tab-button.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.document-page-content {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.document-images {
-  height: 100%;
-  min-height: 0;
-  display: grid;
-  align-content: start;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
-  overflow: auto;
-  padding-right: 3px;
-}
-
-.document-image-card {
-  min-width: 0;
-  display: grid;
-  align-content: start;
+  align-items: center;
   gap: 8px;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
-  overflow: hidden;
 }
 
-.document-image-card img {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 280px;
-  object-fit: contain;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #ffffff;
+.document-page-toolbar span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.document-chunk-list {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 3px;
 }
 
 .chunk-row {
