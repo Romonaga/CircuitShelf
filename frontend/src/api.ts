@@ -148,9 +148,9 @@ export function getReviewDocuments(): Promise<{ documents: ReviewDocument[] }> {
   return requestJson<{ documents: ReviewDocument[] }>("/api/review/documents");
 }
 
-export function getReviewDocument(source: string): Promise<{ document: string; displayName?: string; status?: string; chunks: ReviewChunk[] }> {
+export function getReviewDocument(source: string, limit = 50): Promise<{ document: string; displayName?: string; status?: string; chunks: ReviewChunk[] }> {
   return requestJson<{ document: string; displayName?: string; status?: string; chunks: ReviewChunk[] }>(
-    `/api/review/document?source=${encodeURIComponent(source)}`
+    `/api/review/document?source=${encodeURIComponent(source)}&limit=${encodeURIComponent(String(limit))}`
   );
 }
 

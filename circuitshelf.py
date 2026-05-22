@@ -3028,7 +3028,7 @@ async def review_document(req: Request, source: str, limit: int = 50):
     _, error = require_admin_user(req)
     if error:
         return error
-    rows = vector_store.review_document_chunks(source, limit=max(1, min(int(limit), 200)))
+    rows = vector_store.review_document_chunks(source, limit=max(1, min(int(limit), 500)))
     if not rows:
         return {"document": source, "chunks": []}
     return {

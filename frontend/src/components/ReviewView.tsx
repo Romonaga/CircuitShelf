@@ -14,6 +14,9 @@ import { ErrorMessage } from "./ErrorMessage";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { SectionHeader } from "./SectionHeader";
 
+const initialChunkPreviewLimit = 50;
+const maxChunkPreviewLimit = 500;
+
 export function ReviewView({
   isActive,
   refreshSignal,
@@ -26,6 +29,7 @@ export function ReviewView({
   const [documents, setDocuments] = useState<ReviewDocument[]>([]);
   const [selected, setSelected] = useState("");
   const [chunks, setChunks] = useState<ReviewChunk[]>([]);
+  const [chunkLimit, setChunkLimit] = useState(initialChunkPreviewLimit);
   const [images, setImages] = useState<ReviewImage[]>([]);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,6 +48,9 @@ export function ReviewView({
   }, [documents, filter]);
 
   const selectedDocument = documents.find((doc) => doc.source === selected) || null;
+  const totalChunkCount = selectedDocument?.chunkCount ?? chunks.length;
+  const chunkPreviewCap = Math.min(totalChunkCount || maxChunkPreviewLimit, maxChunkPreviewLimit);
+  const canLoadMoreChunks = Boolean(selectedDocument && chunks.length < totalChunkCount && chunkLimit < chunkPreviewCap);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -82,7 +89,7 @@ export function ReviewView({
     setChunks([]);
     setImages([]);
     setError("");
-    Promise.all([getReviewDocument(selected), getReviewDocumentImages(selected)])
+    Promise.all([getReviewDocument(selected, chunkLimit), getReviewDocumentImages(selected)])
       .then(([documentResponse, imageResponse]) => {
         if (active) {
           setChunks(documentResponse.chunks);
@@ -102,7 +109,7 @@ export function ReviewView({
     return () => {
       active = false;
     };
-  }, [selected]);
+  }, [selected, chunkLimit]);
 
   async function approveSelected(includeImages: boolean) {
     if (!selectedDocument) {
@@ -187,7 +194,10 @@ export function ReviewView({
             <button
               key={document.source}
               className={document.source === selected ? "document-row active" : "document-row"}
-              onClick={() => setSelected(document.source)}
+              onClick={() => {
+                setChunkLimit(initialChunkPreviewLimit);
+                setSelected(document.source);
+              }}
             >
               <span>{document.displayName}</span>
               <small>
@@ -228,8 +238,23 @@ export function ReviewView({
           }
         />
         <div className="review-summary-strip">
-          <span>{formatInteger(chunks.length)} parsed text chunks</span>
+          <span>
+            Showing {formatInteger(chunks.length)} of {formatInteger(totalChunkCount)} parsed text chunks
+          </span>
           <span>{formatInteger(images.length)} stored images</span>
+          {canLoadMoreChunks ? (
+            <button
+              className="ghost-button compact-button"
+              type="button"
+              onClick={() => setChunkLimit(Math.min(chunkLimit + 100, chunkPreviewCap))}
+              disabled={detailBusy}
+            >
+              Load more chunks
+            </button>
+          ) : null}
+          {selectedDocument && totalChunkCount > maxChunkPreviewLimit && chunks.length >= maxChunkPreviewLimit ? (
+            <span>Preview capped at {formatInteger(maxChunkPreviewLimit)} chunks</span>
+          ) : null}
         </div>
         {detailBusy ? (
           <div className="review-loading">
