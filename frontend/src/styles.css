@@ -447,7 +447,7 @@ nav {
 }
 
 .docs-grid {
-  grid-template-columns: 360px minmax(0, 1fr);
+  grid-template-columns: 430px minmax(0, 1fr);
 }
 
 .settings-grid {
@@ -1467,31 +1467,31 @@ nav {
 }
 
 .ingest-file-grid {
-  padding: 8px;
+  padding: 6px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
-  overflow-x: auto;
+  overflow: hidden;
 }
 
 .ingest-file-grid-heading,
 .ingest-file-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.6fr) minmax(110px, 1fr) minmax(70px, 0.55fr) minmax(80px, 0.6fr);
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 76px 64px 62px;
+  gap: 5px;
   align-items: center;
-  min-width: 520px;
+  min-width: 0;
 }
 
 .ingest-file-grid-heading {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.64rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .ingest-file-row {
-  padding: 6px 0;
+  padding: 5px 0;
   border-top: 1px solid var(--line);
 }
 
@@ -1500,10 +1500,16 @@ nav {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.72rem;
+  line-height: 1.2;
 }
 
 .ingest-file-row strong {
   color: var(--text);
+}
+
+.ingest-file-row span {
+  color: var(--muted);
 }
 
 .ingest-change-list {

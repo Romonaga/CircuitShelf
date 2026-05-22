@@ -104,6 +104,30 @@ function pageProgress(progress: Record<string, string | number | boolean | null 
   return "n/a";
 }
 
+function compactPhase(progress: Record<string, string | number | boolean | null | undefined>): string {
+  const phase = progress.documentPhase;
+  if (!phase) {
+    return "Active";
+  }
+  const text = formatDetailValue(phase);
+  const normalized = text.toLowerCase().replace(/\s+/g, "_");
+  const labels: Record<string, string> = {
+    extracting_text: "Text",
+    extracting_images: "Images",
+    extracting_pdf: "PDF",
+    scanning_pdf_pages: "Scan PDF",
+    selecting_visual_pdf_pages: "Find visuals",
+    saving_rendered_pdf_pages: "Save visuals",
+    ocr_image_extraction: "OCR images",
+    chunking: "Chunks",
+    embedding_chunks: "Embedding",
+    persisting_chunks: "Saving text",
+    persisting_images: "Saving images",
+    readying_review: "Review"
+  };
+  return labels[text] ?? labels[normalized] ?? formatStage(text);
+}
+
 export function IngestStatusPanel({
   ingest,
   workerBudget,
@@ -172,7 +196,7 @@ export function IngestStatusPanel({
           {fileRows.map(({ file, progress }) => (
             <div key={file} className="ingest-file-row">
               <strong title={file}>{file}</strong>
-              <span>{formatDetailValue(progress.documentPhase ?? "Active")}</span>
+              <span title={formatDetailValue(progress.documentPhase ?? "Active")}>{compactPhase(progress)}</span>
               <span>{pageProgress(progress)}</span>
               <span>{formatDetailValue(progress.imageCandidates)}</span>
             </div>
