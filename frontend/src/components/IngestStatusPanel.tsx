@@ -63,7 +63,8 @@ function formatDetailLabel(key: string): string {
     rawChunks: "Raw chunks",
     chunks: "Chunks",
     droppedChunks: "Dropped chunks",
-    imageCandidates: "Image OCR entries",
+    extractedImages: "Extracted images",
+    imageCandidates: "Indexed image OCR",
     storedImages: "Stored images",
     indexedImageTexts: "Indexed image texts",
     ocrImageTexts: "OCR image texts"

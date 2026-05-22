@@ -413,6 +413,63 @@ def file_changes_payload(changes):
     }
 
 
+def count_state_chunks_by_document(target_state):
+    counts = {}
+    sources = target_state.get_sources()
+    metadata = target_state.get_metadata()
+    for idx, source in enumerate(sources):
+        meta = metadata[idx] if idx < len(metadata) else {}
+        rel_path = vector_store.rel_path_for_source(source, meta)
+        counts[rel_path] = counts.get(rel_path, 0) + 1
+    return counts
+
+
+def count_state_images_by_document(image_keys, rel_paths):
+    counts = {rel_path: 0 for rel_path in rel_paths}
+    for image_id in image_keys:
+        for rel_path in rel_paths:
+            if image_asset_belongs_to_document(image_id, rel_path):
+                counts[rel_path] += 1
+                break
+    return counts
+
+
+def collect_document_ingest_stats(target_state, rel_paths, raw_chunk_counts=None, raw_image_counts=None, raw_ocr_image_counts=None):
+    rel_paths = list(rel_paths or [])
+    kept_chunk_counts = count_state_chunks_by_document(target_state)
+    indexed_image_counts = count_state_images_by_document(target_state.get_image_id_list(), rel_paths)
+    raw_chunk_counts = raw_chunk_counts or {}
+    raw_image_counts = raw_image_counts or count_state_images_by_document(target_state.get_image_store().keys(), rel_paths)
+    raw_ocr_image_counts = raw_ocr_image_counts or count_state_images_by_document(target_state.get_image_page_text().keys(), rel_paths)
+
+    stats = {}
+    for rel_path in rel_paths:
+        raw_chunks = int(raw_chunk_counts.get(rel_path, 0) or 0)
+        kept_chunks = int(kept_chunk_counts.get(rel_path, 0) or 0)
+        stats[rel_path] = {
+            "rawChunkCount": raw_chunks,
+            "chunkCount": kept_chunks,
+            "droppedChunkCount": max(raw_chunks - kept_chunks, 0),
+            "extractedImageCount": int(raw_image_counts.get(rel_path, 0) or 0),
+            "indexedImageTextCount": int(indexed_image_counts.get(rel_path, 0) or 0),
+            "ocrImageTextCount": int(raw_ocr_image_counts.get(rel_path, 0) or 0),
+        }
+    return stats
+
+
+def summarize_document_ingest_stats(document_stats):
+    values = list((document_stats or {}).values())
+    return {
+        "documents": len(values),
+        "rawChunks": sum(item.get("rawChunkCount", 0) for item in values),
+        "chunks": sum(item.get("chunkCount", 0) for item in values),
+        "droppedChunks": sum(item.get("droppedChunkCount", 0) for item in values),
+        "extractedImages": sum(item.get("extractedImageCount", 0) for item in values),
+        "indexedImageTexts": sum(item.get("indexedImageTextCount", 0) for item in values),
+        "ocrImageTexts": sum(item.get("ocrImageTextCount", 0) for item in values),
+    }
+
+
 def build_ingest_context():
     ingest_state = StateManager(use_lock=True, cache_capacity=0, trace_logger=trace_logger)
     ingest_token_utils = TokenUtils(state=ingest_state, trace_logger=trace_logger)
@@ -1154,6 +1211,7 @@ def run_incremental_ingest(changes, current_manifest):
 
     ingested_state = None
     build_result = None
+    final_details = {}
     if changed_rel_paths:
         ingested_state, ingest_token_utils, ingest_chunker = build_ingest_context()
         load_documents_parallel(
@@ -1165,11 +1223,16 @@ def run_incremental_ingest(changes, current_manifest):
             target_token_utils=ingest_token_utils,
             progress_callback=update_index_progress,
         )
+        raw_chunk_counts = count_state_chunks_by_document(ingested_state)
+        raw_image_counts = count_state_images_by_document(ingested_state.get_image_store().keys(), changed_rel_paths)
+        raw_ocr_image_counts = count_state_images_by_document(ingested_state.get_image_page_text().keys(), changed_rel_paths)
         update_index_progress(
             stage="embedding_chunks",
             details={
                 "documents": len(changed_rel_paths),
-                "rawChunks": len(ingested_state.get_chunks()),
+                "rawChunks": sum(raw_chunk_counts.values()),
+                "extractedImages": sum(raw_image_counts.values()),
+                "ocrImageTexts": sum(raw_ocr_image_counts.values()),
             },
         )
         builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
@@ -1179,15 +1242,24 @@ def run_incremental_ingest(changes, current_manifest):
             trace_logger.warning(f"⚠️ Changed documents produced no valid chunks: {exc}")
             if delete_rel_paths:
                 vector_store.delete_sources(delete_rel_paths)
-            return None
+            return None, {}
         update_index_progress(
             stage="persisting_chunks",
             details={
                 "documents": len(changed_rel_paths),
                 "chunks": build_result.chunks,
                 "droppedChunks": build_result.dropped_chunks,
-                "imageCandidates": build_result.images,
+                "extractedImages": sum(raw_image_counts.values()),
+                "indexedImageTexts": build_result.images,
+                "ocrImageTexts": sum(raw_ocr_image_counts.values()),
             },
+        )
+        document_stats = collect_document_ingest_stats(
+            ingested_state,
+            changed_rel_paths,
+            raw_chunk_counts=raw_chunk_counts,
+            raw_image_counts=raw_image_counts,
+            raw_ocr_image_counts=raw_ocr_image_counts,
         )
         vector_store.replace_sources(
             delete_rel_paths=delete_rel_paths,
@@ -1197,30 +1269,33 @@ def run_incremental_ingest(changes, current_manifest):
             metadata=ingested_state.get_metadata(),
             embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
             status="pending",
+            document_stats=document_stats,
         )
         update_index_progress(
             stage="persisting_images",
             details={
                 "documents": len(changed_rel_paths),
                 "chunks": build_result.chunks,
-                "imageCandidates": build_result.images,
+                "droppedChunks": build_result.dropped_chunks,
+                "extractedImages": sum(raw_image_counts.values()),
+                "indexedImageTexts": build_result.images,
             },
         )
         image_result = persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=changed_rel_paths)
+        final_details = {
+            **summarize_document_ingest_stats(document_stats),
+            **image_result,
+        }
         update_index_progress(
             stage="readying_review",
-            details={
-                "documents": len(changed_rel_paths),
-                "chunks": build_result.chunks,
-                **image_result,
-            },
+            details=final_details,
         )
         ready_sources = vector_store.set_sources_status(list(changed_rel_paths), "needs_review")
         trace_logger.info(f"✅ {len(ready_sources)} documents are ready for review.")
     elif delete_rel_paths:
         vector_store.delete_sources(delete_rel_paths)
 
-    return build_result
+    return build_result, final_details
 
 
 def reindex_review_source(source):
@@ -1240,11 +1315,16 @@ def reindex_review_source(source):
         target_token_utils=ingest_token_utils,
         progress_callback=update_index_progress,
     )
+    raw_chunk_counts = count_state_chunks_by_document(ingested_state)
+    raw_image_counts = count_state_images_by_document(ingested_state.get_image_store().keys(), [source])
+    raw_ocr_image_counts = count_state_images_by_document(ingested_state.get_image_page_text().keys(), [source])
     update_index_progress(
         stage="embedding_chunks",
         details={
             "documents": 1,
-            "rawChunks": len(ingested_state.get_chunks()),
+            "rawChunks": sum(raw_chunk_counts.values()),
+            "extractedImages": sum(raw_image_counts.values()),
+            "ocrImageTexts": sum(raw_ocr_image_counts.values()),
         },
     )
     builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
@@ -1255,8 +1335,17 @@ def reindex_review_source(source):
             "documents": 1,
             "chunks": build_result.chunks,
             "droppedChunks": build_result.dropped_chunks,
-            "imageCandidates": build_result.images,
+            "extractedImages": sum(raw_image_counts.values()),
+            "indexedImageTexts": build_result.images,
+            "ocrImageTexts": sum(raw_ocr_image_counts.values()),
         },
+    )
+    document_stats = collect_document_ingest_stats(
+        ingested_state,
+        [source],
+        raw_chunk_counts=raw_chunk_counts,
+        raw_image_counts=raw_image_counts,
+        raw_ocr_image_counts=raw_ocr_image_counts,
     )
     vector_store.replace_sources(
         delete_rel_paths=[source],
@@ -1266,17 +1355,20 @@ def reindex_review_source(source):
         metadata=ingested_state.get_metadata(),
         embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
         status="pending",
+        document_stats=document_stats,
     )
     update_index_progress(
         stage="persisting_images",
         details={
             "documents": 1,
             "chunks": build_result.chunks,
-            "imageCandidates": build_result.images,
+            "droppedChunks": build_result.dropped_chunks,
+            "extractedImages": sum(raw_image_counts.values()),
+            "indexedImageTexts": build_result.images,
         },
     )
     image_result = persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=[source])
-    update_index_progress(stage="readying_review", details={"documents": 1, **image_result})
+    update_index_progress(stage="readying_review", details={**summarize_document_ingest_stats(document_stats), **image_result})
     vector_store.set_sources_status([source], "needs_review")
     return build_result
 
@@ -1327,7 +1419,7 @@ def check_for_training_changes(reason="watch"):
             totalFiles=len(changes.changed_or_added),
             currentFiles=[],
         )
-        build_result = run_incremental_ingest(changes, current_manifest)
+        build_result, final_details = run_incremental_ingest(changes, current_manifest)
         duration = time.time() - start_time
         trace_logger.info(
             f"✅ Incremental index check completed in {duration:.2f} sec. "
@@ -1347,7 +1439,7 @@ def check_for_training_changes(reason="watch"):
             lastFinishedAt=utc_now_iso(),
             lastResult=result,
             lastChanges=file_changes_payload(changes),
-            details={},
+            details=final_details,
         )
     except Exception as exc:
         trace_logger.error(f"❌ Incremental index check failed for {reason}: {exc}")
@@ -2462,6 +2554,12 @@ def review_document_payload(row):
         "fileExtension": row["file_extension"],
         "chunkCount": int(row["chunk_count"] or 0),
         "imageCount": int(row["image_count"] or 0),
+        "rawChunkCount": int(row["raw_chunk_count"] or 0),
+        "droppedChunkCount": int(row["dropped_chunk_count"] or 0),
+        "extractedImageCount": int(row["extracted_image_count"] or 0),
+        "storedImageCount": int(row["stored_image_count"] or 0),
+        "indexedImageTextCount": int(row["indexed_image_text_count"] or 0),
+        "ocrImageTextCount": int(row["ocr_image_text_count"] or 0),
         "avgQuality": float(row["avg_quality"] or 0.0),
         "lowQualityCount": int(row["low_quality_count"] or 0),
         "lastIngestedAt": row["last_ingested_at"].isoformat() if row["last_ingested_at"] else None,
@@ -2858,34 +2956,20 @@ async def react_query(req: Request):
 
 @app.get("/api/documents")
 async def documents():
-    grouped = {}
-    metadata = state.get_metadata()
-    for idx, source in enumerate(state.get_sources()):
-        meta = metadata[idx] if idx < len(metadata) else {}
-        doc_source = document_source_from_metadata(source, meta)
-        doc = grouped.setdefault(
-            doc_source,
-            {
-                "source": doc_source,
-                "displayName": display_source_name(doc_source),
-                "chunkCount": 0,
-                "imageIds": set(),
-            },
-        )
-        doc["chunkCount"] += 1
-        image_id = source_image_id_from_metadata(source, meta)
-        if image_id:
-            doc["imageIds"].add(image_id)
-
     docs = []
-    for doc in grouped.values():
+    for row in vector_store.list_document_stats():
         docs.append({
-            "source": doc["source"],
-            "displayName": doc["displayName"],
-            "chunkCount": doc["chunkCount"],
-            "imageCount": max(len(doc["imageIds"]), image_asset_count_for_document(doc["source"])),
+            "source": row["source_path"],
+            "displayName": row["display_name"],
+            "chunkCount": int(row["actual_chunk_count"] or row["chunk_count"] or 0),
+            "imageCount": int(row["actual_image_count"] or row["stored_image_count"] or 0),
+            "rawChunkCount": int(row["raw_chunk_count"] or 0),
+            "droppedChunkCount": int(row["dropped_chunk_count"] or 0),
+            "extractedImageCount": int(row["extracted_image_count"] or 0),
+            "storedImageCount": int(row["stored_image_count"] or 0),
+            "indexedImageTextCount": int(row["indexed_image_text_count"] or 0),
+            "ocrImageTextCount": int(row["ocr_image_text_count"] or 0),
         })
-    docs.sort(key=lambda item: item["displayName"].lower())
     return {"documents": docs}
 
 
@@ -3019,6 +3103,22 @@ def build_document_detail(doc_name):
         "chunks": rows,
         "images": image_assets,
         "pages": sorted(pages.values(), key=lambda item: int(item["page"])),
+        "ingestStats": next(
+            (
+                {
+                    "rawChunkCount": int(row["raw_chunk_count"] or 0),
+                    "chunkCount": int(row["actual_chunk_count"] or row["chunk_count"] or 0),
+                    "droppedChunkCount": int(row["dropped_chunk_count"] or 0),
+                    "extractedImageCount": int(row["extracted_image_count"] or 0),
+                    "storedImageCount": int(row["stored_image_count"] or 0),
+                    "indexedImageTextCount": int(row["indexed_image_text_count"] or 0),
+                    "ocrImageTextCount": int(row["ocr_image_text_count"] or 0),
+                }
+                for row in vector_store.list_document_stats()
+                if row["source_path"] == doc_name
+            ),
+            None,
+        ),
         "pinout": intelligence.get("pinout") if intelligence.get("pinout", {}).get("pins") else pinout,
         "intelligence": intelligence,
     }

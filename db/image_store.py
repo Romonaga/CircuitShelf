@@ -51,6 +51,7 @@ class ImageStore:
         if not image_store:
             with self.database.connection() as conn:
                 conn.execute(load_query("image_catalog_clear.sql"))
+                self._refresh_document_image_stats(conn, None)
             return
 
         image_meta = self._metadata_by_image_key(metadata)
@@ -67,6 +68,7 @@ class ImageStore:
                 embedding_model=embedding_model,
                 metadata=metadata,
             )
+            self._refresh_document_image_stats(conn, None)
 
     def upsert_sources(
         self,
@@ -82,6 +84,7 @@ class ImageStore:
     ) -> None:
         if not image_store:
             return
+        refreshed_paths = set(rel_paths)
         with self.database.connection() as conn:
             self._upsert_image_rows(
                 conn,
@@ -94,6 +97,7 @@ class ImageStore:
                 metadata=metadata,
                 rel_paths=rel_paths,
             )
+            self._refresh_document_image_stats(conn, refreshed_paths)
 
     def _upsert_image_rows(
         self,
@@ -154,6 +158,10 @@ class ImageStore:
                     vector_to_sql(image_embeddings[image_key]) if image_key in image_embeddings else None,
                 ),
             )
+
+    def _refresh_document_image_stats(self, conn, rel_paths: set[str] | None) -> None:
+        paths = sorted(rel_paths) if rel_paths is not None else None
+        conn.execute(load_query("document_image_stats_refresh.sql"), (paths, paths))
 
     def counts(self) -> dict[str, int]:
         with self.database.connection() as conn:

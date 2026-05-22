@@ -12,6 +12,7 @@ export function DocumentStatsPanel({ detail }: { detail: DocumentDetail | null }
 
   const factCount = detail.intelligence?.facts.length ?? 0;
   const pinCount = detail.pinout.pins.length;
+  const stats = detail.ingestStats;
 
   return (
     <div className="document-stats-panel">
@@ -37,6 +38,16 @@ export function DocumentStatsPanel({ detail }: { detail: DocumentDetail | null }
           <strong>{formatInteger(factCount)}</strong>
         </div>
       </div>
+
+      {stats ? (
+        <div className="document-ingest-stats">
+          <span>Raw chunks: {formatInteger(stats.rawChunkCount)}</span>
+          <span>Dropped chunks: {formatInteger(stats.droppedChunkCount)}</span>
+          <span>Extracted images: {formatInteger(stats.extractedImageCount)}</span>
+          <span>Stored images: {formatInteger(stats.storedImageCount)}</span>
+          <span>Indexed image OCR: {formatInteger(stats.indexedImageTextCount)}</span>
+        </div>
+      ) : null}
 
       {detail.intelligence ? (
         <div className="document-detection-summary">

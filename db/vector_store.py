@@ -117,13 +117,14 @@ class VectorStore:
         metadata: list[dict],
         embeddings: np.ndarray,
         status: str = "indexed",
+        document_stats: dict[str, dict[str, int]] | None = None,
     ) -> None:
         if len(chunks) != len(sources) or len(chunks) != len(metadata) or len(chunks) != len(embeddings):
             raise ValueError("Chunk, source, metadata, and embedding counts must match before DB persistence.")
 
         with self.database.connection() as conn:
             conn.execute(load_query("vector_catalog_clear.sql"))
-            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings, status)
+            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings, status, document_stats or {})
 
     def replace_sources(
         self,
@@ -135,6 +136,7 @@ class VectorStore:
         metadata: list[dict],
         embeddings: np.ndarray,
         status: str = "needs_review",
+        document_stats: dict[str, dict[str, int]] | None = None,
     ) -> None:
         if len(chunks) != len(sources) or len(chunks) != len(metadata) or len(chunks) != len(embeddings):
             raise ValueError("Chunk, source, metadata, and embedding counts must match before DB persistence.")
@@ -142,7 +144,7 @@ class VectorStore:
         with self.database.connection() as conn:
             if delete_rel_paths:
                 conn.execute(load_query("vector_document_delete_by_sources.sql"), (delete_rel_paths,))
-            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings, status)
+            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings, status, document_stats or {})
 
     def _insert_catalog_rows(
         self,
@@ -153,6 +155,7 @@ class VectorStore:
         metadata: list[dict],
         embeddings: np.ndarray,
         status: str,
+        document_stats: dict[str, dict[str, int]],
     ) -> None:
         document_ids: dict[str, str] = {}
         page_ids: dict[tuple[str, int], str] = {}
@@ -163,6 +166,7 @@ class VectorStore:
             record = file_records.get(rel_path) or self.record_from_source(rel_path)
             document_id = document_ids.get(rel_path)
             if not document_id:
+                stats = document_stats.get(rel_path, {})
                 document_id = conn.execute(
                     load_query("vector_document_upsert.sql"),
                     (
@@ -173,6 +177,12 @@ class VectorStore:
                         record.mtime_ns,
                         record.sha256,
                         status,
+                        int(stats.get("rawChunkCount", 0) or 0),
+                        int(stats.get("chunkCount", 0) or 0),
+                        int(stats.get("droppedChunkCount", 0) or 0),
+                        int(stats.get("extractedImageCount", 0) or 0),
+                        int(stats.get("indexedImageTextCount", 0) or 0),
+                        int(stats.get("ocrImageTextCount", 0) or 0),
                     ),
                 ).fetchone()["id"]
                 document_ids[rel_path] = document_id
@@ -273,6 +283,11 @@ class VectorStore:
     def list_review_documents(self) -> list[dict]:
         with self.database.connection() as conn:
             rows = conn.execute(load_query("review_documents_list.sql")).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_document_stats(self) -> list[dict]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("vector_documents_stats.sql")).fetchall()
         return [dict(row) for row in rows]
 
     def review_document_chunks(self, source_path: str, *, limit: int = 50) -> list[dict]:

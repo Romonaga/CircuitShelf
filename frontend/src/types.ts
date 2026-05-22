@@ -54,6 +54,12 @@ export interface DocumentSummary {
   displayName?: string;
   chunkCount: number;
   imageCount: number;
+  rawChunkCount?: number;
+  droppedChunkCount?: number;
+  extractedImageCount?: number;
+  storedImageCount?: number;
+  indexedImageTextCount?: number;
+  ocrImageTextCount?: number;
 }
 
 export interface UploadedDocument {
@@ -263,6 +269,17 @@ export interface DocumentDetail {
   pages: DocumentPage[];
   pinout: DocumentPinout;
   intelligence?: DatasheetIntelligence | null;
+  ingestStats?: DocumentIngestStats | null;
+}
+
+export interface DocumentIngestStats {
+  rawChunkCount: number;
+  chunkCount: number;
+  droppedChunkCount: number;
+  extractedImageCount: number;
+  storedImageCount: number;
+  indexedImageTextCount: number;
+  ocrImageTextCount: number;
 }
 
 export interface StatusPayload {
@@ -341,6 +358,12 @@ export interface ReviewDocument {
   fileExtension: string;
   chunkCount: number;
   imageCount: number;
+  rawChunkCount?: number;
+  droppedChunkCount?: number;
+  extractedImageCount?: number;
+  storedImageCount?: number;
+  indexedImageTextCount?: number;
+  ocrImageTextCount?: number;
   avgQuality: number;
   lowQualityCount: number;
   lastIngestedAt?: string | null;

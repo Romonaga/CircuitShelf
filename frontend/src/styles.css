@@ -1676,7 +1676,7 @@ nav {
 .document-page-inspector {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
   overflow: hidden;
 }
@@ -1695,6 +1695,90 @@ nav {
 .document-page-toolbar span {
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.document-ingest-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.document-ingest-stats span {
+  padding: 5px 9px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.document-image-details {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.document-image-details summary {
+  cursor: pointer;
+  padding: 10px;
+  color: var(--text);
+  font-weight: 750;
+}
+
+.document-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  max-height: 360px;
+  overflow: auto;
+  padding: 0 10px 10px;
+}
+
+.document-image-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.document-image-card div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.document-image-card strong,
+.document-image-card span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-image-card span,
+.document-image-card p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.document-image-card img {
+  width: 100%;
+  max-height: 210px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.document-image-card p {
+  max-height: 78px;
+  margin: 0;
+  overflow: auto;
 }
 
 .document-chunk-list {

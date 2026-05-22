@@ -1,5 +1,6 @@
 import type { DocumentPage } from "../types";
 import { formatInteger } from "../lib/format";
+import { DocumentImageGallery } from "./DocumentImageGallery";
 
 export function DocumentPageInspector({ page }: { page: DocumentPage }) {
   return (
@@ -9,6 +10,8 @@ export function DocumentPageInspector({ page }: { page: DocumentPage }) {
         <span>{formatInteger(page.chunks.length)} chunks</span>
         <span>{formatInteger(page.images.length)} image assets available to retrieval</span>
       </div>
+
+      <DocumentImageGallery images={page.images} />
 
       <div className="document-chunk-list">
         {page.chunks.map((chunk) => (
