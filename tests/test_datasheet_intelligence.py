@@ -106,6 +106,44 @@ class DatasheetIntelligenceTests(unittest.TestCase):
 
         self.assertEqual(card["componentName"], "4N35")
 
+    def test_build_card_prefers_matching_555_component_over_noisy_source_match(self):
+        noisy_project_book = {
+            "questionMatch": True,
+            "source": "training/Engineer's Mini-Notebook - 555 Timer Circuits.pdf",
+            "displayName": "Engineer's Mini-Notebook - 555 Timer Circuits.pdf",
+            "componentName": "NEAQ",
+            "componentType": "timer",
+            "summary": "NEAQ appears to be a timer.",
+            "confidence": 0.75,
+            "facts": [],
+            "pinout": {"pins": []},
+        }
+        datasheet = {
+            "questionMatch": True,
+            "source": "training/ne555.pdf",
+            "displayName": "ne555.pdf",
+            "componentName": "NE555",
+            "componentType": "timer",
+            "summary": "NE555 appears to be a timer.",
+            "confidence": 0.75,
+            "facts": [],
+            "pinout": {"pins": []},
+        }
+
+        card = build_circuit_build_card(
+            "build me a 555 timer project that is hooked up to an arduino",
+            [
+                {"source": "training/Engineer's Mini-Notebook - 555 Timer Circuits.pdf"},
+                {"source": "training/ne555.pdf"},
+            ],
+            {
+                "training/Engineer's Mini-Notebook - 555 Timer Circuits.pdf": noisy_project_book,
+                "training/ne555.pdf": datasheet,
+            },
+        )
+
+        self.assertEqual(card["componentName"], "NE555")
+
     def test_ads_datasheet_is_detected_as_adc_with_pinout(self):
         chunks = [
             """ADS1115

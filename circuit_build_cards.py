@@ -42,7 +42,7 @@ def build_circuit_build_card(question: str, source_payload: list[dict], intellig
     if not should_build_card(question):
         return None
 
-    intelligence = _first_intelligence(source_payload, intelligence_by_source)
+    intelligence = _first_intelligence(question, source_payload, intelligence_by_source)
     if not intelligence:
         return None
 
@@ -68,15 +68,51 @@ def build_circuit_build_card(question: str, source_payload: list[dict], intellig
     }
 
 
-def _first_intelligence(source_payload: list[dict], intelligence_by_source: dict[str, dict]) -> dict | None:
-    question_match = next((item for item in intelligence_by_source.values() if item.get("questionMatch")), None)
-    if question_match:
-        return question_match
-    for source in source_payload:
-        item = intelligence_by_source.get(source.get("source"))
-        if item:
-            return item
-    return next(iter(intelligence_by_source.values()), None)
+def _first_intelligence(question: str, source_payload: list[dict], intelligence_by_source: dict[str, dict]) -> dict | None:
+    candidates = list(intelligence_by_source.values())
+    if not candidates:
+        return None
+
+    source_order = {
+        source.get("source"): index
+        for index, source in enumerate(source_payload or [])
+        if source.get("source")
+    }
+    return max(
+        candidates,
+        key=lambda item: _intelligence_score(question, item, source_order),
+    )
+
+
+def _intelligence_score(question: str, intelligence: dict, source_order: dict[str, int]) -> tuple:
+    component = str(intelligence.get("componentName") or intelligence.get("displayName") or "")
+    display = str(intelligence.get("displayName") or "")
+    source = str(intelligence.get("source") or "")
+    haystack = _normalized_identifier(f"{component} {display} {source}")
+    component_id = _normalized_identifier(component)
+    terms = [_normalized_identifier(term) for term in _question_component_terms(question)]
+
+    component_term_match = any(term and term in component_id for term in terms)
+    source_term_match = any(term and term in haystack for term in terms)
+    pin_count = len((intelligence.get("pinout") or {}).get("pins") or [])
+    source_rank = source_order.get(source, 10_000)
+
+    return (
+        bool(component_term_match),
+        bool(intelligence.get("questionMatch")),
+        bool(source_term_match),
+        pin_count,
+        float(intelligence.get("confidence") or 0.0),
+        -source_rank,
+    )
+
+
+def _question_component_terms(question: str) -> list[str]:
+    return [match.group(0).strip("-") for match in re.finditer(r"\b[A-Za-z]*\d[A-Za-z0-9-]{1,24}\b", question or "")]
+
+
+def _normalized_identifier(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
 def _parts(lower: str, component: str, component_type: str) -> list[dict]:
