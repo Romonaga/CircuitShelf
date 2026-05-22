@@ -1263,9 +1263,11 @@ def check_for_training_changes(reason="watch"):
         processedFiles=0,
         totalFiles=0,
         lastStartedAt=utc_now_iso(),
+        lastFinishedAt=None,
         lastReason=reason,
         lastError=None,
         lastResult="running",
+        lastChanges=None,
         details={},
     )
     start_time = time.time()
@@ -1274,6 +1276,7 @@ def check_for_training_changes(reason="watch"):
         current_manifest = manifest.scan()
         previous_manifest = vector_store.load_document_records()
         changes = manifest.diff(previous_manifest, current_manifest)
+        set_index_status(lastChanges=file_changes_payload(changes))
         if not changes.has_changes:
             trace_logger.info(f"✅ Index check found no training changes for {reason}.")
             return set_index_status(
