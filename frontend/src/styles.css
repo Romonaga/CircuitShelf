@@ -388,7 +388,8 @@ nav {
   background: var(--panel-soft);
 }
 
-.review-loading {
+.review-loading,
+.document-loading {
   min-height: 120px;
   display: inline-flex;
   align-items: center;
@@ -398,6 +399,20 @@ nav {
   border: 1px dashed var(--line-strong);
   border-radius: 8px;
   background: var(--panel-soft);
+}
+
+.document-row-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.document-row-spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border-width: 2px;
 }
 
 .loading-spinner {

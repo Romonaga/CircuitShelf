@@ -8,6 +8,7 @@ import { ErrorMessage } from "./ErrorMessage";
 import { IngestStatusPanel } from "./IngestStatusPanel";
 import { DocumentPageInspector } from "./DocumentPageInspector";
 import { DocumentStatsPanel } from "./DocumentStatsPanel";
+import { LoadingSpinner } from "./LoadingSpinner";
 import { SectionHeader } from "./SectionHeader";
 
 export function DocumentsView({
@@ -33,6 +34,7 @@ export function DocumentsView({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [detailBusy, setDetailBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadInputKey, setUploadInputKey] = useState(0);
@@ -117,9 +119,14 @@ export function DocumentsView({
     if (!selected) {
       setDetail(null);
       setSelectedPage(null);
+      setDetailBusy(false);
       return;
     }
     let active = true;
+    setDetailBusy(true);
+    setDetail(null);
+    setSelectedPage(null);
+    setError("");
     getDocument(selected)
       .then((response) => {
         if (active) {
@@ -127,7 +134,16 @@ export function DocumentsView({
           setSelectedPage(response.pages[0]?.page ?? null);
         }
       })
-      .catch((err) => setError(errorMessage(err, "Could not load document")));
+      .catch((err) => {
+        if (active) {
+          setError(errorMessage(err, "Could not load document"));
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setDetailBusy(false);
+        }
+      });
     return () => {
       active = false;
     };
@@ -181,7 +197,10 @@ export function DocumentsView({
               className={document.source === selected ? "document-row active" : "document-row"}
               onClick={() => setSelected(document.source)}
             >
-              <span>{document.displayName ?? document.source}</span>
+              <span className="document-row-title">
+                {document.displayName ?? document.source}
+                {detailBusy && document.source === selected ? <LoadingSpinner className="document-row-spinner" /> : null}
+              </span>
               <small>
                 {formatInteger(document.chunkCount)} chunks | {formatInteger(document.imageCount)} images
               </small>
@@ -192,10 +211,16 @@ export function DocumentsView({
       <div className="chunk-panel">
         <SectionHeader
           title={documents.find((document) => document.source === selected)?.displayName ?? selected ?? "No document selected"}
-          description={`${formatInteger(detail?.chunks.length ?? 0)} chunks | ${formatInteger(detail?.images.length ?? 0)} images`}
+          description={detailBusy ? "Loading document details..." : `${formatInteger(detail?.chunks.length ?? 0)} chunks | ${formatInteger(detail?.images.length ?? 0)} images`}
         />
-        <DocumentStatsPanel detail={detail} />
-        {detail?.pages.length ? (
+        {detailBusy ? (
+          <div className="document-loading">
+            <LoadingSpinner />
+            <span>Loading document details...</span>
+          </div>
+        ) : null}
+        {!detailBusy ? <DocumentStatsPanel detail={detail} /> : null}
+        {!detailBusy && detail?.pages.length ? (
           <div className="document-explorer">
             <div className="page-strip">
               {detail.pages.map((page) => (
@@ -213,9 +238,9 @@ export function DocumentsView({
               {selectedPageDetail ? <DocumentPageInspector page={selectedPageDetail} /> : null}
             </div>
           </div>
-        ) : (
+        ) : !detailBusy ? (
           <div className="empty-state">Select a document to inspect its pages, chunks, images, and pinout.</div>
-        )}
+        ) : null}
       </div>
     </section>
   );
