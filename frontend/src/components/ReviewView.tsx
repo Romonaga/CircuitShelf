@@ -229,19 +229,22 @@ export function ReviewView({
             <span>Loading review details...</span>
           </div>
         ) : null}
-        <div className="review-images">
-          {images.map((image) => (
-            <article key={image.imageKey} className="review-image-card">
-              <div className="chunk-meta">
-                <strong>{image.caption}</strong>
-                {image.page ? <span>Page {image.page}</span> : null}
-                <span>{formatInteger(image.width)} x {formatInteger(image.height)}</span>
-              </div>
-              <img src={`data:image/png;base64,${image.imageBase64}`} alt={image.caption} />
-            </article>
-          ))}
-          {selectedDocument && !detailBusy && !images.length ? <div className="empty-state compact">No image assets were extracted for this document.</div> : null}
-        </div>
+        <details className="review-image-details">
+          <summary>Image assets ({formatInteger(images.length)})</summary>
+          <div className="review-images">
+            {images.map((image) => (
+              <article key={image.imageKey} className="review-image-card">
+                <div className="chunk-meta">
+                  <strong>{image.caption}</strong>
+                  {image.page ? <span>Page {image.page}</span> : null}
+                  <span>{formatInteger(image.width)} x {formatInteger(image.height)}</span>
+                </div>
+                <img src={`data:image/png;base64,${image.imageBase64}`} alt={image.caption} />
+              </article>
+            ))}
+            {selectedDocument && !detailBusy && !images.length ? <div className="empty-state compact">No image assets were extracted for this document.</div> : null}
+          </div>
+        </details>
         <div className="chunk-table">
           {chunks.map((chunk) => (
             <article key={chunk.index} className={chunk.quality < 0.35 ? "chunk-row warning-row" : "chunk-row"}>

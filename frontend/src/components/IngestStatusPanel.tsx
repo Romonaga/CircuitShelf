@@ -31,7 +31,7 @@ function formatStage(stage?: string | null): string {
     processing_documents: "Extracting text and images",
     embedding_chunks: "Embedding text chunks",
     persisting_chunks: "Saving text chunks",
-    persisting_images: "Saving extracted images",
+    persisting_images: "Saving image assets",
     readying_review: "Preparing review queue",
     failed: "Failed",
     idle: "Idle"

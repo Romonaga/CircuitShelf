@@ -421,7 +421,20 @@ nav {
   gap: 10px;
   max-height: 430px;
   overflow: auto;
-  padding-right: 3px;
+  padding: 0 10px 10px;
+}
+
+.review-image-details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.review-image-details summary {
+  cursor: pointer;
+  padding: 10px;
+  color: var(--text);
+  font-weight: 750;
 }
 
 .review-image-card {
@@ -1169,12 +1182,91 @@ nav {
 .chunk-panel {
   max-height: calc(100vh - 48px);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 14px;
 }
 
 .review-panel {
   grid-template-rows: auto auto auto auto minmax(0, 1fr);
+}
+
+.document-stats-panel {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.document-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.document-stat {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.document-stat span,
+.document-detection-summary span,
+.document-detection-summary p {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.document-stat strong {
+  font-size: 1.05rem;
+  line-height: 1.1;
+}
+
+.document-detection-summary {
+  display: grid;
+  gap: 4px;
+}
+
+.document-pinout-details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.document-pinout-details summary {
+  cursor: pointer;
+  padding: 10px;
+  color: var(--text);
+  font-weight: 750;
+}
+
+.document-pinout-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.document-pin-card {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.document-pin-card span,
+.document-pin-card small {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .pinout-panel {
@@ -1420,7 +1512,8 @@ nav {
   .build-card-grid,
   .intelligence-facts,
   .build-wiring-row,
-  .fact-row {
+  .fact-row,
+  .document-stat-grid {
     grid-template-columns: 1fr;
   }
 }

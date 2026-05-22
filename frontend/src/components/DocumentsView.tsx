@@ -6,8 +6,8 @@ import { formatInteger } from "../lib/format";
 import { uploadResultMessage } from "../lib/uploadMessages";
 import { ErrorMessage } from "./ErrorMessage";
 import { IngestStatusPanel } from "./IngestStatusPanel";
-import { DatasheetIntelligencePanel } from "./DatasheetIntelligencePanel";
 import { DocumentPageInspector } from "./DocumentPageInspector";
+import { DocumentStatsPanel } from "./DocumentStatsPanel";
 import { SectionHeader } from "./SectionHeader";
 
 export function DocumentsView({
@@ -77,6 +77,12 @@ export function DocumentsView({
       void loadDocuments();
     }
   }, [isActive, loadDocuments, refreshSignal]);
+
+  useEffect(() => {
+    if (!status?.ingest?.running && message.toLowerCase().includes("started")) {
+      setMessage("");
+    }
+  }, [message, status?.ingest?.running]);
 
   async function submitUpload() {
     if (!uploadFiles.length) {
@@ -194,21 +200,7 @@ export function DocumentsView({
           title={documents.find((document) => document.source === selected)?.displayName ?? selected ?? "No document selected"}
           description={`${formatInteger(detail?.chunks.length ?? 0)} chunks | ${formatInteger(detail?.images.length ?? 0)} images`}
         />
-        <DatasheetIntelligencePanel intelligence={detail?.intelligence} />
-        {detail?.pinout.pins.length ? (
-          <div className="pinout-panel">
-            <strong>Detected Pinout</strong>
-            <div className="pinout-grid">
-              {detail.pinout.pins.map((pin) => (
-                <div key={pin.pin} className="pinout-row">
-                  <span>Pin {pin.pin}</span>
-                  <b>{pin.function}</b>
-                  {pin.page ? <small>Page {pin.page}</small> : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+        <DocumentStatsPanel detail={detail} />
         {detail?.pages.length ? (
           <div className="document-explorer">
             <div className="page-strip">
