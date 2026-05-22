@@ -1233,30 +1233,36 @@ nav {
 .page-detail {
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(180px, min(34vh, 360px)) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   overflow: hidden;
+  isolation: isolate;
 }
 
 .document-images {
   position: relative;
   z-index: 1;
-  min-height: 0;
-  display: grid;
-  align-content: start;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  height: clamp(180px, 28vh, 320px);
+  min-height: 180px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
   gap: 10px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
+  contain: layout paint;
 }
 
 .document-image-card {
+  flex: 0 0 min(280px, 78vw);
   min-width: 0;
+  height: 100%;
   display: grid;
-  align-content: start;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
   padding: 10px;
   border: 1px solid var(--line);
@@ -1268,12 +1274,18 @@ nav {
 .document-image-card img {
   display: block;
   width: 100%;
-  height: auto;
-  max-height: 300px;
+  height: 100%;
+  min-height: 0;
   object-fit: contain;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #ffffff;
+}
+
+.page-detail > .chunk-table {
+  position: relative;
+  z-index: 2;
+  background: var(--surface);
 }
 
 .chunk-row {
