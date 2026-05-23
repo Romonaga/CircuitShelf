@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import type { InventoryPartInput } from "../types";
 
-const partTypes = ["component", "ic", "resistor", "capacitor", "transistor", "sensor", "module", "board", "tooling", "power"];
+const partTypes = ["component", "ic", "resistor", "capacitor", "diode", "transistor", "sensor", "module", "board", "display", "tooling", "power"];
 
 const initialPart: InventoryPartInput = {
   displayName: "",

@@ -4,13 +4,14 @@ import { errorMessage } from "../lib/errors";
 import type { AppConfig, InventoryPartInput, ProjectCandidate } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
 import { InventoryPartForm } from "./InventoryPartForm";
+import { InventoryImportPanel } from "./InventoryImportPanel";
 import { InventoryPartList } from "./InventoryPartList";
 import { ProjectCandidateList } from "./ProjectCandidateList";
 import { SectionHeader } from "./SectionHeader";
 import { useInventory } from "../hooks/useInventory";
 
 export function InventoryView({ config, isActive }: { config: AppConfig; isActive: boolean }) {
-  const { parts, candidates, loading, finding, error, findProjects, savePart, removePart } = useInventory(isActive);
+  const { parts, candidates, loading, finding, error, findProjects, savePart, removePart, loadParts } = useInventory(isActive);
   const [saving, setSaving] = useState(false);
   const [buildingId, setBuildingId] = useState("");
   const [message, setMessage] = useState("");
@@ -61,6 +62,12 @@ export function InventoryView({ config, isActive }: { config: AppConfig; isActiv
       <aside className="inventory-panel">
         <SectionHeader title="Lab inventory" description={`${parts.length} stored parts`} />
         <InventoryPartForm saving={saving} onSave={submitPart} />
+        <InventoryImportPanel
+          onImported={(count) => {
+            setMessage(`${count} inventory items imported.`);
+            void loadParts();
+          }}
+        />
         <InventoryPartList parts={parts} loading={loading} onRemove={(partId) => void removePart(partId)} />
       </aside>
       <section className="inventory-results-panel">

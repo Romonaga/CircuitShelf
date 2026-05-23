@@ -21,6 +21,8 @@ import type {
   LogTailPayload,
   InventoryPart,
   InventoryPartInput,
+  InventoryImportItem,
+  InventoryImportPreview,
   ProjectFinderResponse,
   StatusPayload,
   UploadDocumentsResponse
@@ -223,6 +225,20 @@ export function saveInventoryPart(part: InventoryPartInput): Promise<{ part: Inv
 export function deleteInventoryPart(partId: string): Promise<{ ok: boolean }> {
   return requestJson<{ ok: boolean }>(`/api/inventory/parts/${encodeURIComponent(partId)}`, {
     method: "DELETE"
+  });
+}
+
+export function previewInventoryImport(text: string): Promise<InventoryImportPreview> {
+  return requestJson<InventoryImportPreview>("/api/inventory/import/preview", {
+    method: "POST",
+    body: JSON.stringify({ text })
+  });
+}
+
+export function applyInventoryImport(items: InventoryImportItem[]): Promise<{ parts: InventoryPart[]; count: number }> {
+  return requestJson<{ parts: InventoryPart[]; count: number }>("/api/inventory/import/apply", {
+    method: "POST",
+    body: JSON.stringify({ items })
   });
 }
 

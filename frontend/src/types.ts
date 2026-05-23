@@ -380,6 +380,21 @@ export interface InventoryPartInput {
   aliases: string[];
 }
 
+export interface InventoryImportItem extends InventoryPartInput {
+  rawLine: string;
+  normalizedName?: string;
+  confidence: number;
+  warnings: string[];
+  action?: "create" | "merge" | string;
+  existingPartId?: string | null;
+  selected?: boolean;
+}
+
+export interface InventoryImportPreview {
+  items: InventoryImportItem[];
+  count: number;
+}
+
 export interface ProjectCandidatePart {
   id?: string;
   displayName?: string;

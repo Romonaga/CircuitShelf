@@ -725,6 +725,7 @@ nav {
 .inventory-panel,
 .inventory-results-panel,
 .inventory-part-form,
+.inventory-import-panel,
 .inventory-part-list,
 .project-candidate-list {
   display: grid;
@@ -739,6 +740,63 @@ nav {
 
 .inventory-part-form textarea {
   min-height: 84px;
+}
+
+.inventory-import-panel {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.inventory-import-panel h3 {
+  margin: 0;
+}
+
+.inventory-import-panel textarea {
+  min-height: 130px;
+}
+
+.inventory-import-list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.inventory-import-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.inventory-import-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 76px;
+  gap: 8px;
+}
+
+.inventory-import-row small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.inventory-import-warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inventory-import-warnings span {
+  padding: 4px 7px;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  color: #9a3412;
+  background: #fff7ed;
+  font-size: 0.78rem;
 }
 
 .inventory-part-row {
@@ -2504,6 +2562,7 @@ nav {
   .build-wiring-row,
   .fact-row,
   .inventory-form-grid,
+  .inventory-import-fields,
   .project-part-columns,
   .document-stat-grid {
     grid-template-columns: 1fr;

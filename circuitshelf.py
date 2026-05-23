@@ -52,6 +52,7 @@ from reranker_module import Reranker
 from ocr_utils import run_ocr
 from pdf_visuals import link_chunks_to_rendered_pages, render_pdf_visual_pages
 from index_builder import IndexBuildResult, IndexBuilder
+from inventory_import import parse_inventory_import
 from pinout_extractor import extract_pinout_map
 from datasheet_intelligence import build_datasheet_intelligence
 from circuit_build_cards import build_circuit_build_card
@@ -3111,6 +3112,57 @@ async def inventory_part_upsert(req: Request):
     except (TypeError, ValueError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     return {"part": part}
+
+
+@app.post("/api/inventory/import/preview")
+async def inventory_import_preview(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    data = await req.json()
+    text = str(data.get("text") or "")
+    if not text.strip():
+        return JSONResponse({"error": "Inventory text is required."}, status_code=400)
+    existing = lab_inventory_store.list_parts(user_id_for_user(user))
+    return parse_inventory_import(text, existing)
+
+
+@app.post("/api/inventory/import/apply")
+async def inventory_import_apply(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    data = await req.json()
+    items = data.get("items") or []
+    if not isinstance(items, list) or not items:
+        return JSONResponse({"error": "At least one inventory item is required."}, status_code=400)
+    user_id = user_id_for_user(user)
+    existing_parts = {part["id"]: part for part in lab_inventory_store.list_parts(user_id)}
+    saved = []
+    for item in items[:200]:
+        try:
+            existing = existing_parts.get(str(item.get("existingPartId") or ""))
+            if existing:
+                item = {
+                    **item,
+                    "displayName": existing["displayName"],
+                    "partType": existing["partType"],
+                    "quantity": max(int(existing.get("quantity") or 0), int(item.get("quantity") or 0)),
+                    "location": existing.get("location") or item.get("location") or "",
+                    "notes": "\n".join(
+                        note
+                        for note in [
+                            existing.get("notes") or "",
+                            item.get("notes") or "",
+                        ]
+                        if note.strip()
+                    ),
+                    "aliases": sorted(set([*(existing.get("aliases") or []), *(item.get("aliases") or [])])),
+                }
+            saved.append(lab_inventory_store.upsert_part(user_id, item))
+        except (TypeError, ValueError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"parts": saved, "count": len(saved)}
 
 
 @app.delete("/api/inventory/parts/{part_id}")
