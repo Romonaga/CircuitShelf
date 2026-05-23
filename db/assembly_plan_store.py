@@ -130,6 +130,11 @@ class AssemblyPlanStore:
             "notes": [self._note(row) for row in notes],
         }
 
+    def delete(self, plan_id: str, user_id: int | None = None) -> dict | None:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("assembly_plan_delete.sql"), (plan_id, user_id, user_id)).fetchone()
+        return {"id": row["id"], "title": row["title"]} if row else None
+
     def set_step_completed(self, plan_id: str, step_id: str, completed: bool, user_id: int | None = None) -> bool:
         with self.database.connection() as conn:
             row = conn.execute(

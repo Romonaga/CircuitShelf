@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAssemblyPlan, getAssemblyPlans } from "../api";
+import { deleteAssemblyPlan, getAssemblyPlan, getAssemblyPlans } from "../api";
 import { errorMessage } from "../lib/errors";
 import type { AssemblyPlan, AssemblyPlanSummary } from "../types";
 
@@ -42,6 +42,21 @@ export function useAssemblyPlans(isActive: boolean) {
     }
   }, []);
 
+  const removePlan = useCallback(async (planId: string) => {
+    const response = await deleteAssemblyPlan(planId);
+    const listResponse = await getAssemblyPlans();
+    setPlans(listResponse.plans);
+    const nextSelectedId = selectedPlanId === planId ? listResponse.plans[0]?.id || "" : selectedPlanId;
+    if (selectedPlanId === planId) {
+      setSelectedPlan(null);
+    }
+    setSelectedPlanId(nextSelectedId);
+    if (!nextSelectedId) {
+      setSelectedPlan(null);
+    }
+    return response.deleted;
+  }, [selectedPlanId]);
+
   useEffect(() => {
     if (isActive) {
       void loadPlans();
@@ -65,6 +80,7 @@ export function useAssemblyPlans(isActive: boolean) {
     setSelectedPlanId,
     loadPlans,
     loadPlan,
+    removePlan,
     setError,
   };
 }

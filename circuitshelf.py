@@ -3368,6 +3368,17 @@ async def assembly_plan(plan_id: str, req: Request):
     return {"plan": plan}
 
 
+@app.delete("/api/assembly-plans/{plan_id}")
+async def assembly_plan_delete(plan_id: str, req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    deleted = assembly_plan_store.delete(plan_id, user_id_for_user(user))
+    if not deleted:
+        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+    return {"ok": True, "deleted": deleted}
+
+
 @app.post("/api/assembly-plans/build")
 async def assembly_plan_build(req: Request):
     user, error = require_authenticated_user(req)

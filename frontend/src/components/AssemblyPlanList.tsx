@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { formatNumber } from "../lib/format";
 import type { AssemblyPlanSummary } from "../types";
 
@@ -5,12 +6,14 @@ export function AssemblyPlanList({
   plans,
   selectedPlanId,
   loading,
-  onSelect
+  onSelect,
+  onOpenContextMenu
 }: {
   plans: AssemblyPlanSummary[];
   selectedPlanId: string;
   loading: boolean;
   onSelect: (planId: string) => void;
+  onOpenContextMenu: (event: MouseEvent, plan: AssemblyPlanSummary) => void;
 }) {
   return (
     <div className="assembly-plan-list">
@@ -23,6 +26,7 @@ export function AssemblyPlanList({
             className={plan.id === selectedPlanId ? "assembly-plan-row active" : "assembly-plan-row"}
             type="button"
             onClick={() => onSelect(plan.id)}
+            onContextMenu={(event) => onOpenContextMenu(event, plan)}
           >
             <strong>{plan.title}</strong>
             <span>{plan.componentName || plan.componentType || "Circuit build"}</span>

@@ -136,6 +136,12 @@ export function getAssemblyPlan(planId: string): Promise<{ plan: AssemblyPlan }>
   return requestJson<{ plan: AssemblyPlan }>(`/api/assembly-plans/${encodeURIComponent(planId)}`);
 }
 
+export function deleteAssemblyPlan(planId: string): Promise<{ ok: boolean; deleted?: { id: string; title: string } }> {
+  return requestJson<{ ok: boolean; deleted?: { id: string; title: string } }>(`/api/assembly-plans/${encodeURIComponent(planId)}`, {
+    method: "DELETE"
+  });
+}
+
 export function buildAssemblyPlan(payload: {
   objective: string;
   model: string;
