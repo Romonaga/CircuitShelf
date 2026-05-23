@@ -3,6 +3,10 @@ import { errorMessage } from "../lib/errors";
 import { formatNumber } from "../lib/format";
 import type { AppConfig, AssemblyPlan } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
+import { AssemblyExportPanel } from "./AssemblyExportPanel";
+import { AssemblyLearningPanel } from "./AssemblyLearningPanel";
+import { AssemblyPhotoCheckPanel } from "./AssemblyPhotoCheckPanel";
+import { AssemblyStepEvidencePanel } from "./AssemblyStepEvidencePanel";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { SectionHeader } from "./SectionHeader";
 import { FormEvent, useMemo, useState } from "react";
@@ -130,11 +134,18 @@ export function AssemblyPlanDetail({
                     Evidence: {step.sourcePath || "source"} {step.page ? `page ${step.page}` : ""}
                   </small>
                 ) : null}
+                <AssemblyStepEvidencePanel planId={plan.id} step={step} />
               </span>
             </label>
           ))}
         </div>
       </section>
+
+      <div className="assembly-tool-grid">
+        <AssemblyLearningPanel plan={plan} />
+        <AssemblyExportPanel plan={plan} />
+        <AssemblyPhotoCheckPanel plan={plan} />
+      </div>
 
       <section>
         <h3>Sources</h3>

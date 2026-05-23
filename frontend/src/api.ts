@@ -1,7 +1,11 @@
 import type {
   AppConfig,
+  AssemblyLearningSession,
   AssemblyPlan,
+  AssemblyPlanExport,
+  AssemblyPhotoCheck,
   AssemblyPlanSummary,
+  AssemblyStepEvidence,
   BuildAssemblyPlanResponse,
   ConversationDetail,
   ConversationSummary,
@@ -162,6 +166,47 @@ export function askAssemblyAssistant(planId: string, message: string, model: str
       body: JSON.stringify({ message, model })
     }
   );
+}
+
+export function getAssemblyStepEvidence(planId: string, stepId: string): Promise<AssemblyStepEvidence> {
+  return requestJson<AssemblyStepEvidence>(
+    `/api/assembly-plans/${encodeURIComponent(planId)}/steps/${encodeURIComponent(stepId)}/evidence`
+  );
+}
+
+export function exportAssemblyPlan(planId: string, format: string): Promise<AssemblyPlanExport> {
+  return requestJson<AssemblyPlanExport>(
+    `/api/assembly-plans/${encodeURIComponent(planId)}/export?format=${encodeURIComponent(format)}`
+  );
+}
+
+export function getAssemblyLearning(planId: string): Promise<{ learning: AssemblyLearningSession }> {
+  return requestJson<{ learning: AssemblyLearningSession }>(`/api/assembly-plans/${encodeURIComponent(planId)}/learning`);
+}
+
+export function updateAssemblyLearning(planId: string, action: string): Promise<{ learning: AssemblyLearningSession }> {
+  return requestJson<{ learning: AssemblyLearningSession }>(`/api/assembly-plans/${encodeURIComponent(planId)}/learning`, {
+    method: "PATCH",
+    body: JSON.stringify({ action })
+  });
+}
+
+export function submitAssemblyPhotoCheck(planId: string, file: File, note: string): Promise<{ check: AssemblyPhotoCheck; checks: AssemblyPhotoCheck[] }> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("note", note);
+  return requestJson<{ check: AssemblyPhotoCheck; checks: AssemblyPhotoCheck[] }>(
+    `/api/assembly-plans/${encodeURIComponent(planId)}/photo-check`,
+    {
+      method: "POST",
+      body,
+      headers: {}
+    }
+  );
+}
+
+export function getAssemblyPhotoChecks(planId: string): Promise<{ checks: AssemblyPhotoCheck[] }> {
+  return requestJson<{ checks: AssemblyPhotoCheck[] }>(`/api/assembly-plans/${encodeURIComponent(planId)}/photo-checks`);
 }
 
 export function getInventoryParts(): Promise<{ parts: InventoryPart[] }> {

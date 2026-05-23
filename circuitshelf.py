@@ -26,7 +26,7 @@ import uvicorn
 import nltk
 from lxml import etree
 from datetime import datetime, timezone
-from fastapi import FastAPI, File, Query, Request, UploadFile
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from collections import deque, OrderedDict
 from contextlib import asynccontextmanager
@@ -3368,6 +3368,260 @@ async def assembly_assistant(plan_id: str, req: Request):
     assistant_answer = await run_in_threadpool(query_ollama_chat_with_retry, prompt, data.get("model") or LLM_MODEL_NAME, [])
     assembly_plan_store.add_note(plan_id, "assistant", assistant_answer, user_id_for_user(user))
     return {"plan": assembly_plan_store.get(plan_id, user_id_for_user(user)), "answer": assistant_answer}
+
+
+@app.get("/api/assembly-plans/{plan_id}/steps/{step_id}/evidence")
+async def assembly_step_evidence(plan_id: str, step_id: str, req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    user_id = user_id_for_user(user)
+    if not assembly_plan_store.get(plan_id, user_id):
+        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+    return assembly_plan_store.evidence_for_step(plan_id, step_id, user_id)
+
+
+@app.get("/api/assembly-plans/{plan_id}/export")
+async def assembly_plan_export(plan_id: str, req: Request, format: str = Query("markdown")):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    plan = assembly_plan_store.get(plan_id, user_id_for_user(user))
+    if not plan:
+        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+    export = build_assembly_export(plan, format)
+    return export
+
+
+@app.get("/api/assembly-plans/{plan_id}/learning")
+async def assembly_learning_get(plan_id: str, req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    user_id = user_id_for_user(user)
+    plan = assembly_plan_store.get(plan_id, user_id)
+    if not plan:
+        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+    session = assembly_plan_store.get_learning(plan_id, user_id) or assembly_plan_store.start_learning(plan_id, user_id)
+    return {"learning": build_learning_payload(plan, session)}
+
+
+@app.patch("/api/assembly-plans/{plan_id}/learning")
+async def assembly_learning_update(plan_id: str, req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    user_id = user_id_for_user(user)
+    data = await req.json()
+    plan = assembly_plan_store.get(plan_id, user_id)
+    if not plan:
+        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+    session = assembly_plan_store.get_learning(plan_id, user_id) or assembly_plan_store.start_learning(plan_id, user_id)
+    current = int((session or {}).get("currentOrdinal") or 1)
+    action = str(data.get("action") or "").lower()
+    if action == "next":
+        current += 1
+    elif action == "previous":
+        current -= 1
+    elif action == "disable":
+        session = assembly_plan_store.update_learning(plan_id, user_id, current_ordinal=current, mode_enabled=False)
+        return {"learning": build_learning_payload(plan, session)}
+    elif data.get("currentOrdinal") is not None:
+        current = int(data.get("currentOrdinal"))
+    max_ordinal = max((int(step["ordinal"]) for step in plan.get("steps", [])), default=1)
+    current = max(1, min(current, max_ordinal))
+    session = assembly_plan_store.update_learning(plan_id, user_id, current_ordinal=current, mode_enabled=True)
+    return {"learning": build_learning_payload(plan, session)}
+
+
+@app.post("/api/assembly-plans/{plan_id}/photo-check")
+async def assembly_photo_check(plan_id: str, req: Request, file: UploadFile = File(...), note: str = Form("")):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    user_id = user_id_for_user(user)
+    plan = assembly_plan_store.get(plan_id, user_id)
+    if not plan:
+        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+    mime_type = file.content_type or "application/octet-stream"
+    if not mime_type.startswith("image/"):
+        return JSONResponse({"error": "Upload must be an image."}, status_code=400)
+    image_bytes = await file.read()
+    await file.close()
+    if not image_bytes:
+        return JSONResponse({"error": "Uploaded image is empty."}, status_code=400)
+    if len(image_bytes) > 8 * 1024 * 1024:
+        return JSONResponse({"error": "Photo is too large. Use an image under 8 MB."}, status_code=400)
+    checklist = build_photo_checklist(plan, note)
+    check = assembly_plan_store.add_photo_check(
+        plan_id,
+        user_id,
+        image_mime_type=mime_type,
+        image_base64=base64.b64encode(image_bytes).decode("ascii"),
+        note=note,
+        checklist=checklist,
+    )
+    return {"check": check, "checks": assembly_plan_store.photo_checks(plan_id, user_id)}
+
+
+@app.get("/api/assembly-plans/{plan_id}/photo-checks")
+async def assembly_photo_checks(plan_id: str, req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    user_id = user_id_for_user(user)
+    if not assembly_plan_store.get(plan_id, user_id):
+        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+    return {"checks": assembly_plan_store.photo_checks(plan_id, user_id)}
+
+
+def build_learning_payload(plan: dict, session: dict | None) -> dict:
+    steps = plan.get("steps") or []
+    current_ordinal = int((session or {}).get("currentOrdinal") or 1)
+    current_step = next((step for step in steps if int(step.get("ordinal") or 0) == current_ordinal), None)
+    if not current_step and steps:
+        current_step = steps[0]
+        current_ordinal = int(current_step.get("ordinal") or 1)
+    prompt = ""
+    if current_step:
+        prompt = learning_prompt_for_step(current_step)
+    return {
+        "planId": plan.get("id"),
+        "currentOrdinal": current_ordinal,
+        "modeEnabled": bool((session or {}).get("modeEnabled", True)),
+        "stepCount": len(steps),
+        "currentStep": current_step,
+        "prompt": prompt,
+    }
+
+
+def learning_prompt_for_step(step: dict) -> str:
+    step_type = step.get("type")
+    title = step.get("title") or "this step"
+    if step_type == "wiring":
+        return (
+            f"Before doing step {step.get('ordinal')}, identify the source pin/rail and destination for {title}. "
+            "Say what should be connected, then make the connection and verify continuity before moving on."
+        )
+    if step_type == "warning":
+        return (
+            f"Pause on caution step {step.get('ordinal')}. Explain the risk in your own words before continuing."
+        )
+    return (
+        f"Before checking step {step.get('ordinal')}, predict what a correct circuit should show, then perform the test."
+    )
+
+
+def build_photo_checklist(plan: dict, note: str = "") -> str:
+    open_steps = [step for step in plan.get("steps", []) if not step.get("completed")]
+    relevant_steps = open_steps[:6] if open_steps else (plan.get("steps") or [])[:6]
+    lines = [
+        "Photo saved for this Bench plan.",
+        "Automatic visual wire tracing is not enabled yet; use this checklist against the uploaded photo.",
+        "",
+        "Check these items in the image:",
+        "- Power rails are clearly identified before power is applied.",
+        "- Ground and VCC are not swapped.",
+        "- IC notch/orientation matches the pin numbering used by the plan.",
+        "- Every LED path has a current-limiting resistor.",
+        "- Loose jumpers do not bridge adjacent rows accidentally.",
+    ]
+    if note:
+        lines.extend(["", f"User note: {note}"])
+    if relevant_steps:
+        lines.append("")
+        lines.append("Plan steps to compare against the photo:")
+        for step in relevant_steps:
+            lines.append(f"- Step {step['ordinal']}: {step['title']} -> {step['instruction']}")
+    return "\n".join(lines)
+
+
+def build_assembly_export(plan: dict, export_format: str) -> dict:
+    requested = (export_format or "markdown").lower()
+    if requested in {"md", "markdown"}:
+        content = assembly_export_markdown(plan)
+        return {
+            "filename": f"{safe_export_name(plan)}.md",
+            "mimeType": "text/markdown",
+            "content": content,
+        }
+    if requested in {"ltspice", "spice", "netlist"}:
+        content = assembly_export_spice(plan)
+        return {
+            "filename": f"{safe_export_name(plan)}.cir",
+            "mimeType": "text/plain",
+            "content": content,
+        }
+    if requested in {"falstad", "circuitjs"}:
+        content = assembly_export_falstad_notes(plan)
+        return {
+            "filename": f"{safe_export_name(plan)}-falstad.txt",
+            "mimeType": "text/plain",
+            "content": content,
+        }
+    return {
+        "filename": f"{safe_export_name(plan)}.txt",
+        "mimeType": "text/plain",
+        "content": assembly_export_markdown(plan),
+    }
+
+
+def safe_export_name(plan: dict) -> str:
+    name = re.sub(r"[^a-zA-Z0-9_-]+", "-", plan.get("title") or "assembly-plan").strip("-")
+    return name[:80] or "assembly-plan"
+
+
+def assembly_export_markdown(plan: dict) -> str:
+    lines = [
+        f"# {plan.get('title')}",
+        "",
+        f"Objective: {plan.get('objective')}",
+        f"Component: {plan.get('componentName')} ({plan.get('componentType')})",
+        "",
+        "## Parts",
+    ]
+    lines.extend(f"- {part['name']}: {part.get('detail') or ''}" for part in plan.get("parts", []))
+    lines.extend(["", "## Power"])
+    lines.extend(f"- {item['note']}" for item in plan.get("power", []))
+    lines.extend(["", "## Steps"])
+    for step in plan.get("steps", []):
+        source = f" Source: {step.get('sourcePath')} page {step.get('page')}." if step.get("sourcePath") or step.get("page") else ""
+        lines.append(f"{step['ordinal']}. [{step['type']}] {step['title']}: {step['instruction']} {step.get('note') or ''}{source}")
+    lines.extend(["", "## Sources"])
+    for source in plan.get("sources", []):
+        pages = ", ".join(str(page) for page in source.get("pages") or [])
+        lines.append(f"- {source['displayName']} pages {pages or 'n/a'}")
+    return "\n".join(lines).strip() + "\n"
+
+
+def assembly_export_spice(plan: dict) -> str:
+    lines = [
+        f"* {plan.get('title')}",
+        "* CircuitShelf starter SPICE notes.",
+        "* This is not a solved schematic netlist; convert the Bench wiring steps into circuit elements.",
+        ".title CircuitShelf starter",
+        "",
+        "* Parts",
+    ]
+    lines.extend(f"* - {part['name']}: {part.get('detail') or ''}" for part in plan.get("parts", []))
+    lines.extend(["", "* Wiring checklist"])
+    for step in plan.get("steps", []):
+        lines.append(f"* {step['ordinal']}. {step['title']} -> {step['instruction']} {step.get('note') or ''}")
+    lines.extend(["", ".end"])
+    return "\n".join(lines) + "\n"
+
+
+def assembly_export_falstad_notes(plan: dict) -> str:
+    lines = [
+        f"CircuitJS/Falstad starter notes for {plan.get('title')}",
+        "",
+        "CircuitShelf cannot infer a complete node-level CircuitJS file from prose wiring steps yet.",
+        "Use these notes as the build checklist while drawing the schematic in Falstad:",
+        "",
+    ]
+    for step in plan.get("steps", []):
+        lines.append(f"{step['ordinal']}. {step['title']} -> {step['instruction']} {step.get('note') or ''}")
+    return "\n".join(lines) + "\n"
 
 
 def build_assembly_assistant_prompt(plan: dict, message: str) -> str:

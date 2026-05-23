@@ -446,6 +446,117 @@ nav {
   min-height: 96px;
 }
 
+.assembly-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.assembly-tool-panel,
+.assembly-learning-card,
+.assembly-evidence-body,
+.assembly-photo-form,
+.assembly-photo-checks {
+  display: grid;
+  gap: 10px;
+}
+
+.assembly-tool-panel {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.assembly-tool-panel h3 {
+  margin: 0;
+}
+
+.assembly-export-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.assembly-export-controls select {
+  min-width: 0;
+}
+
+.assembly-learning-card p {
+  margin: 0;
+  color: #2c3a4f;
+  line-height: 1.45;
+}
+
+.assembly-evidence {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.assembly-evidence-body {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.assembly-evidence-chunk {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.assembly-evidence-chunk p {
+  margin: 0;
+  color: #2c3a4f;
+  line-height: 1.45;
+}
+
+.assembly-evidence-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.assembly-evidence-images figure {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.assembly-evidence-images img {
+  width: 100%;
+  max-height: 150px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.assembly-evidence-images figcaption,
+.assembly-learning-card small,
+.assembly-evidence-chunk small {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.assembly-photo-form textarea {
+  min-height: 72px;
+}
+
+.assembly-photo-checks pre {
+  overflow: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: 1.45;
+}
+
 .docs-grid {
   grid-template-columns: 430px minmax(0, 1fr);
 }
@@ -2291,7 +2402,8 @@ nav {
   }
 
   .assembly-builder-controls,
-  .assembly-section-grid {
+  .assembly-section-grid,
+  .assembly-tool-grid {
     grid-template-columns: 1fr;
   }
 }

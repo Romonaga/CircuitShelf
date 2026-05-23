@@ -148,6 +148,63 @@ class AssemblyPlanStore:
             raise ValueError("Assembly plan not found.")
         return self._note(row)
 
+    def evidence_for_step(self, plan_id: str, step_id: str, user_id: int, *, limit: int = 8) -> dict:
+        with self.database.connection() as conn:
+            chunks = conn.execute(
+                load_query("assembly_step_evidence_chunks.sql"),
+                (step_id, plan_id, user_id, user_id, int(limit)),
+            ).fetchall()
+            images = conn.execute(
+                load_query("assembly_step_evidence_images.sql"),
+                (step_id, plan_id, user_id, user_id, min(int(limit), 4)),
+            ).fetchall()
+        return {
+            "chunks": [self._evidence_chunk(row) for row in chunks],
+            "images": [self._evidence_image(row) for row in images],
+        }
+
+    def start_learning(self, plan_id: str, user_id: int) -> dict | None:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("assembly_learning_upsert.sql"), (user_id, plan_id, user_id)).fetchone()
+        return self._learning(row) if row else None
+
+    def get_learning(self, plan_id: str, user_id: int) -> dict | None:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("assembly_learning_get.sql"), (plan_id, user_id, user_id)).fetchone()
+        return self._learning(row) if row else None
+
+    def update_learning(self, plan_id: str, user_id: int, *, current_ordinal: int, mode_enabled: bool = True) -> dict | None:
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("assembly_learning_update.sql"),
+                (max(1, int(current_ordinal)), bool(mode_enabled), plan_id, user_id),
+            ).fetchone()
+        return self._learning(row) if row else None
+
+    def add_photo_check(
+        self,
+        plan_id: str,
+        user_id: int,
+        *,
+        image_mime_type: str,
+        image_base64: str,
+        note: str,
+        checklist: str,
+    ) -> dict | None:
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("assembly_photo_check_insert.sql"),
+                (user_id, image_mime_type, image_base64, note, checklist, plan_id, user_id),
+            ).fetchone()
+            if row:
+                conn.execute(load_query("assembly_plan_touch.sql"), (plan_id,))
+        return self._photo_check(row) if row else None
+
+    def photo_checks(self, plan_id: str, user_id: int, *, limit: int = 10) -> list[dict]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("assembly_photo_checks_list.sql"), (plan_id, user_id, int(limit))).fetchall()
+        return [self._photo_check(row) for row in rows]
+
     def _source_notes(self, raw_sources: list[dict]) -> list[dict]:
         result = []
         for source in raw_sources:
@@ -261,5 +318,51 @@ class AssemblyPlanStore:
             "id": row["id"],
             "role": row["role"],
             "message": row["message"],
+            "createdAt": self._timestamp(row["created_at"]),
+        }
+
+    def _evidence_chunk(self, row) -> dict:
+        return {
+            "sourcePath": row["source_path"],
+            "displayName": row["display_name"],
+            "chunkIndex": int(row["chunk_index"]),
+            "page": row["page_number"],
+            "section": row["section_title"] or "Unknown",
+            "category": row["category"] or "Uncategorized",
+            "quality": self._optional_float(row["quality_score"]),
+            "preview": (row["chunk_text"] or "")[:900],
+        }
+
+    def _evidence_image(self, row) -> dict:
+        return {
+            "sourcePath": row["source_path"],
+            "displayName": row["display_name"],
+            "imageKey": row["image_key"],
+            "caption": row["caption"] or row["image_key"],
+            "page": row["page_number"],
+            "width": int(row["width_px"] or 0),
+            "height": int(row["height_px"] or 0),
+            "imageMimeType": row["image_mime_type"] or "image/png",
+            "imageBase64": row["image_base64"],
+        }
+
+    def _learning(self, row) -> dict:
+        return {
+            "planId": row["plan_id"],
+            "userId": int(row["user_id"]),
+            "currentOrdinal": int(row["current_ordinal"]),
+            "modeEnabled": bool(row["mode_enabled"]),
+            "createdAt": self._timestamp(row["created_at"]),
+            "updatedAt": self._timestamp(row["updated_at"]),
+        }
+
+    def _photo_check(self, row) -> dict:
+        return {
+            "id": row["id"],
+            "planId": row["plan_id"],
+            "userId": int(row["user_id"]),
+            "imageMimeType": row["image_mime_type"],
+            "note": row["note"] or "",
+            "checklist": row["checklist"] or "",
             "createdAt": self._timestamp(row["created_at"]),
         }

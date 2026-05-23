@@ -258,6 +258,34 @@ export interface AssemblyPlanStep {
   completedAt?: string | null;
 }
 
+export interface AssemblyStepEvidenceChunk {
+  sourcePath: string;
+  displayName: string;
+  chunkIndex: number;
+  page?: number | null;
+  section: string;
+  category: string;
+  quality?: number | null;
+  preview: string;
+}
+
+export interface AssemblyStepEvidenceImage {
+  sourcePath: string;
+  displayName: string;
+  imageKey: string;
+  caption: string;
+  page?: number | null;
+  width: number;
+  height: number;
+  imageMimeType: string;
+  imageBase64: string;
+}
+
+export interface AssemblyStepEvidence {
+  chunks: AssemblyStepEvidenceChunk[];
+  images: AssemblyStepEvidenceImage[];
+}
+
 export interface AssemblyPlanSource {
   id: string;
   sourcePath: string;
@@ -280,6 +308,31 @@ export interface AssemblyPlan extends AssemblyPlanSummary {
   steps: AssemblyPlanStep[];
   sources: AssemblyPlanSource[];
   notes: AssemblyPlanNote[];
+}
+
+export interface AssemblyPlanExport {
+  filename: string;
+  mimeType: string;
+  content: string;
+}
+
+export interface AssemblyLearningSession {
+  planId: string;
+  currentOrdinal: number;
+  modeEnabled: boolean;
+  stepCount: number;
+  currentStep?: AssemblyPlanStep | null;
+  prompt: string;
+}
+
+export interface AssemblyPhotoCheck {
+  id: string;
+  planId: string;
+  userId: number;
+  imageMimeType: string;
+  note: string;
+  checklist: string;
+  createdAt?: string | null;
 }
 
 export interface BuildAssemblyPlanResponse {
