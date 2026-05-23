@@ -557,6 +557,41 @@ nav {
   line-height: 1.45;
 }
 
+.photo-diagnostics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.photo-diagnostics span,
+.photo-diagnostics small {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: #ffffff;
+  font-size: 0.78rem;
+}
+
+.photo-diagnostics small {
+  border-color: #fed7aa;
+  color: #9a3412;
+  background: #fff7ed;
+}
+
+.photo-color-strip {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.photo-color-strip span {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 4px;
+}
+
 .docs-grid {
   grid-template-columns: 430px minmax(0, 1fr);
 }

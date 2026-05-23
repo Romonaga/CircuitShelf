@@ -332,7 +332,20 @@ export interface AssemblyPhotoCheck {
   imageMimeType: string;
   note: string;
   checklist: string;
+  diagnostics?: BenchPhotoDiagnostics;
   createdAt?: string | null;
+}
+
+export interface BenchPhotoDiagnostics {
+  width?: number;
+  height?: number;
+  brightness?: number;
+  contrast?: number;
+  edgeDensity?: number;
+  blurScore?: number;
+  dominantColors?: Array<{ hex: string; percent: number }>;
+  wireColorPixels?: Record<string, number>;
+  warnings?: string[];
 }
 
 export interface BuildAssemblyPlanResponse {

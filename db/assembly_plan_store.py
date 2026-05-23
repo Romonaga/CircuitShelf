@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from typing import Any
 
 from psycopg.errors import UndefinedTable
@@ -190,11 +191,12 @@ class AssemblyPlanStore:
         image_base64: str,
         note: str,
         checklist: str,
+        diagnostics: dict | None = None,
     ) -> dict | None:
         with self.database.connection() as conn:
             row = conn.execute(
                 load_query("assembly_photo_check_insert.sql"),
-                (user_id, image_mime_type, image_base64, note, checklist, plan_id, user_id),
+                (user_id, image_mime_type, image_base64, note, checklist, json.dumps(diagnostics or {}), plan_id, user_id),
             ).fetchone()
             if row:
                 conn.execute(load_query("assembly_plan_touch.sql"), (plan_id,))
@@ -364,5 +366,6 @@ class AssemblyPlanStore:
             "imageMimeType": row["image_mime_type"],
             "note": row["note"] or "",
             "checklist": row["checklist"] or "",
+            "diagnostics": dict(row["diagnostics"] or {}),
             "createdAt": self._timestamp(row["created_at"]),
         }

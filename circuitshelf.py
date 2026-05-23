@@ -24,6 +24,7 @@ import pandas as pd
 import threading
 import uvicorn
 import nltk
+import bench_tools
 from lxml import etree
 from datetime import datetime, timezone
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile
@@ -3389,7 +3390,7 @@ async def assembly_plan_export(plan_id: str, req: Request, format: str = Query("
     plan = assembly_plan_store.get(plan_id, user_id_for_user(user))
     if not plan:
         return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-    export = build_assembly_export(plan, format)
+    export = bench_tools.build_assembly_export(plan, format)
     return export
 
 
@@ -3452,7 +3453,8 @@ async def assembly_photo_check(plan_id: str, req: Request, file: UploadFile = Fi
         return JSONResponse({"error": "Uploaded image is empty."}, status_code=400)
     if len(image_bytes) > 8 * 1024 * 1024:
         return JSONResponse({"error": "Photo is too large. Use an image under 8 MB."}, status_code=400)
-    checklist = build_photo_checklist(plan, note)
+    diagnostics = bench_tools.analyze_bench_photo(image_bytes)
+    checklist = bench_tools.build_photo_checklist(plan, note, diagnostics)
     check = assembly_plan_store.add_photo_check(
         plan_id,
         user_id,
@@ -3460,6 +3462,7 @@ async def assembly_photo_check(plan_id: str, req: Request, file: UploadFile = Fi
         image_base64=base64.b64encode(image_bytes).decode("ascii"),
         note=note,
         checklist=checklist,
+        diagnostics=diagnostics,
     )
     return {"check": check, "checks": assembly_plan_store.photo_checks(plan_id, user_id)}
 
@@ -3510,118 +3513,6 @@ def learning_prompt_for_step(step: dict) -> str:
     return (
         f"Before checking step {step.get('ordinal')}, predict what a correct circuit should show, then perform the test."
     )
-
-
-def build_photo_checklist(plan: dict, note: str = "") -> str:
-    open_steps = [step for step in plan.get("steps", []) if not step.get("completed")]
-    relevant_steps = open_steps[:6] if open_steps else (plan.get("steps") or [])[:6]
-    lines = [
-        "Photo saved for this Bench plan.",
-        "Automatic visual wire tracing is not enabled yet; use this checklist against the uploaded photo.",
-        "",
-        "Check these items in the image:",
-        "- Power rails are clearly identified before power is applied.",
-        "- Ground and VCC are not swapped.",
-        "- IC notch/orientation matches the pin numbering used by the plan.",
-        "- Every LED path has a current-limiting resistor.",
-        "- Loose jumpers do not bridge adjacent rows accidentally.",
-    ]
-    if note:
-        lines.extend(["", f"User note: {note}"])
-    if relevant_steps:
-        lines.append("")
-        lines.append("Plan steps to compare against the photo:")
-        for step in relevant_steps:
-            lines.append(f"- Step {step['ordinal']}: {step['title']} -> {step['instruction']}")
-    return "\n".join(lines)
-
-
-def build_assembly_export(plan: dict, export_format: str) -> dict:
-    requested = (export_format or "markdown").lower()
-    if requested in {"md", "markdown"}:
-        content = assembly_export_markdown(plan)
-        return {
-            "filename": f"{safe_export_name(plan)}.md",
-            "mimeType": "text/markdown",
-            "content": content,
-        }
-    if requested in {"ltspice", "spice", "netlist"}:
-        content = assembly_export_spice(plan)
-        return {
-            "filename": f"{safe_export_name(plan)}.cir",
-            "mimeType": "text/plain",
-            "content": content,
-        }
-    if requested in {"falstad", "circuitjs"}:
-        content = assembly_export_falstad_notes(plan)
-        return {
-            "filename": f"{safe_export_name(plan)}-falstad.txt",
-            "mimeType": "text/plain",
-            "content": content,
-        }
-    return {
-        "filename": f"{safe_export_name(plan)}.txt",
-        "mimeType": "text/plain",
-        "content": assembly_export_markdown(plan),
-    }
-
-
-def safe_export_name(plan: dict) -> str:
-    name = re.sub(r"[^a-zA-Z0-9_-]+", "-", plan.get("title") or "assembly-plan").strip("-")
-    return name[:80] or "assembly-plan"
-
-
-def assembly_export_markdown(plan: dict) -> str:
-    lines = [
-        f"# {plan.get('title')}",
-        "",
-        f"Objective: {plan.get('objective')}",
-        f"Component: {plan.get('componentName')} ({plan.get('componentType')})",
-        "",
-        "## Parts",
-    ]
-    lines.extend(f"- {part['name']}: {part.get('detail') or ''}" for part in plan.get("parts", []))
-    lines.extend(["", "## Power"])
-    lines.extend(f"- {item['note']}" for item in plan.get("power", []))
-    lines.extend(["", "## Steps"])
-    for step in plan.get("steps", []):
-        source = f" Source: {step.get('sourcePath')} page {step.get('page')}." if step.get("sourcePath") or step.get("page") else ""
-        lines.append(f"{step['ordinal']}. [{step['type']}] {step['title']}: {step['instruction']} {step.get('note') or ''}{source}")
-    lines.extend(["", "## Sources"])
-    for source in plan.get("sources", []):
-        pages = ", ".join(str(page) for page in source.get("pages") or [])
-        lines.append(f"- {source['displayName']} pages {pages or 'n/a'}")
-    return "\n".join(lines).strip() + "\n"
-
-
-def assembly_export_spice(plan: dict) -> str:
-    lines = [
-        f"* {plan.get('title')}",
-        "* CircuitShelf starter SPICE notes.",
-        "* This is not a solved schematic netlist; convert the Bench wiring steps into circuit elements.",
-        ".title CircuitShelf starter",
-        "",
-        "* Parts",
-    ]
-    lines.extend(f"* - {part['name']}: {part.get('detail') or ''}" for part in plan.get("parts", []))
-    lines.extend(["", "* Wiring checklist"])
-    for step in plan.get("steps", []):
-        lines.append(f"* {step['ordinal']}. {step['title']} -> {step['instruction']} {step.get('note') or ''}")
-    lines.extend(["", ".end"])
-    return "\n".join(lines) + "\n"
-
-
-def assembly_export_falstad_notes(plan: dict) -> str:
-    lines = [
-        f"CircuitJS/Falstad starter notes for {plan.get('title')}",
-        "",
-        "CircuitShelf cannot infer a complete node-level CircuitJS file from prose wiring steps yet.",
-        "Use these notes as the build checklist while drawing the schematic in Falstad:",
-        "",
-    ]
-    for step in plan.get("steps", []):
-        lines.append(f"{step['ordinal']}. {step['title']} -> {step['instruction']} {step.get('note') or ''}")
-    return "\n".join(lines) + "\n"
 
 
 def build_assembly_assistant_prompt(plan: dict, message: str) -> str:

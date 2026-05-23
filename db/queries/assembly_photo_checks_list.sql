@@ -4,6 +4,7 @@ SELECT id,
        image_mime_type,
        note,
        checklist,
+       diagnostics,
        created_at
 FROM assembly_photo_checks
 WHERE plan_id = %s

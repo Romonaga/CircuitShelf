@@ -11,6 +11,7 @@
 - Photo-based bench check
   - Let a user upload a breadboard or wiring photo.
   - Save the photo with a Bench plan and generate a plan-specific manual inspection checklist.
+  - Analyze photo quality, edge density, dominant colors, and wire-like color pixels.
   - Future work: real visual wire tracing and mistake detection.
 
 - Source-to-bench traceability
@@ -19,7 +20,8 @@
 
 - Circuit simulator export
   - Generate Bench markdown, LTspice starter notes, and Falstad/CircuitJS drawing notes from a Bench plan.
-  - Future work: infer actual node-level schematics for simple resistor/LED/555/op-amp circuits.
+  - Generate starter SPICE/CircuitJS topologies for recognized LED/resistor and 555 timer plans.
+  - Future work: infer broader node-level schematics for op-amp, transistor, sensor, and microcontroller circuits.
 
 - Learning mode
   - Turn Bench plans into guided lessons.
@@ -29,6 +31,6 @@
 ## Future Deepening
 
 - Real photo-based wire tracing and component recognition.
-- True simulator netlist generation for common circuit families.
+- Wider simulator netlist generation for common circuit families.
 - KiCad schematic export once node-level circuit inference exists.
 - Learning-mode answer grading using the local model.

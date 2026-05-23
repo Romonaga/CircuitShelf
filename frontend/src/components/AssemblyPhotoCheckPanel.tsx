@@ -65,10 +65,36 @@ export function AssemblyPhotoCheckPanel({ plan }: { plan: AssemblyPlan }) {
         {checks.map((check) => (
           <article key={check.id} className="assembly-note assistant">
             <strong>{check.createdAt ? new Date(check.createdAt).toLocaleString() : "Photo check"}</strong>
+            <PhotoDiagnostics diagnostics={check.diagnostics} />
             <pre>{check.checklist}</pre>
           </article>
         ))}
       </div>
     </section>
+  );
+}
+
+function PhotoDiagnostics({ diagnostics }: { diagnostics: AssemblyPhotoCheck["diagnostics"] }) {
+  if (!diagnostics || !Object.keys(diagnostics).length) {
+    return null;
+  }
+  return (
+    <div className="photo-diagnostics">
+      <span>{diagnostics.width} x {diagnostics.height}</span>
+      <span>brightness {diagnostics.brightness}</span>
+      <span>contrast {diagnostics.contrast}</span>
+      <span>edges {diagnostics.edgeDensity}</span>
+      <span>blur {diagnostics.blurScore}</span>
+      {diagnostics.warnings?.map((warning) => (
+        <small key={warning}>{warning}</small>
+      ))}
+      {diagnostics.dominantColors?.length ? (
+        <div className="photo-color-strip">
+          {diagnostics.dominantColors.map((color) => (
+            <span key={color.hex} title={`${color.hex} ${color.percent}%`} style={{ background: color.hex }} />
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
