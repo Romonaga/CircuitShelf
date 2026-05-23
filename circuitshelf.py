@@ -3952,6 +3952,7 @@ def mount_react_app():
     dist_dir = os.path.abspath(REACT_DIST_DIR)
     index_html = os.path.join(dist_dir, "index.html")
     assets_dir = os.path.join(dist_dir, "assets")
+    index_headers = {"Cache-Control": "no-store"}
     if not os.path.exists(index_html):
         trace_logger.warning(f"React dist not found at {dist_dir}; API will run without static UI.")
         return
@@ -3960,13 +3961,13 @@ def mount_react_app():
 
     @app.get("/")
     async def react_index():
-        return FileResponse(index_html)
+        return FileResponse(index_html, headers=index_headers)
 
     @app.get("/{full_path:path}")
     async def react_spa(full_path: str):
         if full_path.startswith("api/") or full_path.startswith("assets/"):
             return {"error": "Not found"}
-        return FileResponse(index_html)
+        return FileResponse(index_html, headers=index_headers)
 
 def flush_trace_log():
     for handler in trace_logger.handlers:
