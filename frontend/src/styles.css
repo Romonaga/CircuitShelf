@@ -800,31 +800,88 @@ nav {
   font-size: 0.78rem;
 }
 
-.inventory-part-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px;
+.inventory-table-wrap {
+  overflow: auto;
+  max-height: min(62vh, 760px);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
 }
 
-.inventory-part-row > div {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
+.inventory-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.86rem;
 }
 
-.inventory-part-row strong,
-.inventory-part-row small {
+.inventory-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0;
+  color: #d9f2ee;
+  text-align: left;
+  border-bottom: 1px solid #0e7490;
+  background: #123241;
+}
+
+.inventory-table th button {
+  width: 100%;
+  min-height: 34px;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.inventory-table th button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.inventory-table td {
+  max-width: 210px;
+  padding: 8px 10px;
+  color: #26364a;
+  border-bottom: 1px solid #e4edf3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.inventory-part-row small,
+.inventory-table tbody tr:nth-child(even) td {
+  background: #f8fbfc;
+}
+
+.inventory-table tbody tr:hover td {
+  background: #e8f7f8;
+}
+
+.inventory-part-name {
+  color: #061a2c;
+  font-weight: 800;
+}
+
+.inventory-table-number {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.inventory-table-action {
+  width: 86px;
+  text-align: right;
+}
+
+.inventory-table-action .compact-button {
+  min-height: 28px;
+}
+
 .project-candidate-heading p,
 .project-part-group small {
   color: var(--muted);
