@@ -3045,18 +3045,36 @@ nav {
 :root[data-theme="dark"] .project-summary-stat,
 :root[data-theme="dark"] .project-gap-row,
 :root[data-theme="dark"] .source-item,
+:root[data-theme="dark"] .source-detail,
+:root[data-theme="dark"] .source-chunk,
 :root[data-theme="dark"] .chunk-row,
 :root[data-theme="dark"] .document-row,
-:root[data-theme="dark"] .document-page-button,
+:root[data-theme="dark"] .document-context-menu,
+:root[data-theme="dark"] .document-stat,
+:root[data-theme="dark"] .document-pinout-details,
+:root[data-theme="dark"] .pinout-row,
+:root[data-theme="dark"] .page-chip,
+:root[data-theme="dark"] .document-page-toolbar,
+:root[data-theme="dark"] .document-ingest-stats span,
+:root[data-theme="dark"] .document-image-details,
 :root[data-theme="dark"] .document-image-card,
 :root[data-theme="dark"] .review-image-card,
 :root[data-theme="dark"] .review-image-details,
 :root[data-theme="dark"] .assembly-plan-row,
+:root[data-theme="dark"] .assembly-source-row,
+:root[data-theme="dark"] .assembly-note,
+:root[data-theme="dark"] .assembly-evidence-chunk,
 :root[data-theme="dark"] .assembly-step,
-:root[data-theme="dark"] .assembly-tool,
+:root[data-theme="dark"] .assembly-tool-panel,
 :root[data-theme="dark"] .build-card,
+:root[data-theme="dark"] .intelligence-panel,
+:root[data-theme="dark"] .ingest-status-panel,
+:root[data-theme="dark"] .ingest-current-files,
+:root[data-theme="dark"] .ingest-file-grid,
 :root[data-theme="dark"] .settings-row,
 :root[data-theme="dark"] .settings-group-heading,
+:root[data-theme="dark"] .log-tail-follow,
+:root[data-theme="dark"] .answer-details,
 :root[data-theme="dark"] .login-panel {
   background: var(--panel-raised);
 }
@@ -3064,12 +3082,63 @@ nav {
 :root[data-theme="dark"] .empty-state,
 :root[data-theme="dark"] .json-view,
 :root[data-theme="dark"] .source-item pre,
+:root[data-theme="dark"] .answer-ocr,
+:root[data-theme="dark"] .answer-rich code,
+:root[data-theme="dark"] .answer-rich th,
 :root[data-theme="dark"] .status-grid .stat,
 :root[data-theme="dark"] .validation-panel,
 :root[data-theme="dark"] .project-finder-summary,
+:root[data-theme="dark"] .document-stats-panel,
+:root[data-theme="dark"] .pinout-panel,
+:root[data-theme="dark"] .document-pin-card,
+:root[data-theme="dark"] .ingest-status-grid,
+:root[data-theme="dark"] .ingest-file-grid-heading,
+:root[data-theme="dark"] .ingest-change-list span,
+:root[data-theme="dark"] .ingest-queue-summary span,
+:root[data-theme="dark"] .ingest-worker-budget span,
 :root[data-theme="dark"] .document-loading,
 :root[data-theme="dark"] .review-loading {
   background: var(--panel-soft);
+}
+
+:root[data-theme="dark"] .assembly-summary,
+:root[data-theme="dark"] .assembly-note p,
+:root[data-theme="dark"] .assembly-learning-card p,
+:root[data-theme="dark"] .assembly-evidence-chunk p,
+:root[data-theme="dark"] .source-chunk p,
+:root[data-theme="dark"] .source-item pre,
+:root[data-theme="dark"] .json-view,
+:root[data-theme="dark"] .answer-ocr,
+:root[data-theme="dark"] .chunk-row p {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .assembly-step.warning,
+:root[data-theme="dark"] .warning-row,
+:root[data-theme="dark"] .ingest-status-panel.error {
+  border-color: rgba(255, 143, 132, 0.35);
+  background: rgba(127, 29, 29, 0.22);
+}
+
+:root[data-theme="dark"] .assembly-step.complete,
+:root[data-theme="dark"] .ingest-status-panel.running {
+  border-color: rgba(88, 224, 188, 0.35);
+  background: rgba(17, 92, 76, 0.22);
+}
+
+:root[data-theme="dark"] .ingest-file-row:nth-child(even) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+:root[data-theme="dark"] .ingest-phase-badge,
+:root[data-theme="dark"] .ingest-phase-badge.ocr,
+:root[data-theme="dark"] .ingest-phase-badge.save,
+:root[data-theme="dark"] .ingest-phase-badge.embed,
+:root[data-theme="dark"] .ingest-phase-badge.visual,
+:root[data-theme="dark"] .ingest-phase-badge.waiting {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
 }
 
 :root[data-theme="dark"] .error,
