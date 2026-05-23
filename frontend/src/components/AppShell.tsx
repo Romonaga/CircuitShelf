@@ -24,15 +24,31 @@ export function AppShell({
   onLogout: () => void;
   children: ReactNode;
 }) {
-  const nav: Array<{ id: View; label: string }> = [
-    { id: "ask", label: "Ask" },
-    { id: "bench", label: "Bench" },
-    { id: "inventory", label: "Inventory" },
-    { id: "documents", label: "Documents" },
-    ...(isAdmin ? [{ id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` }] : []),
-    { id: "trace", label: "Trace" },
-    { id: "status", label: "Status" },
-    ...(isAdmin ? [{ id: "settings" as View, label: "Settings" }] : [])
+  const navGroups: Array<{ label: string; items: Array<{ id: View; label: string }> }> = [
+    {
+      label: "Build",
+      items: [
+        { id: "ask", label: "Ask" },
+        { id: "bench", label: "Bench" },
+        { id: "finder", label: "Finder" }
+      ]
+    },
+    {
+      label: "Lab",
+      items: [
+        { id: "inventory", label: "Inventory" },
+        { id: "documents", label: "Documents" }
+      ]
+    },
+    {
+      label: "System",
+      items: [
+        ...(isAdmin ? [{ id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` }] : []),
+        { id: "trace", label: "Trace" },
+        { id: "status", label: "Status" },
+        ...(isAdmin ? [{ id: "settings" as View, label: "Settings" }] : [])
+      ]
+    }
   ];
 
   return (
@@ -46,14 +62,19 @@ export function AppShell({
           </div>
         </div>
         <nav>
-          {nav.map((item) => (
-            <button
-              key={item.id}
-              className={activeView === item.id ? "nav-item active" : "nav-item"}
-              onClick={() => setActiveView(item.id)}
-            >
-              {item.label}
-            </button>
+          {navGroups.map((group) => (
+            <section key={group.label} className="nav-group">
+              <p className="nav-group-label">{group.label}</p>
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  className={activeView === item.id ? "nav-item active" : "nav-item"}
+                  onClick={() => setActiveView(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </section>
           ))}
         </nav>
         <div className="sidebar-footer">

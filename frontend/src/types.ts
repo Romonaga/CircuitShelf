@@ -1,5 +1,5 @@
 export type RetrievalStrategy = "Vector only" | "Vector + CrossEncoder" | string;
-export type View = "ask" | "bench" | "inventory" | "documents" | "review" | "trace" | "status" | "settings";
+export type View = "ask" | "bench" | "finder" | "inventory" | "documents" | "review" | "trace" | "status" | "settings";
 
 export interface SessionUser {
   userId?: number;

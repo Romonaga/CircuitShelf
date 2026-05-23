@@ -144,7 +144,7 @@ h3 {
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 270px minmax(0, 1fr);
+  grid-template-columns: 292px minmax(0, 1fr);
 }
 
 .sidebar {
@@ -188,7 +188,22 @@ h3 {
 nav {
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 18px;
+}
+
+.nav-group {
+  display: grid;
+  gap: 7px;
+}
+
+.nav-group-label {
+  margin: 0 0 2px;
+  padding: 0 10px;
+  color: #8fa4bb;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .nav-item,
@@ -206,12 +221,21 @@ nav {
   color: #dce7f3;
   text-align: left;
   background: transparent;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
 }
 
 .nav-item:hover,
 .nav-item.active {
   color: #ffffff;
   background: #25364a;
+}
+
+.nav-item.active {
+  border-color: rgba(156, 230, 213, 0.38);
+  box-shadow: inset 3px 0 0 #9ce6d5;
 }
 
 .sidebar-footer {
@@ -600,11 +624,27 @@ nav {
   grid-template-columns: 360px minmax(0, 1fr);
 }
 
-.inventory-grid {
+.inventory-workflow,
+.finder-workflow {
   display: grid;
-  grid-template-columns: 390px minmax(0, 1fr);
   gap: 18px;
   align-items: start;
+}
+
+.inventory-layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 430px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.finder-workflow {
+  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+}
+
+.inventory-entry-column {
+  display: grid;
+  gap: 18px;
 }
 
 .query-panel {
@@ -632,8 +672,12 @@ nav {
 .answer-panel,
 .history-panel,
 .sources-panel,
+.inventory-command-panel,
 .inventory-panel,
 .inventory-results-panel,
+.inventory-stock-panel,
+.finder-control-panel,
+.finder-results-panel,
 .document-list-panel,
 .settings-list-panel,
 .settings-editor-panel,
@@ -724,6 +768,9 @@ nav {
 
 .inventory-panel,
 .inventory-results-panel,
+.inventory-stock-panel,
+.finder-control-panel,
+.finder-results-panel,
 .inventory-part-form,
 .inventory-import-panel,
 .inventory-part-list,
@@ -731,6 +778,66 @@ nav {
 .project-candidate-list {
   display: grid;
   gap: 14px;
+}
+
+.inventory-command-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.55fr);
+  gap: 20px;
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(156, 230, 213, 0.24), rgba(255, 255, 255, 0) 46%),
+    #ffffff;
+}
+
+.inventory-stat-strip,
+.finder-readiness {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inventory-metric,
+.finder-metric {
+  display: grid;
+  gap: 3px;
+  min-height: 74px;
+  padding: 12px;
+  border: 1px solid #c8e8e7;
+  border-radius: 8px;
+  background: #f7ffff;
+}
+
+.inventory-metric span,
+.finder-metric span,
+.finder-metric small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.inventory-metric strong,
+.finder-metric strong {
+  color: #10202c;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.finder-control-panel {
+  position: sticky;
+  top: 18px;
+  align-content: start;
+}
+
+.finder-readiness {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.finder-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
 }
 
 .inventory-form-grid {
@@ -802,7 +909,7 @@ nav {
 
 .inventory-table-wrap {
   overflow: auto;
-  max-height: min(62vh, 760px);
+  max-height: min(70vh, 860px);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
@@ -810,10 +917,10 @@ nav {
 
 .inventory-table {
   width: 100%;
-  min-width: 860px;
+  min-width: 940px;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.86rem;
+  font-size: 0.88rem;
 }
 
 .inventory-table th {
@@ -846,7 +953,7 @@ nav {
 }
 
 .inventory-table td {
-  max-width: 210px;
+  max-width: 240px;
   padding: 8px 10px;
   color: #26364a;
   border-bottom: 1px solid #e4edf3;
@@ -1001,14 +1108,17 @@ nav {
 .project-candidate {
   display: grid;
   gap: 12px;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background:
+    linear-gradient(180deg, #ffffff, #fbfdff);
+  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.04);
 }
 
 .project-candidate.buildable {
   border-color: #8bd3ba;
+  box-shadow: 0 10px 26px rgba(22, 101, 52, 0.08);
 }
 
 .project-candidate-heading {
@@ -2682,7 +2792,9 @@ nav {
       "sources";
   }
 
-  .inventory-grid {
+  .inventory-layout,
+  .finder-workflow,
+  .inventory-command-panel {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -2719,6 +2831,15 @@ nav {
     grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
   }
 
+  .nav-group {
+    display: contents;
+    gap: 6px;
+  }
+
+  .nav-group-label {
+    display: none;
+  }
+
   .nav-item {
     min-height: 36px;
     padding: 0 8px;
@@ -2738,8 +2859,12 @@ nav {
   .answer-panel,
   .history-panel,
   .sources-panel,
+  .inventory-command-panel,
   .inventory-panel,
   .inventory-results-panel,
+  .inventory-stock-panel,
+  .finder-control-panel,
+  .finder-results-panel,
   .document-list-panel,
   .bench-detail-panel,
   .assembly-builder,
@@ -2759,12 +2884,18 @@ nav {
     grid-template-columns: 1fr;
   }
 
+  .finder-control-panel {
+    position: static;
+  }
+
   .build-card-grid,
   .intelligence-facts,
   .build-wiring-row,
   .fact-row,
   .inventory-form-grid,
   .inventory-import-fields,
+  .inventory-stat-strip,
+  .finder-readiness,
   .project-finder-stats,
   .project-gap-row,
   .project-part-columns,

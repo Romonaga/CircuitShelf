@@ -5,6 +5,7 @@ import { BenchView } from "./components/BenchView";
 import { DocumentsView } from "./components/DocumentsView";
 import { InventoryView } from "./components/InventoryView";
 import { LoginView } from "./components/LoginView";
+import { ProjectFinderView } from "./components/ProjectFinderView";
 import { ReviewView } from "./components/ReviewView";
 import { StatusView } from "./components/StatusView";
 import { SettingsView } from "./components/SettingsView";
@@ -56,8 +57,11 @@ export default function App() {
       <div hidden={activeView !== "bench"}>
         <BenchView config={config} isActive={activeView === "bench"} />
       </div>
+      <div hidden={activeView !== "finder"}>
+        <ProjectFinderView config={config} isActive={activeView === "finder"} setActiveView={setActiveView} />
+      </div>
       <div hidden={activeView !== "inventory"}>
-        <InventoryView config={config} isActive={activeView === "inventory"} />
+        <InventoryView isActive={activeView === "inventory"} />
       </div>
       <div hidden={activeView !== "documents"}>
         <DocumentsView
