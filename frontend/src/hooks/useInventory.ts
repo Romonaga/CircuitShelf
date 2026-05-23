@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { deleteInventoryPart, getInventoryParts, getProjectCandidates, saveInventoryPart } from "../api";
 import { errorMessage } from "../lib/errors";
-import type { InventoryPart, InventoryPartInput, ProjectCandidate } from "../types";
+import type { InventoryPart, InventoryPartInput, ProjectCandidate, ProjectMissingPartSummary } from "../types";
 
 const emptyCandidates: ProjectCandidate[] = [];
 
@@ -11,6 +11,9 @@ export function useInventory(isActive: boolean) {
   const [loading, setLoading] = useState(false);
   const [finding, setFinding] = useState(false);
   const [inventoryCount, setInventoryCount] = useState(0);
+  const [buildableCount, setBuildableCount] = useState(0);
+  const [needsPartsCount, setNeedsPartsCount] = useState(0);
+  const [missingPartSummary, setMissingPartSummary] = useState<ProjectMissingPartSummary[]>([]);
   const [error, setError] = useState("");
 
   const loadParts = useCallback(async () => {
@@ -32,6 +35,9 @@ export function useInventory(isActive: boolean) {
     try {
       const response = await getProjectCandidates(32);
       setInventoryCount(response.inventoryCount);
+      setBuildableCount(response.buildableCount || 0);
+      setNeedsPartsCount(response.needsPartsCount || 0);
+      setMissingPartSummary(response.missingPartSummary || []);
       setCandidates(response.candidates);
     } catch (err) {
       setError(errorMessage(err, "Could not find project candidates"));
@@ -64,6 +70,9 @@ export function useInventory(isActive: boolean) {
       await deleteInventoryPart(partId);
       setParts((current) => current.filter((part) => part.id !== partId));
       setCandidates(emptyCandidates);
+      setBuildableCount(0);
+      setNeedsPartsCount(0);
+      setMissingPartSummary([]);
       return true;
     } catch (err) {
       setError(errorMessage(err, "Could not remove part"));
@@ -81,6 +90,9 @@ export function useInventory(isActive: boolean) {
     parts,
     candidates,
     inventoryCount,
+    buildableCount,
+    needsPartsCount,
+    missingPartSummary,
     loading,
     finding,
     error,

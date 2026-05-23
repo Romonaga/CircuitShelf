@@ -727,6 +727,7 @@ nav {
 .inventory-part-form,
 .inventory-import-panel,
 .inventory-part-list,
+.project-finder-summary,
 .project-candidate-list {
   display: grid;
   gap: 14px;
@@ -838,6 +839,106 @@ nav {
 
 .inventory-results-heading .primary-button {
   flex: 0 0 auto;
+}
+
+.project-finder-summary {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.project-finder-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.project-summary-stat {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.project-summary-stat span,
+.project-gap-panel p,
+.project-gap-row small {
+  color: var(--muted);
+}
+
+.project-summary-stat strong {
+  font-size: 1.35rem;
+}
+
+.project-summary-stat.ok {
+  border-color: #86efac;
+}
+
+.project-summary-stat.warn {
+  border-color: #fed7aa;
+}
+
+.project-gap-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.project-gap-panel h3,
+.project-gap-panel p {
+  margin: 0;
+}
+
+.project-gap-list {
+  display: grid;
+  gap: 8px;
+}
+
+.project-gap-row {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.project-gap-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.project-candidate-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-candidate-filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: #ffffff;
+}
+
+.project-candidate-filters button.active {
+  border-color: var(--accent);
+  background: #e6f6f7;
+}
+
+.project-candidate-filters span {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .project-candidate {
@@ -2563,6 +2664,8 @@ nav {
   .fact-row,
   .inventory-form-grid,
   .inventory-import-fields,
+  .project-finder-stats,
+  .project-gap-row,
   .project-part-columns,
   .document-stat-grid {
     grid-template-columns: 1fr;

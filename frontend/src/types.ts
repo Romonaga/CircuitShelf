@@ -424,9 +424,19 @@ export interface ProjectCandidate {
   score: number;
 }
 
+export interface ProjectMissingPartSummary {
+  name: string;
+  type: string;
+  count: number;
+  exampleTitles: string[];
+}
+
 export interface ProjectFinderResponse {
   inventoryCount: number;
   termCount?: number;
+  buildableCount?: number;
+  needsPartsCount?: number;
+  missingPartSummary?: ProjectMissingPartSummary[];
   candidates: ProjectCandidate[];
 }
 

@@ -163,6 +163,9 @@ class ProjectFinderStore:
         return {
             "inventoryCount": len(inventory),
             "termCount": len(terms),
+            "buildableCount": sum(1 for candidate in ranked if candidate["buildable"]),
+            "needsPartsCount": sum(1 for candidate in ranked if not candidate["buildable"]),
+            "missingPartSummary": self._missing_part_summary(ranked),
             "candidates": ranked[:limit],
         }
 
@@ -300,6 +303,27 @@ class ProjectFinderStore:
             if not existing or candidate["score"] > existing["score"]:
                 result[candidate["id"]] = candidate
         return list(result.values())
+
+    def _missing_part_summary(self, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        summary: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        for candidate in candidates:
+            for part in candidate.get("missingParts") or []:
+                key = normalize_part_name(part.get("name") or part.get("displayName") or "")
+                if not key:
+                    continue
+                item = summary.setdefault(
+                    key,
+                    {
+                        "name": part.get("name") or part.get("displayName") or "Unknown part",
+                        "type": part.get("type") or part.get("partType") or "component",
+                        "count": 0,
+                        "exampleTitles": [],
+                    },
+                )
+                item["count"] += 1
+                if len(item["exampleTitles"]) < 3 and candidate.get("title"):
+                    item["exampleTitles"].append(candidate["title"])
+        return sorted(summary.values(), key=lambda item: item["count"], reverse=True)[:10]
 
     def _candidate_id(self, *parts: Any) -> str:
         digest = hashlib.sha1("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()

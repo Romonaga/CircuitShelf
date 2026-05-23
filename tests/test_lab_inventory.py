@@ -1,6 +1,6 @@
 import unittest
 
-from db.lab_inventory import infer_required_parts, normalize_part_name
+from db.lab_inventory import ProjectFinderStore, infer_required_parts, normalize_part_name
 
 
 class LabInventoryTests(unittest.TestCase):
@@ -19,6 +19,30 @@ class LabInventoryTests(unittest.TestCase):
         self.assertIn("Breadboard", names)
         self.assertIn("10 k ohm resistor", names)
         self.assertIn("10 uF capacitor", names)
+
+    def test_missing_part_summary_ranks_repeated_gaps(self):
+        store = ProjectFinderStore(None, None)
+        summary = store._missing_part_summary(
+            [
+                {
+                    "title": "LED flasher",
+                    "missingParts": [
+                        {"name": "Breadboard", "type": "tooling"},
+                        {"name": "10 uF capacitor", "type": "capacitor"},
+                    ],
+                },
+                {
+                    "title": "Timer alarm",
+                    "missingParts": [
+                        {"name": "Breadboard", "type": "tooling"},
+                    ],
+                },
+            ]
+        )
+
+        self.assertEqual(summary[0]["name"], "Breadboard")
+        self.assertEqual(summary[0]["count"], 2)
+        self.assertEqual(summary[0]["exampleTitles"], ["LED flasher", "Timer alarm"])
 
 
 if __name__ == "__main__":
