@@ -12,6 +12,7 @@ import { ConversationPanel } from "./ConversationPanel";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 import { SourceList } from "./SourceList";
+import { ResponseValidationPanel } from "./ResponseValidationPanel";
 
 const ASK_RETRIEVAL_PREFERENCE_KEY = "ask.retrieval";
 
@@ -132,6 +133,7 @@ export function AskView({ config }: { config: AppConfig }) {
               chatHistory: turns,
               sources: [],
               buildCard: null,
+              validation: null,
               cacheStats: null,
               confidence: lastTurn.confidence ?? null,
               averageQueryTime: null
@@ -270,6 +272,7 @@ export function AskView({ config }: { config: AppConfig }) {
           title="Answer"
           description={`Confidence ${formatNumber(result?.confidence)} | Average ${formatNumber(result?.averageQueryTime)}s`}
         />
+        <ResponseValidationPanel validation={result?.validation} />
         <BuildCard card={result?.buildCard} />
         <div className={result?.answer ? "answer-text" : "empty-state"}>
           {result?.answer ? <AnswerRenderer content={result.answer} /> : "Ask a question to see the generated answer."}

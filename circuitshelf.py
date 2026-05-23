@@ -61,6 +61,7 @@ from circuit_build_cards import (
     build_recovery_prompt,
     parse_recovered_build_card,
 )
+from response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT, finalize_response
 from ingest_manifest import IngestManifest
 from ingest_workers import detected_cpu_count, document_worker_count, ocr_worker_count, reserved_core_count, usable_core_count
 from log_tail import tail_text_file
@@ -117,6 +118,10 @@ settings_store.seed_setting("PDF_RENDER_MIN_DRAWINGS", 100, "Minimum vector draw
 settings_store.seed_setting("PDF_RENDER_ZOOM", 1.5, "Scale used when rendering visual PDF pages.")
 settings_store.seed_setting("PDF_RENDER_RASTER_PAGES", True, "Render raster-heavy scanned PDF pages as searchable images.")
 settings_store.seed_setting("PDF_RENDER_MIN_RASTER_COVERAGE", 0.8, "Minimum page image coverage before a PDF page is considered raster-heavy.")
+settings_store.seed_setting("RESPONSE_FINALIZER_ENABLED", True, "Run a second model pass to validate and clean up generated answers.")
+settings_store.seed_setting("RESPONSE_FINALIZER_MODE", "always", "When to run answer validation: off, always, issues, build, build_or_issues, low_confidence, or build_or_low_confidence.")
+settings_store.seed_setting("RESPONSE_FINALIZER_MIN_CONFIDENCE", 0.80, "Retrieval confidence threshold used by low-confidence finalizer modes.")
+settings_store.seed_setting("RESPONSE_FINALIZER_MAX_CONTEXT_CHARS", 7000, "Maximum source-summary characters sent to the response finalizer.")
 applied_settings = settings_store.apply_to_config(config)
 runtime_config_store = RuntimeConfigStore(database, trace_logger)
 seeded_runtime_config = runtime_config_store.seed_from_config(config.config)
@@ -270,6 +275,10 @@ RAG_CHAT_SYSTEM_PROMPT = config.get(
         "and safety cautions."
     ),
 )
+RESPONSE_FINALIZER_ENABLED = bool(config.get("RESPONSE_FINALIZER_ENABLED", True))
+RESPONSE_FINALIZER_MODE = config.get("RESPONSE_FINALIZER_MODE", "always")
+RESPONSE_FINALIZER_MIN_CONFIDENCE = float(config.get("RESPONSE_FINALIZER_MIN_CONFIDENCE", 0.80))
+RESPONSE_FINALIZER_MAX_CONTEXT_CHARS = int(config.get("RESPONSE_FINALIZER_MAX_CONTEXT_CHARS", 7000))
 # === Settings for Reranking ===
 RERANK_PROFILES = config.get("RERANK_PROFILES")
 EMBED_BATCH_SIZE = config.get("EMBED_BATCH_SIZE", 16)
@@ -2312,7 +2321,7 @@ def get_rag_response(
                 intelligence_for_question_and_sources(retrieval_q, cached.sources),
                 context_question=retrieval_q,
             )
-            return norm_q, cached.answer, chat_history, cached.sources, response_cache.stats(), confidence, get_average_query_time(), build_card
+            return norm_q, cached.answer, chat_history, cached.sources, response_cache.stats(), confidence, get_average_query_time(), build_card, None
     else:
         if bypass_cache:
             trace_logger.debug("Response cache bypassed by request option.")
@@ -2345,7 +2354,7 @@ def get_rag_response(
             max_turns=MAX_CHAT_HISTORY_TURNS,
             max_chars=MAX_CHAT_HISTORY_CHARS,
         )
-        return norm_q, response, chat_history, [], response_cache.stats(), "0.00", get_average_query_time(), None
+        return norm_q, response, chat_history, [], response_cache.stats(), "0.00", get_average_query_time(), None, None
 
     dedup_hits = deduplicate_hits_by_index(all_hits)
     rerank_duration = None
@@ -2373,27 +2382,46 @@ def get_rag_response(
     context = "\n\n".join([c["text"] for c in selected_chunks])
     prompt = build_prompt(context, norm_q, chunker.is_math_heavy_question(norm_q))
 
+    source_payload = build_source_payload(selected_chunks)
+
     # === LLM Call
     response = query_ollama_chat_with_retry(prompt, model_name, chat_history=chat_history)
 
-    # === Format Output
-    image_md_blocks = build_image_markdown_blocks(retrieval_q, selected_chunks) if show_full_text else []
-    final_answer = _assemble_final_markdown(response, image_md_blocks)
-
-    chat_history = append_chat_turn(
-        chat_history,
-        norm_q,
-        response,
-        max_turns=MAX_CHAT_HISTORY_TURNS,
-        max_chars=MAX_CHAT_HISTORY_CHARS,
-    )
-
-    source_payload = build_source_payload(selected_chunks)
     build_card = build_circuit_build_card(
         norm_q,
         source_payload,
         intelligence_for_question_and_sources(retrieval_q, source_payload),
         context_question=retrieval_q,
+    )
+    revised_response, validation = finalize_response(
+        question=norm_q,
+        answer=response,
+        source_payload=source_payload,
+        build_card=build_card,
+        model_name=model_name,
+        confidence=confidence,
+        enabled=RESPONSE_FINALIZER_ENABLED,
+        mode=RESPONSE_FINALIZER_MODE,
+        min_confidence=RESPONSE_FINALIZER_MIN_CONFIDENCE,
+        max_context_chars=RESPONSE_FINALIZER_MAX_CONTEXT_CHARS,
+        llm_call=lambda finalizer_prompt: query_ollama_chat_with_retry(
+            finalizer_prompt,
+            model_name,
+            [],
+            system_prompt=RESPONSE_FINALIZER_SYSTEM_PROMPT,
+        ),
+    )
+
+    # === Format Output
+    image_md_blocks = build_image_markdown_blocks(retrieval_q, selected_chunks) if show_full_text else []
+    final_answer = _assemble_final_markdown(revised_response, image_md_blocks)
+
+    chat_history = append_chat_turn(
+        chat_history,
+        norm_q,
+        revised_response,
+        max_turns=MAX_CHAT_HISTORY_TURNS,
+        max_chars=MAX_CHAT_HISTORY_CHARS,
     )
     if cache_enabled:
         response_cache.put_response(
@@ -2421,6 +2449,7 @@ def get_rag_response(
         "weighting_profile": profile,
         "vector_duration": f"{vector_duration:.2f}s",
         "rerank_duration": "N/A" if rerank_duration is None else f"{rerank_duration:.2f}s",
+        "finalizer": validation.api_payload() if validation else None,
         "total_duration": f"{time.time() - start_time:.2f}s",
         "top_chunks": selected_chunks,
     })
@@ -2439,7 +2468,7 @@ def get_rag_response(
         username=username,
     )
 
-    return norm_q, final_answer, chat_history, source_payload, response_cache.stats(), confidence, get_average_query_time(), build_card
+    return norm_q, final_answer, chat_history, source_payload, response_cache.stats(), confidence, get_average_query_time(), build_card, validation.api_payload() if validation else None
 
 @trace_timer("extract_doc_and_page")
 def extract_doc_and_page(img_id):
@@ -3350,7 +3379,7 @@ async def assembly_plan_build(req: Request):
         return JSONResponse({"error": "Build objective is required."}, status_code=400)
     model_name = data.get("model") or LLM_MODEL_NAME
 
-    _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card = await run_in_threadpool(
+    _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card, validation = await run_in_threadpool(
         get_rag_response,
         question=objective,
         chat_history=[],
@@ -3385,6 +3414,7 @@ async def assembly_plan_build(req: Request):
                 "averageQueryTime": avg_time,
                 "cacheStats": cache_stats,
                 "chatHistory": chat_history,
+                "validation": validation,
             },
             status_code=422,
         )
@@ -3403,6 +3433,7 @@ async def assembly_plan_build(req: Request):
         "averageQueryTime": avg_time,
         "cacheStats": cache_stats,
         "chatHistory": chat_history,
+        "validation": validation,
     }
 
 
@@ -3654,7 +3685,7 @@ async def react_query(req: Request):
             conversation = conversation_store.create(user_id, conversation_title_from_question(question))
             conversation_id = conversation["id"]
 
-        _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card = await run_in_threadpool(
+        _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card, validation = await run_in_threadpool(
             get_rag_response,
             question=question,
             chat_history=data.get("chatHistory", []),
@@ -3689,6 +3720,7 @@ async def react_query(req: Request):
             "confidence": confidence,
             "averageQueryTime": avg_time,
             "buildCard": build_card,
+            "validation": validation,
         }
     except Exception as e:
         trace_logger.error(f"❌ [API] React query failed: {e}")

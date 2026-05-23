@@ -72,10 +72,23 @@ export interface QueryResponse {
   chatHistory: ChatTurn[];
   sources: SourceSummary[];
   buildCard?: CircuitBuildCard | null;
+  validation?: ResponseValidation | null;
   cacheStats: unknown;
   confidence: number | null;
   averageQueryTime: number | null;
   error?: string;
+}
+
+export interface ResponseValidation {
+  enabled: boolean;
+  ran: boolean;
+  useful: boolean;
+  changed: boolean;
+  confidence?: number | null;
+  issues: string[];
+  notes: string[];
+  elapsedMs: number;
+  model?: string | null;
 }
 
 export interface DocumentSummary {
@@ -352,6 +365,7 @@ export interface BuildAssemblyPlanResponse {
   plan?: AssemblyPlan;
   answer?: string;
   sources?: SourceSummary[];
+  validation?: ResponseValidation | null;
   confidence?: number | null;
   averageQueryTime?: number | null;
   error?: string;

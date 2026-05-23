@@ -995,6 +995,50 @@ nav {
   background: #fff7ed;
 }
 
+.validation-panel {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.validation-panel > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.validation-panel strong {
+  color: var(--ink);
+}
+
+.validation-panel span,
+.validation-panel li {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.validation-panel ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.validation-panel.ok {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.validation-panel.warn {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
 .project-part-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
