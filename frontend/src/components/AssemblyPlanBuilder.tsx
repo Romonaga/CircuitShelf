@@ -1,6 +1,8 @@
 import { FormEvent, useState } from "react";
 import { buildAssemblyPlan } from "../api";
 import { errorMessage } from "../lib/errors";
+import { formatElapsed } from "../lib/time";
+import { useElapsedSeconds } from "../hooks/useElapsedSeconds";
 import type { AppConfig, AssemblyPlan, QueryOptions } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
 import { LoadingSpinner } from "./LoadingSpinner";
@@ -19,6 +21,7 @@ export function AssemblyPlanBuilder({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  const elapsedSeconds = useElapsedSeconds(busy);
   const canSubmit = objective.trim().length > 0 && !busy;
 
   async function submit(event: FormEvent) {
@@ -107,7 +110,7 @@ export function AssemblyPlanBuilder({
         {busy ? (
           <>
             <LoadingSpinner className="button-spinner" />
-            Building plan
+            Building {formatElapsed(elapsedSeconds)}
           </>
         ) : (
           "Build assembly plan"

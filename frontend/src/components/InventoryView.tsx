@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { buildAssemblyPlan } from "../api";
 import { errorMessage } from "../lib/errors";
+import { useElapsedSeconds } from "../hooks/useElapsedSeconds";
 import type { AppConfig, InventoryPartInput, ProjectCandidate } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
 import { InventoryPartForm } from "./InventoryPartForm";
@@ -33,6 +34,7 @@ export function InventoryView({ config, isActive }: { config: AppConfig; isActiv
   const [message, setMessage] = useState("");
   const [buildError, setBuildError] = useState("");
   const [candidateFilter, setCandidateFilter] = useState<ProjectCandidateFilter>("all");
+  const buildingElapsedSeconds = useElapsedSeconds(Boolean(buildingId));
 
   const filteredCandidates = useMemo(() => {
     if (candidateFilter === "buildable") {
@@ -126,6 +128,7 @@ export function InventoryView({ config, isActive }: { config: AppConfig; isActiv
           candidates={filteredCandidates}
           finding={finding}
           buildingId={buildingId}
+          buildingElapsedSeconds={buildingElapsedSeconds}
           onBuild={(candidate) => void createBenchPlan(candidate)}
         />
       </section>

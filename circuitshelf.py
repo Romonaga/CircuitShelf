@@ -55,7 +55,12 @@ from index_builder import IndexBuildResult, IndexBuilder
 from inventory_import import parse_inventory_import
 from pinout_extractor import extract_pinout_map
 from datasheet_intelligence import build_datasheet_intelligence
-from circuit_build_cards import build_circuit_build_card
+from circuit_build_cards import (
+    RECOVERY_SYSTEM_PROMPT,
+    build_circuit_build_card,
+    build_recovery_prompt,
+    parse_recovered_build_card,
+)
 from ingest_manifest import IngestManifest
 from ingest_workers import detected_cpu_count, document_worker_count, ocr_worker_count, reserved_core_count, usable_core_count
 from log_tail import tail_text_file
@@ -2178,7 +2183,7 @@ def get_average_query_time():
 
 
 @trace_timer("query_ollama_chat with retry")
-def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=None, delay=None):
+def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=None, delay=None, system_prompt=None):
     retries = int(QUERY_RETRIES if retries is None else retries)
     delay = float(QUERY_RETRY_DELAY if delay is None else delay)
 
@@ -2202,7 +2207,7 @@ def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=
         "model": model_name or "default",
         "stream": False,
         "messages": build_chat_messages(
-            RAG_CHAT_SYSTEM_PROMPT,
+            system_prompt or RAG_CHAT_SYSTEM_PROMPT,
             prompt,
             chat_history,
             max_turns=MAX_CHAT_HISTORY_TURNS,
@@ -3359,12 +3364,23 @@ async def assembly_plan_build(req: Request):
         user_id=user_id_for_user(user),
         username=username_for_user(user),
     )
+    api_sources = normalize_sources_for_api(sources)
+    if not build_card:
+        recovery_prompt = build_recovery_prompt(objective, answer, api_sources)
+        recovered = await run_in_threadpool(
+            query_ollama_chat_with_retry,
+            recovery_prompt,
+            model_name,
+            [],
+            system_prompt=RECOVERY_SYSTEM_PROMPT,
+        )
+        build_card = parse_recovered_build_card(recovered, api_sources)
     if not build_card:
         return JSONResponse(
             {
                 "error": "CircuitShelf could not build an assembly plan from the current indexed sources.",
                 "answer": answer,
-                "sources": normalize_sources_for_api(sources),
+                "sources": api_sources,
                 "confidence": confidence,
                 "averageQueryTime": avg_time,
                 "cacheStats": cache_stats,
@@ -3382,7 +3398,7 @@ async def assembly_plan_build(req: Request):
     return {
         "plan": plan,
         "answer": answer,
-        "sources": normalize_sources_for_api(sources),
+        "sources": api_sources,
         "confidence": confidence,
         "averageQueryTime": avg_time,
         "cacheStats": cache_stats,

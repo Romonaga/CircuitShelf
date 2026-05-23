@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import os
 from collections import OrderedDict
@@ -63,7 +64,7 @@ def build_circuit_build_card(
     component_type = intelligence.get("componentType") or "component"
     lower = f"{ranking_question} {component} {component_type}".lower()
     pins = intelligence.get("pinout", {}).get("pins", [])
-    wiring = _specific_wiring(lower, pins) or _pinout_wiring(pins)
+    wiring = _pinout_wiring(pins)
     facts = intelligence.get("facts", [])
 
     return {
@@ -79,6 +80,205 @@ def build_circuit_build_card(
         "warnings": _warnings(facts, component_type),
         "sourceNotes": _source_notes(source_payload, intelligence),
     }
+
+
+RECOVERY_SYSTEM_PROMPT = (
+    "You are CircuitShelf's build-card recovery engine. Convert electronics answers "
+    "and retrieved source summaries into strict JSON bench build cards. Do not use a "
+    "fixed recipe for any specific chip. Use only the concrete details in the provided "
+    "answer, source summaries, and ordinary low-voltage hobby safety rules. If exact "
+    "pinouts, voltages, or component values are not supported, put that uncertainty in "
+    "warnings or return null when a usable plan cannot be made. Return JSON only."
+)
+
+
+def build_recovery_prompt(question: str, answer: str, source_payload: list[dict]) -> str:
+    sources = []
+    for source in (source_payload or [])[:8]:
+        chunks = []
+        for chunk in source.get("chunks") or []:
+            chunks.append(
+                {
+                    "page": chunk.get("page"),
+                    "section": chunk.get("section"),
+                    "preview": str(chunk.get("preview") or "")[:420],
+                }
+            )
+        sources.append(
+            {
+                "source": source.get("source"),
+                "displayName": source.get("displayName"),
+                "pages": source.get("pages") or [],
+                "chunkCount": source.get("chunkCount") or 0,
+                "chunks": chunks[:4],
+            }
+        )
+
+    payload = {
+        "objective": question,
+        "answer": str(answer or "")[:5000],
+        "sources": sources,
+        "schema": {
+            "title": "short project title",
+            "componentName": "main component or project family",
+            "componentType": "component category",
+            "summary": "one paragraph",
+            "confidence": 0.0,
+            "parts": [{"name": "part", "detail": "why/value/package"}],
+            "power": ["power note"],
+            "wiring": [{"from": "pin/component/rail", "to": "pin/component/rail", "note": "specific instruction", "page": None}],
+            "checks": ["verification step"],
+            "warnings": ["safety or uncertainty warning"],
+            "sourceNotes": [{"source": "source path/name", "pages": [1], "chunks": 1}],
+        },
+    }
+    return (
+        "Create one build card JSON object for this electronics project. The card must be "
+        "generic to the requested objective; do not force a 555, Arduino, MOSFET, op-amp, "
+        "or any other component unless the objective or answer actually calls for it. "
+        "Prefer pin-by-pin wiring rows when the answer/source supports them. If a safe, "
+        "concrete bench plan cannot be formed, return exactly null.\n\n"
+        f"{json.dumps(payload, ensure_ascii=False)}"
+    )
+
+
+def parse_recovered_build_card(raw: str, source_payload: list[dict]) -> dict | None:
+    data = _extract_json_value(raw)
+    if not isinstance(data, dict):
+        return None
+
+    card = {
+        "title": _clean_text(data.get("title"), 100) or "Assembly plan",
+        "componentName": _clean_text(data.get("componentName"), 100) or _clean_text(data.get("component"), 100) or "Project",
+        "componentType": _clean_text(data.get("componentType"), 80) or _clean_text(data.get("type"), 80) or "project",
+        "summary": _clean_text(data.get("summary"), 900),
+        "confidence": _bounded_float(data.get("confidence"), 0.45),
+        "parts": _normalize_parts(data.get("parts")),
+        "power": _normalize_strings(data.get("power"), 8),
+        "wiring": _normalize_wiring(data.get("wiring")),
+        "checks": _normalize_strings(data.get("checks"), 12),
+        "warnings": _normalize_strings(data.get("warnings"), 8),
+        "sourceNotes": _normalize_source_notes(data.get("sourceNotes"), source_payload),
+    }
+    if len(card["parts"]) < 1 or len(card["wiring"]) < 2:
+        return None
+    if not card["checks"]:
+        card["checks"] = ["Verify every power and ground connection before applying power."]
+    if not card["warnings"]:
+        card["warnings"] = ["Verify the plan against cited source material before powering the circuit."]
+    return card
+
+
+def _extract_json_value(raw: str):
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    fenced = re.search(r"```(?:json)?\s*(.*?)```", text, re.IGNORECASE | re.DOTALL)
+    if fenced:
+        text = fenced.group(1).strip()
+    for candidate in _json_candidates(text):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def _json_candidates(text: str) -> list[str]:
+    candidates = [text]
+    for start, end in [("{", "}"), ("[", "]")]:
+        left = text.find(start)
+        right = text.rfind(end)
+        if left >= 0 and right > left:
+            candidates.append(text[left:right + 1])
+    return candidates
+
+
+def _normalize_parts(value) -> list[dict]:
+    rows = []
+    for item in value or []:
+        if isinstance(item, str):
+            name = _clean_text(item, 120)
+            detail = ""
+        elif isinstance(item, dict):
+            name = _clean_text(item.get("name") or item.get("part"), 120)
+            detail = _clean_text(item.get("detail") or item.get("value") or item.get("note"), 220)
+        else:
+            continue
+        if name:
+            rows.append({"name": name, "detail": detail})
+    return _dedupe_dicts(rows, "name")[:30]
+
+
+def _normalize_wiring(value) -> list[dict]:
+    rows = []
+    for item in value or []:
+        if not isinstance(item, dict):
+            continue
+        from_pin = _clean_text(item.get("from") or item.get("source") or item.get("pin"), 160)
+        to = _clean_text(item.get("to") or item.get("destination") or item.get("connectTo"), 220)
+        note = _clean_text(item.get("note") or item.get("why") or item.get("instruction"), 360)
+        if from_pin and to:
+            rows.append({"from": from_pin, "to": to, "note": note, "page": _optional_int(item.get("page"))})
+    return rows[:40]
+
+
+def _normalize_strings(value, limit: int) -> list[str]:
+    if isinstance(value, str):
+        value = [value]
+    return _dedupe_strings([_clean_text(item, 260) for item in value or [] if _clean_text(item, 260)])[:limit]
+
+
+def _normalize_source_notes(value, source_payload: list[dict]) -> list[dict]:
+    rows = []
+    for item in value or []:
+        if not isinstance(item, dict):
+            continue
+        source = _clean_text(item.get("source") or item.get("displayName"), 220)
+        if source:
+            rows.append({"source": source, "pages": _pages(item.get("pages")), "chunks": _optional_int(item.get("chunks")) or 0})
+    if rows:
+        return rows[:8]
+    for source in (source_payload or [])[:5]:
+        rows.append(
+            {
+                "source": source.get("displayName") or source.get("source") or "Retrieved source",
+                "pages": _pages(source.get("pages")),
+                "chunks": _optional_int(source.get("chunkCount")) or 0,
+            }
+        )
+    return rows
+
+
+def _pages(value) -> list[int]:
+    if not isinstance(value, list):
+        value = [value] if value is not None else []
+    pages = []
+    for item in value:
+        page = _optional_int(item)
+        if page is not None and page not in pages:
+            pages.append(page)
+    return pages[:12]
+
+
+def _bounded_float(value, fallback: float) -> float:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _optional_int(value):
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _clean_text(value, limit: int) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()[:limit]
 
 
 def _first_intelligence(question: str, source_payload: list[dict], intelligence_by_source: dict[str, dict]) -> dict | None:
@@ -141,39 +341,7 @@ def _parts(lower: str, component: str, component_type: str) -> list[dict]:
             {"name": "Power supply", "detail": "Match the datasheet operating range."},
         ]
     )
-    if "555" in lower or "timer" in component_type:
-        parts.extend(
-            [
-                {"name": "Timing resistor(s)", "detail": "Example: 10 kOhm and 100 kOhm."},
-                {"name": "Timing capacitor", "detail": "Example: 10 uF for a slow blink."},
-                {"name": "0.01 uF capacitor", "detail": "Use on the control-voltage pin."},
-            ]
-        )
     return _dedupe_dicts(parts, "name")
-
-
-def _specific_wiring(lower: str, pins: list[dict]) -> list[dict]:
-    if "4n35" in lower or "optocoupler" in lower:
-        return [
-            _wire("Pin 1 Anode", "MCU output through 220 Ohm to 1 kOhm resistor", "Input LED current must be limited.", pins, 1),
-            _wire("Pin 2 Cathode", "MCU ground", "Completes the input LED circuit.", pins, 2),
-            _wire("Pin 3 NC", "Leave unconnected", "No internal connection.", pins, 3),
-            _wire("Pin 4 Emitter", "Isolated output ground", "Do not assume this ground must be tied to MCU ground.", pins, 4),
-            _wire("Pin 5 Collector", "Output load or input pull-up", "Use a pull-up resistor to the output-side supply.", pins, 5),
-            _wire("Pin 6 Base", "Usually leave open", "Only bias this pin when the datasheet/application note calls for it.", pins, 6),
-        ]
-    if "555" in lower or "timer" in lower:
-        return [
-            _wire("Pin 1 GND", "Ground rail", "Common circuit ground.", pins, 1),
-            _wire("Pin 8 VCC", "+5 V to +15 V supply", "Use the voltage range supported by your specific 555 variant.", pins, 8),
-            _wire("Pin 4 RESET", "VCC", "Tie high unless you need external reset control.", pins, 4),
-            _wire("Pin 5 CTRL", "0.01 uF capacitor to ground", "Stabilizes the threshold reference.", pins, 5),
-            _wire("Pin 2 TRIG", "Tie to Pin 6 for astable mode", "This timing node connects to the timing capacitor.", pins, 2),
-            _wire("Pin 6 THRES", "Tie to Pin 2 and timing capacitor", "The capacitor voltage is measured here.", pins, 6),
-            _wire("Pin 7 DISCH", "Between timing resistors", "Discharges the timing capacitor each cycle.", pins, 7),
-            _wire("Pin 3 OUT", "LED plus series resistor or logic input", "Do not drive an LED without a resistor.", pins, 3),
-        ]
-    return []
 
 
 def _pinout_wiring(pins: list[dict]) -> list[dict]:

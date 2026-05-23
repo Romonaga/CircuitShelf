@@ -1,15 +1,19 @@
 import type { ProjectCandidate } from "../types";
 import { formatNumber } from "../lib/format";
+import { formatElapsed } from "../lib/time";
+import { LoadingSpinner } from "./LoadingSpinner";
 
 export function ProjectCandidateList({
   candidates,
   finding,
   buildingId,
+  buildingElapsedSeconds,
   onBuild
 }: {
   candidates: ProjectCandidate[];
   finding: boolean;
   buildingId: string;
+  buildingElapsedSeconds: number;
   onBuild: (candidate: ProjectCandidate) => void;
 }) {
   if (finding && !candidates.length) {
@@ -42,7 +46,14 @@ export function ProjectCandidateList({
             <PartPillGroup title="Missing" parts={candidate.missingParts.map((part) => part.name || part.displayName || "")} />
           </div>
           <button className="primary-button compact-button" disabled={Boolean(buildingId)} onClick={() => onBuild(candidate)}>
-            {buildingId === candidate.id ? "Creating..." : "Create Bench plan"}
+            {buildingId === candidate.id ? (
+              <>
+                <LoadingSpinner className="button-spinner" />
+                Creating {formatElapsed(buildingElapsedSeconds)}
+              </>
+            ) : (
+              "Create Bench plan"
+            )}
           </button>
         </article>
       ))}

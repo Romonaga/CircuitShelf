@@ -3,6 +3,8 @@ import { deleteConversation, getConversation, getConversations, getUserPreferenc
 import type { AppConfig, ChatTurn, ConversationSummary, QueryOptions, QueryResponse } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatNumber } from "../lib/format";
+import { formatElapsed } from "../lib/time";
+import { useElapsedSeconds } from "../hooks/useElapsedSeconds";
 import { AnswerRenderer } from "./AnswerRenderer";
 import { BuildCard } from "./BuildCard";
 import { ChatHistory } from "./ChatHistory";
@@ -24,9 +26,9 @@ export function AskView({ config }: { config: AppConfig }) {
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
 
+  const elapsedSeconds = useElapsedSeconds(busy);
   const canSubmit = question.trim().length > 0 && !busy;
   const askButtonText = busy ? `Running ${formatElapsed(elapsedSeconds)}` : "Ask";
 
@@ -82,21 +84,6 @@ export function AskView({ config }: { config: AppConfig }) {
       bypassCache: options.bypassCache
     }).catch(() => undefined);
   }, [options.bypassCache, options.showFullText, preferencesLoaded]);
-
-  useEffect(() => {
-    if (!busy) {
-      setElapsedSeconds(0);
-      return;
-    }
-
-    const startedAt = Date.now();
-    setElapsedSeconds(0);
-    const timer = window.setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [busy]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -300,13 +287,4 @@ export function AskView({ config }: { config: AppConfig }) {
       </section>
     </section>
   );
-}
-
-function formatElapsed(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  if (minutes <= 0) {
-    return `${remainingSeconds}s`;
-  }
-  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
