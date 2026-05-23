@@ -87,12 +87,16 @@ export default function App() {
           />
         </div>
       ) : null}
-      <div hidden={activeView !== "trace"}>
-        <TraceView />
-      </div>
-      <div hidden={activeView !== "status"}>
-        <StatusView status={status} refresh={refreshStatus} isActive={activeView === "status"} isAdmin={Boolean(user?.isAdmin)} />
-      </div>
+      {user?.isAdmin ? (
+        <>
+          <div hidden={activeView !== "trace"}>
+            <TraceView />
+          </div>
+          <div hidden={activeView !== "status"}>
+            <StatusView status={status} refresh={refreshStatus} isActive={activeView === "status"} isAdmin={Boolean(user?.isAdmin)} />
+          </div>
+        </>
+      ) : null}
       <div hidden={activeView !== "account"}>
         <AccountView username={user?.username || "local"} theme={theme} setTheme={setTheme} />
       </div>

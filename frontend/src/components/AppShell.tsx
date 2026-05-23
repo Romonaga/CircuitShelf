@@ -30,6 +30,18 @@ export function AppShell({
   onLogout: () => void;
   children: ReactNode;
 }) {
+  const viewLabels: Record<View, string> = {
+    ask: "Ask",
+    bench: "Bench",
+    finder: "Finder",
+    inventory: "Inventory",
+    documents: "Documents",
+    review: "Review",
+    trace: "Trace",
+    status: "Status",
+    settings: "Admin Settings",
+    account: "Account"
+  };
   const navGroups: Array<{ label: string; items: Array<{ id: View; label: string }> }> = [
     {
       label: "Build",
@@ -46,16 +58,17 @@ export function AppShell({
         { id: "documents", label: "Documents" }
       ]
     },
-    {
-      label: "System",
+    ...(isAdmin
+      ? [{
+      label: "Admin",
       items: [
-        ...(isAdmin ? [{ id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` }] : []),
-        { id: "trace", label: "Trace" },
-        { id: "status", label: "Status" },
-        { id: "account", label: "Account" },
-        ...(isAdmin ? [{ id: "settings" as View, label: "Admin Settings" }] : [])
+        { id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` },
+        { id: "trace" as View, label: "Trace" },
+        { id: "status" as View, label: "Status" },
+        { id: "settings" as View, label: "Settings" }
       ]
-    }
+    }]
+      : [])
   ];
 
   return (
@@ -90,15 +103,26 @@ export function AppShell({
           <button className="ghost-button" onClick={onRefresh}>
             Refresh
           </button>
-          <button className="ghost-button theme-button" onClick={onToggleTheme}>
-            {theme === "dark" ? "Light bench" : "Dark bench"}
+          <button className="ghost-button" onClick={() => setActiveView("account")}>
+            Account
           </button>
           <button className="ghost-button" onClick={onLogout}>
             Sign out
           </button>
         </div>
       </aside>
-      <main className="workspace">{children}</main>
+      <main className="workspace">
+        <div className="workspace-topbar">
+          <div>
+            <span>{viewLabels[activeView]}</span>
+            <strong>{siteName}</strong>
+          </div>
+          <button className="ghost-button theme-button" onClick={onToggleTheme}>
+            {theme === "dark" ? "Light bench" : "Dark bench"}
+          </button>
+        </div>
+        <div className="workspace-body">{children}</div>
+      </main>
     </div>
   );
 }

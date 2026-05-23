@@ -413,6 +413,47 @@ nav {
   padding: 24px;
 }
 
+.workspace-topbar {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 10px 12px 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(54, 204, 176, 0.12), rgba(255, 159, 69, 0.08)),
+    var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.workspace-topbar div {
+  display: grid;
+  gap: 2px;
+}
+
+.workspace-topbar span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.workspace-topbar strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.workspace-body {
+  min-width: 0;
+}
+
+.theme-button {
+  min-width: 116px;
+}
+
 .view-grid {
   display: grid;
   gap: 18px;
@@ -3042,6 +3083,7 @@ nav {
 }
 
 :root[data-theme="dark"] .inventory-import-row,
+:root[data-theme="dark"] .conversation-row,
 :root[data-theme="dark"] .project-summary-stat,
 :root[data-theme="dark"] .project-gap-row,
 :root[data-theme="dark"] .source-item,
@@ -3105,6 +3147,7 @@ nav {
 :root[data-theme="dark"] .assembly-note p,
 :root[data-theme="dark"] .assembly-learning-card p,
 :root[data-theme="dark"] .assembly-evidence-chunk p,
+:root[data-theme="dark"] .chat-question,
 :root[data-theme="dark"] .source-chunk p,
 :root[data-theme="dark"] .source-item pre,
 :root[data-theme="dark"] .json-view,
