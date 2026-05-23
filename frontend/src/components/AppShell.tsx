@@ -44,7 +44,7 @@ export function AppShell({
   };
   const navGroups: Array<{ label: string; items: Array<{ id: View; label: string }> }> = [
     {
-      label: "Build",
+      label: "Workbench",
       items: [
         { id: "ask", label: "Ask" },
         { id: "bench", label: "Bench" },
@@ -58,13 +58,18 @@ export function AppShell({
         { id: "documents", label: "Documents" }
       ]
     },
+    {
+      label: "System",
+      items: [
+        { id: "trace" as View, label: "Trace" },
+        { id: "status" as View, label: "Status" }
+      ]
+    },
     ...(isAdmin
       ? [{
       label: "Admin",
       items: [
         { id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` },
-        { id: "trace" as View, label: "Trace" },
-        { id: "status" as View, label: "Status" },
         { id: "settings" as View, label: "Settings" }
       ]
     }]

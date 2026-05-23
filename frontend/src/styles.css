@@ -3148,6 +3148,7 @@ nav {
 :root[data-theme="dark"] .assembly-learning-card p,
 :root[data-theme="dark"] .assembly-evidence-chunk p,
 :root[data-theme="dark"] .chat-question,
+:root[data-theme="dark"] .docs-grid .section-heading h2,
 :root[data-theme="dark"] .source-chunk p,
 :root[data-theme="dark"] .source-item pre,
 :root[data-theme="dark"] .json-view,
