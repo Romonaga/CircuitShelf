@@ -80,6 +80,24 @@ export function useInventory(isActive: boolean) {
     }
   }, []);
 
+  const updateQuantity = useCallback(
+    async (partId: string, quantity: number) => {
+      const part = parts.find((item) => item.id === partId);
+      if (!part) {
+        return null;
+      }
+      return savePart({
+        displayName: part.displayName,
+        partType: part.partType,
+        quantity,
+        location: part.location,
+        notes: part.notes,
+        aliases: part.aliases
+      });
+    },
+    [parts, savePart]
+  );
+
   useEffect(() => {
     if (isActive) {
       void loadParts();
@@ -99,6 +117,7 @@ export function useInventory(isActive: boolean) {
     loadParts,
     findProjects,
     savePart,
-    removePart
+    removePart,
+    updateQuantity
   };
 }

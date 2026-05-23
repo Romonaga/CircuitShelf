@@ -2875,7 +2875,7 @@ def conversation_title_from_question(question: str) -> str:
     return title[:80]
 
 
-USER_PREFERENCE_KEYS = {"ask.retrieval"}
+USER_PREFERENCE_KEYS = {"ask.retrieval", "ui.theme"}
 
 
 def require_admin_user(req: Request):
@@ -3062,6 +3062,21 @@ async def user_preference_update(key: str, req: Request):
         return JSONResponse({"error": "Unknown preference key."}, status_code=404)
     data = await req.json()
     return {"key": key, "value": user_preferences_store.set(user_id_for_user(user), key, data.get("value") or {})}
+
+
+@app.put("/api/account/password")
+async def account_password_update(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    data = await req.json()
+    current_password = str(data.get("currentPassword") or "")
+    new_password = str(data.get("newPassword") or "")
+    if len(new_password) < 8:
+        return JSONResponse({"error": "New password must be at least 8 characters."}, status_code=400)
+    if not user_store.change_password(user_id_for_user(user), current_password, new_password):
+        return JSONResponse({"error": "Current password is not correct."}, status_code=400)
+    return {"ok": True}
 
 
 @app.get("/api/app-config")

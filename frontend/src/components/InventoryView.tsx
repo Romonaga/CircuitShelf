@@ -15,9 +15,11 @@ export function InventoryView({ isActive }: { isActive: boolean }) {
     error,
     savePart,
     removePart,
+    updateQuantity,
     loadParts
   } = useInventory(isActive);
   const [saving, setSaving] = useState(false);
+  const [quantitySavingId, setQuantitySavingId] = useState("");
   const [message, setMessage] = useState("");
 
   const inventoryStats = useMemo(() => {
@@ -43,6 +45,19 @@ export function InventoryView({ isActive }: { isActive: boolean }) {
       return false;
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveQuantity(partId: string, quantity: number) {
+    setQuantitySavingId(partId);
+    setMessage("");
+    try {
+      const saved = await updateQuantity(partId, quantity);
+      if (saved) {
+        setMessage(`${saved.displayName} quantity set to ${formatNumber(saved.quantity)}.`);
+      }
+    } finally {
+      setQuantitySavingId("");
     }
   }
 
@@ -80,7 +95,13 @@ export function InventoryView({ isActive }: { isActive: boolean }) {
           </div>
           <ErrorMessage message={error} />
           {message ? <div className="success-message">{message}</div> : null}
-          <InventoryPartList parts={parts} loading={loading} onRemove={(partId) => void removePart(partId)} />
+          <InventoryPartList
+            parts={parts}
+            loading={loading}
+            savingQuantityId={quantitySavingId}
+            onQuantityChange={(partId, quantity) => void saveQuantity(partId, quantity)}
+            onRemove={(partId) => void removePart(partId)}
+          />
         </section>
       </div>
     </section>

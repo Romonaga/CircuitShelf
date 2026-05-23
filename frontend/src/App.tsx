@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AccountView } from "./components/AccountView";
 import { AppShell } from "./components/AppShell";
 import { AskView } from "./components/AskView";
 import { BenchView } from "./components/BenchView";
@@ -13,6 +14,7 @@ import { TraceView } from "./components/TraceView";
 import { useAppConfig } from "./hooks/useAppConfig";
 import { useSession } from "./hooks/useSession";
 import { useStatus } from "./hooks/useStatus";
+import { useThemePreference } from "./hooks/useThemePreference";
 import { ErrorMessage } from "./components/ErrorMessage";
 import type { View } from "./types";
 
@@ -24,6 +26,7 @@ export default function App() {
     config?.activeStatusPollIntervalSeconds
   );
   const { user, login, logout } = useSession(config);
+  const { theme, setTheme, toggleTheme } = useThemePreference(Boolean(user));
   const error = configError || statusError;
 
   if (!config) {
@@ -47,6 +50,8 @@ export default function App() {
       user={user?.username || "local"}
       isAdmin={Boolean(user?.isAdmin)}
       status={status}
+      theme={theme}
+      onToggleTheme={toggleTheme}
       onRefresh={refreshStatus}
       onLogout={logout}
     >
@@ -87,6 +92,9 @@ export default function App() {
       </div>
       <div hidden={activeView !== "status"}>
         <StatusView status={status} refresh={refreshStatus} isActive={activeView === "status"} isAdmin={Boolean(user?.isAdmin)} />
+      </div>
+      <div hidden={activeView !== "account"}>
+        <AccountView username={user?.username || "local"} theme={theme} setTheme={setTheme} />
       </div>
       {user?.isAdmin ? (
         <div hidden={activeView !== "settings"}>

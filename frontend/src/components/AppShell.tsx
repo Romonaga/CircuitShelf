@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import type { StatusPayload, View } from "../types";
 import { formatNumber } from "../lib/format";
+import type { ThemeMode } from "../hooks/useThemePreference";
+import { LogoMark } from "./LogoMark";
 import { Stat } from "./Stat";
 
 export function AppShell({
@@ -10,6 +12,8 @@ export function AppShell({
   user,
   isAdmin,
   status,
+  theme,
+  onToggleTheme,
   onRefresh,
   onLogout,
   children
@@ -20,6 +24,8 @@ export function AppShell({
   user: string;
   isAdmin: boolean;
   status: StatusPayload | null;
+  theme: ThemeMode;
+  onToggleTheme: () => void;
   onRefresh: () => void;
   onLogout: () => void;
   children: ReactNode;
@@ -46,7 +52,8 @@ export function AppShell({
         ...(isAdmin ? [{ id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` }] : []),
         { id: "trace", label: "Trace" },
         { id: "status", label: "Status" },
-        ...(isAdmin ? [{ id: "settings" as View, label: "Settings" }] : [])
+        { id: "account", label: "Account" },
+        ...(isAdmin ? [{ id: "settings" as View, label: "Admin Settings" }] : [])
       ]
     }
   ];
@@ -55,7 +62,7 @@ export function AppShell({
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-block">
-          <div className="brand-mark">CS</div>
+          <LogoMark />
           <div>
             <h1>{siteName}</h1>
             <p>{user}</p>
@@ -82,6 +89,9 @@ export function AppShell({
           <Stat label="Sources" value={formatNumber(status?.sources)} />
           <button className="ghost-button" onClick={onRefresh}>
             Refresh
+          </button>
+          <button className="ghost-button theme-button" onClick={onToggleTheme}>
+            {theme === "dark" ? "Light bench" : "Dark bench"}
           </button>
           <button className="ghost-button" onClick={onLogout}>
             Sign out

@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { InventoryPart } from "../types";
 import { formatNumber } from "../lib/format";
+import { LoadingSpinner } from "./LoadingSpinner";
 
 type SortKey = "displayName" | "partType" | "quantity" | "location";
 type SortDirection = "asc" | "desc";
@@ -15,10 +16,14 @@ const sortLabels: Record<SortKey, string> = {
 export function InventoryPartList({
   parts,
   loading,
+  savingQuantityId,
+  onQuantityChange,
   onRemove
 }: {
   parts: InventoryPart[];
   loading: boolean;
+  savingQuantityId?: string;
+  onQuantityChange: (partId: string, quantity: number) => void;
   onRemove: (partId: string) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("partType");
@@ -76,7 +81,13 @@ export function InventoryPartList({
                 {part.displayName}
               </td>
               <td>{part.partType}</td>
-              <td className="inventory-table-number">{formatNumber(part.quantity)}</td>
+              <td className="inventory-table-number">
+                <QuantityEditor
+                  part={part}
+                  saving={savingQuantityId === part.id}
+                  onChange={(quantity) => onQuantityChange(part.id, quantity)}
+                />
+              </td>
               <td title={part.location}>{part.location || "Unsorted"}</td>
               <td title={part.aliases.join(", ")}>{part.aliases.length ? part.aliases.join(", ") : "None"}</td>
               <td title={part.notes}>{part.notes || "None"}</td>
@@ -89,6 +100,56 @@ export function InventoryPartList({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function QuantityEditor({
+  part,
+  saving,
+  onChange
+}: {
+  part: InventoryPart;
+  saving: boolean;
+  onChange: (quantity: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(part.quantity));
+
+  useEffect(() => {
+    setDraft(String(part.quantity));
+  }, [part.quantity]);
+
+  function commit(value: number) {
+    const quantity = Math.max(0, Math.trunc(value || 0));
+    setDraft(String(quantity));
+    if (quantity !== part.quantity) {
+      onChange(quantity);
+    }
+  }
+
+  return (
+    <div className="quantity-editor">
+      <button type="button" aria-label={`Decrease ${part.displayName}`} disabled={saving || part.quantity <= 0} onClick={() => commit(part.quantity - 1)}>
+        -
+      </button>
+      <input
+        aria-label={`${part.displayName} quantity`}
+        type="number"
+        min="0"
+        value={draft}
+        disabled={saving}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => commit(Number(draft))}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.currentTarget.blur();
+          }
+        }}
+      />
+      <button type="button" aria-label={`Increase ${part.displayName}`} disabled={saving} onClick={() => commit(part.quantity + 1)}>
+        +
+      </button>
+      {saving ? <LoadingSpinner className="quantity-spinner" /> : <span className="quantity-readout">{formatNumber(part.quantity)}</span>}
     </div>
   );
 }

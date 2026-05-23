@@ -86,6 +86,21 @@ class UserStore:
                 (username, password_hash, is_admin, is_active),
             )
 
+    def change_password(self, user_id: int, current_password: str, new_password: str) -> bool:
+        if not current_password or not new_password or len(new_password) < 8:
+            return False
+
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("users_find_by_id.sql"), (int(user_id),)).fetchone()
+            if not row:
+                return False
+            stored_hash = row["password_hash"]
+            if not bcrypt.checkpw(current_password.encode("utf-8"), stored_hash.encode("utf-8")):
+                return False
+            password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            conn.execute(load_query("users_update_password.sql"), (password_hash, int(user_id)))
+        return True
+
     def list_users(self) -> list[dict]:
         with self.database.connection() as conn:
             rows = conn.execute(load_query("users_list.sql")).fetchall()

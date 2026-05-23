@@ -96,6 +96,13 @@ export function updateUserPreference<T>(key: string, value: T): Promise<{ key: s
   });
 }
 
+export function updateAccountPassword(payload: { currentPassword: string; newPassword: string }): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/api/account/password", {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function logout(): Promise<{ ok: boolean }> {
   return requestJson("/api/logout", { method: "POST" });
 }
