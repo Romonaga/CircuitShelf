@@ -98,6 +98,9 @@ class OpenAIAssistService:
                 input_tokens=usage["inputTokens"],
                 cached_input_tokens=usage["cachedInputTokens"],
                 output_tokens=usage["outputTokens"],
+                billing_scope=settings["pricingScope"],
+                entity_id=settings.get("pricingEntityId"),
+                user_id=settings.get("pricingUserId"),
             )
             self.ai_provider_store.record_ai_assist_event(
                 **event_base,
@@ -175,6 +178,9 @@ class OpenAIAssistService:
                 input_tokens=usage["inputTokens"],
                 cached_input_tokens=usage["cachedInputTokens"],
                 output_tokens=usage["outputTokens"],
+                billing_scope=settings["pricingScope"],
+                entity_id=settings.get("pricingEntityId"),
+                user_id=settings.get("pricingUserId"),
             )
             self.ai_provider_store.record_ai_assist_event(
                 **event_base,

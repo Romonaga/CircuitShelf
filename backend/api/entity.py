@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
+from fastapi.responses import JSONResponse
 
 from backend.api.dependencies import ApiDependencies
 
@@ -33,6 +34,26 @@ def create_router(deps: ApiDependencies) -> APIRouter:
         if error:
             return error
         return {"entity": entity.to_api(), "members": deps.entity_store.members(entity.entity_id)}
+
+    @router.post("/api/entity/members/{user_id}/unlock")
+    async def entity_member_unlock(user_id: int, req: Request):
+        _, entity, error = deps.require_entity_admin(req)
+        if error:
+            return error
+        member = deps.entity_store.unlock_member(entity.entity_id, int(user_id))
+        if not member:
+            return JSONResponse({"error": "Entity member not found."}, status_code=404)
+        return {"ok": True, "member": member}
+
+    @router.post("/api/entity/members/{user_id}/force-password-change")
+    async def entity_member_force_password_change(user_id: int, req: Request):
+        _, entity, error = deps.require_entity_admin(req)
+        if error:
+            return error
+        member = deps.entity_store.force_member_password_change(entity.entity_id, int(user_id), True)
+        if not member:
+            return JSONResponse({"error": "Entity member not found."}, status_code=404)
+        return {"ok": True, "member": member}
 
     @router.get("/api/entity/password-policy")
     async def entity_password_policy(req: Request):

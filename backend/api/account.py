@@ -88,8 +88,10 @@ def create_router(deps: ApiDependencies, preference_keys: set[str]) -> APIRouter
         user, error = deps.require_authenticated_user(req)
         if error:
             return error
-        if len(payload.newPassword) < 8:
-            return JSONResponse({"error": "New password must be at least 8 characters."}, status_code=400)
+        policy = deps.user_store.password_policy_for_user(deps.user_id_for_user(user))
+        issues = deps.user_store.password_policy_issues(payload.newPassword, policy)
+        if issues:
+            return JSONResponse({"error": " ".join(issues)}, status_code=400)
         if not deps.user_store.change_password(deps.user_id_for_user(user), payload.currentPassword, payload.newPassword):
             return JSONResponse({"error": "Current password is not correct."}, status_code=400)
         return {"ok": True}

@@ -1,4 +1,5 @@
 SELECT p.code AS provider_code,
+       s.user_id,
        s.enabled,
        s.key_preview,
        kp.code AS key_policy,

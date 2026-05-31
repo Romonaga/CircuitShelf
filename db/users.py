@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import bcrypt
 from psycopg.errors import UndefinedTable
@@ -55,22 +56,34 @@ class UserStore:
 
         try:
             with self.database.connection() as conn:
-                row = conn.execute(load_query("users_find_for_login.sql"), (username,)).fetchone()
+                row = conn.execute(load_query("users_find_for_login_full.sql"), (username,)).fetchone()
 
                 if not row:
+                    return None
+                policy = self._effective_policy_for_user(conn, int(row["id"]))
+                if not row["is_active"] or row["disabled_at"] is not None:
                     return None
 
                 stored_hash = row["password_hash"]
                 if not bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8")):
+                    conn.execute(
+                        load_query("users_login_failure_update.sql"),
+                        (
+                            int(policy["max_failed_attempts"]),
+                            int(policy["max_failed_attempts"]),
+                            int(row["id"]),
+                        ),
+                    )
                     return None
 
-                conn.execute(load_query("users_touch_last_login.sql"), (username,))
+                conn.execute(load_query("users_login_success_update.sql"), (int(row["id"]),))
+                force_change = bool(row.get("force_password_change")) or self._password_expired(row, policy)
                 return AuthenticatedUser(
                     user_id=int(row["id"]),
                     username=str(row["username"]),
                     is_admin=bool(row["is_admin"]),
                     can_manage_system=bool(row.get("can_manage_system")),
-                    force_password_change=bool(row.get("force_password_change")),
+                    force_password_change=force_change,
                 )
         except UndefinedTable:
             if self.logger:
@@ -97,12 +110,15 @@ class UserStore:
             )
 
     def change_password(self, user_id: int, current_password: str, new_password: str) -> bool:
-        if not current_password or not new_password or len(new_password) < 8:
+        if not current_password or not new_password:
             return False
 
         with self.database.connection() as conn:
             row = conn.execute(load_query("users_find_by_id.sql"), (int(user_id),)).fetchone()
             if not row:
+                return False
+            policy = self._effective_policy_for_user(conn, int(user_id))
+            if self.password_policy_issues(new_password, policy):
                 return False
             stored_hash = row["password_hash"]
             if not bcrypt.checkpw(current_password.encode("utf-8"), stored_hash.encode("utf-8")):
@@ -110,6 +126,25 @@ class UserStore:
             password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
             conn.execute(load_query("users_update_password.sql"), (password_hash, int(user_id)))
         return True
+
+    def password_policy_for_user(self, user_id: int) -> dict:
+        with self.database.connection() as conn:
+            return dict(self._effective_policy_for_user(conn, int(user_id)))
+
+    @staticmethod
+    def password_policy_issues(password: str, policy: dict) -> list[str]:
+        issues = []
+        if len(password or "") < int(policy["min_length"]):
+            issues.append(f"Password must be at least {int(policy['min_length'])} characters.")
+        if policy["require_upper"] and not any(ch.isupper() for ch in password):
+            issues.append("Password must include an uppercase letter.")
+        if policy["require_lower"] and not any(ch.islower() for ch in password):
+            issues.append("Password must include a lowercase letter.")
+        if policy["require_number"] and not any(ch.isdigit() for ch in password):
+            issues.append("Password must include a number.")
+        if policy["require_symbol"] and not any(not ch.isalnum() for ch in password):
+            issues.append("Password must include a symbol.")
+        return issues
 
     def list_users(self) -> list[dict]:
         with self.database.connection() as conn:
@@ -164,3 +199,28 @@ class UserStore:
     @staticmethod
     def _token_hash(token: str) -> str:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def _effective_policy_for_user(self, conn, user_id: int) -> dict:
+        entity_row = conn.execute(load_query("users_entity_id_for_policy.sql"), (int(user_id),)).fetchone()
+        entity_id = entity_row["entity_id"] if entity_row else None
+        policy = conn.execute(load_query("password_policy_get_effective.sql"), (entity_id,)).fetchone()
+        return dict(policy) if policy else {
+            "min_length": 12,
+            "require_upper": True,
+            "require_lower": True,
+            "require_number": True,
+            "require_symbol": False,
+            "password_change_days": 0,
+            "max_failed_attempts": 5,
+            "lockout_minutes": 30,
+        }
+
+    @staticmethod
+    def _password_expired(row: dict, policy: dict) -> bool:
+        days = int(policy.get("password_change_days") or 0)
+        changed_at = row.get("password_changed_at")
+        if days <= 0 or not changed_at:
+            return False
+        if changed_at.tzinfo is None:
+            changed_at = changed_at.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - changed_at).days >= days

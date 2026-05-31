@@ -1,4 +1,5 @@
 SELECT p.code AS provider_code,
+       s.entity_id,
        s.enabled,
        s.key_preview,
        kp.code AS key_policy,

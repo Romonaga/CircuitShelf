@@ -66,6 +66,10 @@ class EntityStore:
                 "nickname": row["nickname"],
                 "isActive": bool(row["is_active"]),
                 "canManageSystem": bool(row["can_manage_system"]),
+                "forcePasswordChange": bool(row.get("force_password_change")),
+                "failedLoginCount": int(row.get("failed_login_count") or 0),
+                "disabledAt": row["disabled_at"].isoformat() if row.get("disabled_at") else None,
+                "disabledReason": row.get("disabled_reason") or "",
                 "role": row["role_code"],
                 "roleName": row["role_name"],
                 "canManage": bool(row["can_manage_entity"]),
@@ -74,6 +78,19 @@ class EntityStore:
             }
             for row in rows
         ]
+
+    def unlock_member(self, entity_id: int, user_id: int) -> dict[str, Any] | None:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("entity_member_unlock.sql"), (int(entity_id), int(user_id))).fetchone()
+        return dict(row) if row else None
+
+    def force_member_password_change(self, entity_id: int, user_id: int, force: bool) -> dict[str, Any] | None:
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("entity_member_force_password_change.sql"),
+                (bool(force), int(entity_id), int(user_id)),
+            ).fetchone()
+        return dict(row) if row else None
 
     def upsert_entity(self, name: str, owner_user_id: int | None = None) -> dict[str, Any]:
         slug = slugify_entity_name(name)

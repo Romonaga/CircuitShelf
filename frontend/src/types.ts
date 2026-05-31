@@ -42,6 +42,10 @@ export interface EntityMember {
   nickname?: string | null;
   isActive: boolean;
   canManageSystem: boolean;
+  forcePasswordChange?: boolean;
+  failedLoginCount?: number;
+  disabledAt?: string | null;
+  disabledReason?: string | null;
   role: string;
   roleName: string;
   canManage: boolean;
@@ -74,6 +78,19 @@ export interface AIModelPricing {
   updatedAt?: string | null;
 }
 
+export interface AIModelPricingOverride {
+  provider?: string;
+  modelName: string;
+  scope?: string;
+  entityId?: number | null;
+  userId?: number | null;
+  inputPerMillion: number;
+  cachedInputPerMillion: number;
+  outputPerMillion: number;
+  currency?: string;
+  updatedAt?: string | null;
+}
+
 export interface AIProviderSettings {
   scope: "system" | "entity" | "user" | string;
   provider: string;
@@ -86,6 +103,7 @@ export interface AIProviderSettings {
   monthlyBudget: number;
   warnPercent: number;
   stopPercent: number;
+  pricingOverrides: AIModelPricingOverride[];
   updatedAt?: string | null;
 }
 
@@ -99,6 +117,7 @@ export interface AIProviderSettingsPayload {
   monthlyBudget: number;
   warnPercent: number;
   stopPercent: number;
+  pricingOverrides?: AIModelPricingOverride[];
 }
 
 export interface QueryOptions {

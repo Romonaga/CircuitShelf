@@ -3,6 +3,7 @@ import type { AIModelPricing, AIProviderSettings, AIProviderSettingsPayload } fr
 import { errorMessage } from "../lib/errors";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
+import { AIProviderPricingOverrides } from "./AIProviderPricingOverrides";
 
 const defaultSettings: AIProviderSettings = {
   scope: "user",
@@ -15,7 +16,8 @@ const defaultSettings: AIProviderSettings = {
   defaultModel: "",
   monthlyBudget: 0,
   warnPercent: 80,
-  stopPercent: 100
+  stopPercent: 100,
+  pricingOverrides: []
 };
 
 export function AIProviderSettingsPanel({
@@ -100,7 +102,8 @@ export function AIProviderSettingsPanel({
         defaultModel: settings.defaultModel,
         monthlyBudget: settings.monthlyBudget,
         warnPercent: settings.warnPercent,
-        stopPercent: settings.stopPercent
+        stopPercent: settings.stopPercent,
+        pricingOverrides: settings.pricingOverrides
       });
       setSettings(response.settings);
       setApiKey("");
@@ -244,6 +247,13 @@ export function AIProviderSettingsPanel({
           <span>Output ${selectedPrice.outputPerMillion}/1M</span>
         </div>
       ) : null}
+
+      <AIProviderPricingOverrides
+        pricing={pricing}
+        overrides={settings.pricingOverrides || []}
+        disabled={!canManage}
+        onChange={(pricingOverrides) => setSettings({ ...settings, pricingOverrides })}
+      />
 
       {message ? <p className="success-message">{message}</p> : null}
       {canManage ? (

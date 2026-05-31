@@ -105,6 +105,18 @@ export function getEntityMembers(): Promise<{ entity: EntityContext; members: En
   return requestJson<{ entity: EntityContext; members: EntityMember[] }>("/api/entity/members");
 }
 
+export function unlockEntityMember(userId: number): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/entity/members/${encodeURIComponent(String(userId))}/unlock`, {
+    method: "POST"
+  });
+}
+
+export function forceEntityMemberPasswordChange(userId: number): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/entity/members/${encodeURIComponent(String(userId))}/force-password-change`, {
+    method: "POST"
+  });
+}
+
 export function getEntityPasswordPolicy(): Promise<{ policy: PasswordPolicy }> {
   return requestJson<{ policy: PasswordPolicy }>("/api/entity/password-policy");
 }

@@ -24,6 +24,9 @@ export function LoginView({ siteName, onLogin }: { siteName: string; onLogin: (s
         userId: result.userId,
         username: result.username || username,
         isAdmin: Boolean(result.isAdmin),
+        canManageSystem: Boolean(result.canManageSystem),
+        forcePasswordChange: Boolean(result.forcePasswordChange),
+        entity: result.entity ?? null,
         token: result.token || ""
       });
     } catch (err) {

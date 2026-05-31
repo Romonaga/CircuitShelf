@@ -7,4 +7,5 @@ FROM user_sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = %s
   AND s.expires_at > now()
-  AND u.is_active = true;
+  AND u.is_active = true
+  AND u.disabled_at IS NULL;

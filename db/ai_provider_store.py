@@ -44,9 +44,29 @@ class AIProviderStore:
             for row in rows
         ]
 
-    def pricing_for_model(self, model_name: str, provider: str = "openai") -> dict[str, Any]:
+    def pricing_for_model(
+        self,
+        model_name: str,
+        provider: str = "openai",
+        *,
+        billing_scope: str = "system",
+        entity_id: int | None = None,
+        user_id: int | None = None,
+    ) -> dict[str, Any]:
         with self.database.connection() as conn:
-            row = conn.execute(load_query("ai_model_pricing_get.sql"), (provider, model_name)).fetchone()
+            row = conn.execute(
+                load_query("ai_model_pricing_resolve.sql"),
+                (
+                    provider,
+                    model_name,
+                    billing_scope,
+                    billing_scope,
+                    billing_scope,
+                    entity_id,
+                    billing_scope,
+                    user_id,
+                ),
+            ).fetchone()
         if not row:
             return {
                 "provider": provider,
@@ -55,6 +75,7 @@ class AIProviderStore:
                 "cachedInputPerMillion": 0.0,
                 "outputPerMillion": 0.0,
                 "currency": "USD",
+                "isOverride": False,
             }
         return {
             "provider": row["provider_code"],
@@ -63,7 +84,72 @@ class AIProviderStore:
             "cachedInputPerMillion": float(row["cached_input_per_million"] or 0),
             "outputPerMillion": float(row["output_per_million"] or 0),
             "currency": row["currency"],
+            "isOverride": bool(row.get("is_override")),
         }
+
+    def pricing_overrides(
+        self,
+        *,
+        scope: str,
+        provider: str = "openai",
+        entity_id: int | None = None,
+        user_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        with self.database.connection() as conn:
+            rows = conn.execute(
+                load_query("ai_model_pricing_overrides_list.sql"),
+                (provider, scope, entity_id, entity_id, user_id, user_id),
+            ).fetchall()
+        return [
+            {
+                "provider": row["provider_code"],
+                "modelName": row["model_name"],
+                "scope": row["scope"],
+                "entityId": row.get("entity_id"),
+                "userId": row.get("user_id"),
+                "inputPerMillion": float(row["input_per_million"] or 0),
+                "cachedInputPerMillion": float(row["cached_input_per_million"] or 0),
+                "outputPerMillion": float(row["output_per_million"] or 0),
+                "currency": row["currency"],
+                "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
+            }
+            for row in rows
+        ]
+
+    def save_pricing_overrides(
+        self,
+        *,
+        scope: str,
+        overrides: list[dict[str, Any]],
+        provider: str = "openai",
+        entity_id: int | None = None,
+        user_id: int | None = None,
+        updated_by: int | None = None,
+    ) -> None:
+        with self.database.connection() as conn:
+            conn.execute(
+                load_query("ai_model_pricing_override_delete_scope.sql"),
+                (provider, scope, entity_id, entity_id, user_id, user_id),
+            )
+            for override in overrides or []:
+                model_name = str(override.get("modelName") or "").strip()
+                if not model_name:
+                    continue
+                conn.execute(
+                    load_query("ai_model_pricing_override_upsert.sql"),
+                    (
+                        provider,
+                        model_name,
+                        scope,
+                        entity_id if scope == "entity" else None,
+                        user_id if scope == "user" else None,
+                        max(0.0, float(override.get("inputPerMillion") or 0)),
+                        max(0.0, float(override.get("cachedInputPerMillion") or 0)),
+                        max(0.0, float(override.get("outputPerMillion") or 0)),
+                        str(override.get("currency") or "USD"),
+                        updated_by,
+                    ),
+                )
 
     def estimate_cost(
         self,
@@ -73,8 +159,17 @@ class AIProviderStore:
         input_tokens: int,
         cached_input_tokens: int = 0,
         output_tokens: int = 0,
+        billing_scope: str = "system",
+        entity_id: int | None = None,
+        user_id: int | None = None,
     ) -> float:
-        pricing = self.pricing_for_model(model_name, provider)
+        pricing = self.pricing_for_model(
+            model_name,
+            provider,
+            billing_scope=billing_scope,
+            entity_id=entity_id,
+            user_id=user_id,
+        )
         regular_input_tokens = max(0, int(input_tokens or 0) - int(cached_input_tokens or 0))
         cost = (
             regular_input_tokens * pricing["inputPerMillion"]
@@ -101,13 +196,13 @@ class AIProviderStore:
         user_policy = (user or {}).get("keyPolicy") or "user_when_available"
 
         if usable(user) and user_policy in {"user_when_available", "user_only"}:
-            return self._resolved_provider(row=user, paid_by="user", owner_user_id=user_id, default_model=default_model)
+            return self._resolved_provider(row=user, paid_by="user", owner_user_id=user_id, default_model=default_model, entity_id=entity_id, user_id=user_id)
         if entity_policy == "user_only":
             return None
         if usable(entity) and entity_policy in {"entity", "user_when_available"}:
-            return self._resolved_provider(row=entity, paid_by="entity", owner_user_id=None, default_model=default_model)
+            return self._resolved_provider(row=entity, paid_by="entity", owner_user_id=None, default_model=default_model, entity_id=entity_id, user_id=None)
         if usable(system):
-            return self._resolved_provider(row=system, paid_by="system", owner_user_id=None, default_model=default_model)
+            return self._resolved_provider(row=system, paid_by="system", owner_user_id=None, default_model=default_model, entity_id=None, user_id=None)
         return None
 
     def record_ai_assist_event(
@@ -222,6 +317,13 @@ class AIProviderStore:
                     update_key,
                 ),
             )
+        if isinstance(payload.get("pricingOverrides"), list):
+            self.save_pricing_overrides(
+                scope="system",
+                overrides=payload.get("pricingOverrides") or [],
+                provider=provider,
+                updated_by=updated_by,
+            )
         return self.get_system_settings(provider)
 
     def save_entity_settings(self, entity_id: int, payload: dict[str, Any], updated_by: int | None, provider: str = "openai") -> dict[str, Any]:
@@ -251,6 +353,14 @@ class AIProviderStore:
                     update_key,
                 ),
             )
+        if isinstance(payload.get("pricingOverrides"), list):
+            self.save_pricing_overrides(
+                scope="entity",
+                overrides=payload.get("pricingOverrides") or [],
+                provider=provider,
+                entity_id=int(entity_id),
+                updated_by=updated_by,
+            )
         return self.get_entity_settings(entity_id, provider)
 
     def save_user_settings(self, user_id: int, payload: dict[str, Any], provider: str = "openai") -> dict[str, Any]:
@@ -278,6 +388,14 @@ class AIProviderStore:
                     update_key,
                     update_key,
                 ),
+            )
+        if isinstance(payload.get("pricingOverrides"), list):
+            self.save_pricing_overrides(
+                scope="user",
+                overrides=payload.get("pricingOverrides") or [],
+                provider=provider,
+                user_id=int(user_id),
+                updated_by=int(user_id),
             )
         return self.get_user_settings(user_id, provider)
 
@@ -350,6 +468,8 @@ class AIProviderStore:
         paid_by: str,
         owner_user_id: int | None,
         default_model: str,
+        entity_id: int | None,
+        user_id: int | None,
     ) -> dict[str, Any]:
         return {
             "provider": row.get("provider") or "openai",
@@ -358,6 +478,9 @@ class AIProviderStore:
             "modelName": row.get("defaultModel") or default_model,
             "paidBy": paid_by,
             "providerKeyOwnerUserId": owner_user_id if paid_by == "user" else None,
+            "pricingScope": paid_by,
+            "pricingEntityId": entity_id if paid_by == "entity" else None,
+            "pricingUserId": user_id if paid_by == "user" else None,
             "scope": row.get("scope"),
         }
 
@@ -370,8 +493,7 @@ class AIProviderStore:
         except Exception:
             return None
 
-    @staticmethod
-    def _settings_row(row: dict[str, Any] | None, *, scope: str, provider: str) -> dict[str, Any]:
+    def _settings_row(self, row: dict[str, Any] | None, *, scope: str, provider: str) -> dict[str, Any]:
         if not row:
             return {
                 "scope": scope,
@@ -385,8 +507,11 @@ class AIProviderStore:
                 "monthlyBudget": 0,
                 "warnPercent": 80,
                 "stopPercent": 100,
-                "updatedAt": None,
-            }
+            "updatedAt": None,
+            "pricingOverrides": [],
+        }
+        scope_entity_id = int(row.get("entity_id")) if row.get("entity_id") is not None else None
+        scope_user_id = int(row.get("user_id")) if row.get("user_id") is not None else None
         return {
             "scope": scope,
             "provider": row["provider_code"],
@@ -400,6 +525,12 @@ class AIProviderStore:
             "warnPercent": int(row.get("warn_percent") or 80),
             "stopPercent": int(row.get("stop_percent") or 100),
             "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
+            "pricingOverrides": self.pricing_overrides(
+                scope=scope,
+                provider=provider,
+                entity_id=scope_entity_id,
+                user_id=scope_user_id,
+            ),
         }
 
     @staticmethod

@@ -16,6 +16,7 @@ class AIProviderSettingsRequest(BaseModel):
     monthlyBudget: float = 0
     warnPercent: int = 80
     stopPercent: int = 100
+    pricingOverrides: list[dict] | None = None
 
 
 def create_router(deps: ApiDependencies) -> APIRouter:

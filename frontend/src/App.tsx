@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AccountView } from "./components/AccountView";
 import { AIUsageView } from "./components/AIUsageView";
 import { AppShell } from "./components/AppShell";
@@ -32,6 +32,12 @@ export default function App() {
   const { theme, setTheme, toggleTheme } = useThemePreference(Boolean(user));
   const error = configError || statusError;
 
+  useEffect(() => {
+    if (user?.forcePasswordChange) {
+      setActiveView("account");
+    }
+  }, [user?.forcePasswordChange]);
+
   if (!config) {
     return (
       <main className="loading-screen">
@@ -61,6 +67,12 @@ export default function App() {
       onLogout={logout}
     >
       <ErrorMessage message={error} className="top-error" />
+      {user?.forcePasswordChange ? (
+        <ErrorMessage
+          className="top-error"
+          message="Password change required before continuing with regular work."
+        />
+      ) : null}
       <div hidden={activeView !== "ask"}>
         <AskView config={config} />
       </div>

@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { getEntityAIProvider, getEntityMembers, getEntityPasswordPolicy, updateEntityAIProvider, updateEntityPasswordPolicy } from "../api";
+import {
+  forceEntityMemberPasswordChange,
+  getEntityAIProvider,
+  getEntityMembers,
+  getEntityPasswordPolicy,
+  unlockEntityMember,
+  updateEntityAIProvider,
+  updateEntityPasswordPolicy
+} from "../api";
 import type { EntityContext, EntityMember } from "../types";
 import { errorMessage } from "../lib/errors";
 import { ErrorMessage } from "./ErrorMessage";
@@ -16,6 +24,7 @@ export function EntitySettingsView({
 }) {
   const [members, setMembers] = useState<EntityMember[]>([]);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   const loadMembers = useCallback(() => {
@@ -30,6 +39,18 @@ export function EntitySettingsView({
       .catch((err) => setError(errorMessage(err, "Could not load entity members")))
       .finally(() => setBusy(false));
   }, [canManage]);
+
+  async function runMemberAction(action: () => Promise<{ ok: boolean }>, successMessage: string) {
+    setError("");
+    setMessage("");
+    try {
+      await action();
+      setMessage(successMessage);
+      loadMembers();
+    } catch (err) {
+      setError(errorMessage(err, "Could not update member"));
+    }
+  }
 
   useEffect(() => {
     loadMembers();
@@ -80,6 +101,7 @@ export function EntitySettingsView({
             }
           />
           <ErrorMessage message={error} />
+          {message ? <p className="success-message">{message}</p> : null}
           <div className="table-wrap">
             <table className="data-table">
               <thead>
@@ -89,6 +111,8 @@ export function EntitySettingsView({
                   <th>Email</th>
                   <th>System</th>
                   <th>Status</th>
+                  <th>Security</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -101,7 +125,40 @@ export function EntitySettingsView({
                     <td>{member.roleName}</td>
                     <td>{member.email || "Not set"}</td>
                     <td>{member.canManageSystem ? "System admin" : "No"}</td>
-                    <td>{member.isActive ? "Active" : "Inactive"}</td>
+                    <td>{member.disabledAt ? "Disabled" : (member.isActive ? "Active" : "Inactive")}</td>
+                    <td>
+                      <small>{member.failedLoginCount || 0} failed</small>
+                      {member.forcePasswordChange ? <small>Password change required</small> : null}
+                      {member.disabledReason ? <small>{member.disabledReason}</small> : null}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        {member.disabledAt ? (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => void runMemberAction(
+                              () => unlockEntityMember(member.userId),
+                              `${member.username} was unlocked.`
+                            )}
+                          >
+                            Unlock
+                          </button>
+                        ) : null}
+                        {!member.forcePasswordChange ? (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => void runMemberAction(
+                              () => forceEntityMemberPasswordChange(member.userId),
+                              `${member.username} must change password next login.`
+                            )}
+                          >
+                            Force reset
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
