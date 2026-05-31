@@ -1,85 +1,12 @@
 import { useState } from "react";
-import type { AIUsageBreakdown, AIUsageEvent } from "../types";
-import { formatInteger, formatNumber } from "../lib/format";
+import { formatInteger } from "../lib/format";
+import { money } from "../lib/money";
 import { useAIUsageReport } from "../hooks/useAIUsageReport";
+import { AIUsageBreakdownCards } from "./AIUsageBreakdownCards";
+import { AIUsageEventsTable } from "./AIUsageEventsTable";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 import { Stat } from "./Stat";
-
-function money(value: number | null | undefined): string {
-  return `$${formatNumber(value ?? 0)}`;
-}
-
-function formatDate(value?: string | null): string {
-  return value ? new Date(value).toLocaleString() : "n/a";
-}
-
-function BreakdownCards({ title, rows }: { title: string; rows: AIUsageBreakdown[] }) {
-  return (
-    <section className="ai-usage-breakdown">
-      <h3>{title}</h3>
-      <div className="ai-usage-card-grid">
-        {rows.length ? rows.slice(0, 5).map((row) => (
-          <div key={row.label} className="ai-usage-card">
-            <span>{row.label}</span>
-            <strong>{money(row.estimatedCost)}</strong>
-            <small>{formatInteger(row.tokens)} tokens | {formatInteger(row.calls)} calls</small>
-          </div>
-        )) : <p className="empty-state">No usage in this range.</p>}
-      </div>
-    </section>
-  );
-}
-
-function UsageEventsTable({ events }: { events: AIUsageEvent[] }) {
-  return (
-    <section className="performance-chart-card">
-      <div className="performance-chart-heading">
-        <div>
-          <h3>Audited calls</h3>
-          <p>Provider calls with token and cost accounting.</p>
-        </div>
-        <span>{formatInteger(events.length)} rows</span>
-      </div>
-      <div className="table-wrap">
-        <table className="data-table ai-usage-table">
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>User</th>
-              <th>Paid by</th>
-              <th>Task</th>
-              <th>Round</th>
-              <th>Model</th>
-              <th>Tokens</th>
-              <th>Cost</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.length ? events.map((event) => (
-              <tr key={event.id}>
-                <td>{formatDate(event.createdAt)}</td>
-                <td>{event.username}</td>
-                <td>{event.paidBy}</td>
-                <td>{event.taskLabel}</td>
-                <td>{event.roundNumber} / {event.roundCount}</td>
-                <td>{event.modelName}</td>
-                <td>{formatInteger(event.inputTokens + event.cachedInputTokens + event.outputTokens)}</td>
-                <td>{money(event.estimatedCost)}</td>
-                <td>{event.success ? "OK" : event.errorMessage || "Failed"}</td>
-              </tr>
-            )) : (
-              <tr>
-                <td colSpan={9}>No audited AI calls yet.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
 
 export function AIUsageView({
   isActive,
@@ -119,13 +46,13 @@ export function AIUsageView({
         <Stat label="Scope" value={scope} />
       </div>
       <div className="ai-usage-breakdown-grid">
-        <BreakdownCards title="By task" rows={report.report?.byTask ?? []} />
-        <BreakdownCards title="By user" rows={report.report?.byUser ?? []} />
-        <BreakdownCards title="By payer" rows={report.report?.byPayer ?? []} />
-        <BreakdownCards title="By model" rows={report.report?.byModel ?? []} />
-        <BreakdownCards title="By context" rows={report.report?.byContext ?? []} />
+        <AIUsageBreakdownCards title="By task" rows={report.report?.byTask ?? []} />
+        <AIUsageBreakdownCards title="By user" rows={report.report?.byUser ?? []} />
+        <AIUsageBreakdownCards title="By payer" rows={report.report?.byPayer ?? []} />
+        <AIUsageBreakdownCards title="By model" rows={report.report?.byModel ?? []} />
+        <AIUsageBreakdownCards title="By context" rows={report.report?.byContext ?? []} />
       </div>
-      <UsageEventsTable events={report.report?.events ?? []} />
+      <AIUsageEventsTable events={report.report?.events ?? []} />
     </section>
   );
 }
