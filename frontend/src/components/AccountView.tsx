@@ -3,6 +3,7 @@ import { getAccountAIProvider, updateAccountAIProvider, updateAccountPassword } 
 import type { ThemeMode } from "../hooks/useThemePreference";
 import { errorMessage } from "../lib/errors";
 import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";
+import { AccountProfileForm } from "./AccountProfileForm";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 
@@ -57,6 +58,8 @@ export function AccountView({
           </button>
         </div>
       </header>
+
+      <AccountProfileForm />
 
       <form className="account-card" onSubmit={submitPassword}>
         <SectionHeader title="Change password" description="Keeps your local CircuitShelf login private." />

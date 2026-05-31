@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  AccountProfile,
   AssemblyLearningSession,
   AssemblyPlan,
   AssemblyPlanExport,
@@ -93,8 +94,15 @@ export function login(username: string, password: string): Promise<{ ok: boolean
   });
 }
 
-export function getMe(): Promise<{ userId?: number; username: string; isAdmin: boolean; canManageSystem?: boolean; forcePasswordChange?: boolean; entity?: EntityContext | null; profile?: unknown }> {
+export function getMe(): Promise<{ userId?: number; username: string; isAdmin: boolean; canManageSystem?: boolean; forcePasswordChange?: boolean; entity?: EntityContext | null; profile?: AccountProfile | null }> {
   return requestJson("/api/me");
+}
+
+export function updateAccountProfile(payload: Partial<AccountProfile>): Promise<{ profile: AccountProfile }> {
+  return requestJson<{ profile: AccountProfile }>("/api/account/profile", {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
 }
 
 export function getCurrentEntity(): Promise<{ entity: EntityContext; user: unknown }> {

@@ -22,6 +22,21 @@ export interface SessionUser {
   lastActivityAt?: number;
 }
 
+export interface AccountProfile {
+  userId: number;
+  username: string;
+  email: string;
+  displayName: string;
+  nickname: string;
+  phone: string;
+  address: string;
+  isAdmin: boolean;
+  canManageSystem: boolean;
+  forcePasswordChange: boolean;
+  passwordChangedAt?: string | null;
+  lastLoginAt?: string | null;
+}
+
 export interface AppConfig {
   siteName: string;
   models: string[];
