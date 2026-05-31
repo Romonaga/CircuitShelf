@@ -18,7 +18,6 @@ export function AppShell({
   status,
   theme,
   onToggleTheme,
-  onRefresh,
   onLogout,
   children
 }: {
@@ -33,7 +32,6 @@ export function AppShell({
   status: StatusPayload | null;
   theme: ThemeMode;
   onToggleTheme: () => void;
-  onRefresh: () => void;
   onLogout: () => void;
   children: ReactNode;
 }) {
@@ -126,7 +124,6 @@ export function AppShell({
           <SidebarSystemCard status={status} />
           <Stat label="Chunks" value={formatNumber(status?.chunks)} />
           <Stat label="Sources" value={formatNumber(status?.sources)} />
-          <button className="ghost-button compact-refresh" onClick={onRefresh}>Refresh status</button>
         </div>
       </aside>
       <main className="workspace">

@@ -58,7 +58,6 @@ export default function App() {
       status={status}
       theme={theme}
       onToggleTheme={toggleTheme}
-      onRefresh={refreshStatus}
       onLogout={logout}
     >
       <ErrorMessage message={error} className="top-error" />

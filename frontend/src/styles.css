@@ -363,6 +363,8 @@ nav {
 .nav-group {
   display: grid;
   gap: 7px;
+  padding-left: 4px;
+  border-left: 1px solid rgba(156, 230, 213, 0.16);
 }
 
 .nav-group-label {
@@ -386,7 +388,8 @@ nav {
 }
 
 .nav-item {
-  width: 100%;
+  width: calc(100% - 8px);
+  margin-left: 8px;
   color: #dce7f3;
   text-align: left;
   background: transparent;
@@ -516,13 +519,6 @@ nav {
   line-height: 1;
 }
 
-.compact-refresh {
-  min-height: 32px;
-  padding: 0 10px;
-  color: #dce7f3;
-  border-color: rgba(156, 230, 213, 0.22);
-  background: rgba(255, 255, 255, 0.04);
-}
 
 .stat {
   min-height: 58px;
