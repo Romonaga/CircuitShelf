@@ -82,9 +82,10 @@ export function PerformanceChart({
             </text>
           </g>
         ))}
-        {series.map((item) => (
-          <path key={item.label} d={pathForSeries(history, item, min, max, width, height)} stroke={item.color} />
-        ))}
+        {series.map((item) => {
+          const path = pathForSeries(history, item, min, max, width, height);
+          return path ? <path key={item.label} d={path} stroke={item.color} /> : null;
+        })}
       </svg>
       <div className="chart-legend">
         {series.map((item) => (

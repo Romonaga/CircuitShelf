@@ -33,6 +33,22 @@ export function formatPercent(value: number | null | undefined): string {
   return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
 }
 
+export function formatDurationMs(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "n/a";
+  }
+  const ms = Math.max(0, value);
+  if (ms < 1000) {
+    return `${Math.round(ms)} ms`;
+  }
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds.toLocaleString(undefined, { maximumFractionDigits: 1 })} sec`;
+  }
+  const minutes = seconds / 60;
+  return `${minutes.toLocaleString(undefined, { maximumFractionDigits: 1 })} min`;
+}
+
 export function formatObject(value: unknown): string {
   if (value === null || value === undefined) {
     return "n/a";

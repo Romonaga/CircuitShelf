@@ -8,6 +8,11 @@ export interface StatusHistoryPoint {
   ram: number | null;
   gpu: number | null;
   vram: number | null;
+  gpuTemp: number | null;
+  gpuPower: number | null;
+  processRamMiB: number | null;
+  embeddingBatch: number;
+  rerankerBatch: number;
   chunks: number;
   sources: number;
   images: number;
@@ -23,6 +28,11 @@ export function pointFromPerformanceSample(sample: PerformanceSample): StatusHis
     ram: sample.ram ?? null,
     gpu: sample.gpu ?? null,
     vram: sample.vram ?? null,
+    gpuTemp: sample.gpuTemperatureC ?? null,
+    gpuPower: sample.gpuPowerW ?? null,
+    processRamMiB: sample.processMemoryBytes ? sample.processMemoryBytes / (1024 * 1024) : null,
+    embeddingBatch: sample.embeddingBatch ?? 0,
+    rerankerBatch: sample.rerankerBatch ?? 0,
     chunks: sample.chunks ?? 0,
     sources: sample.sources ?? 0,
     images: sample.images ?? 0,
@@ -39,6 +49,11 @@ function pointFromStatus(status: StatusPayload): StatusHistoryPoint {
     ram: status.systemResources?.memory?.usedPercent ?? null,
     gpu: status.systemResources?.gpu?.available ? status.systemResources.gpu.utilizationPercent ?? null : null,
     vram: status.systemResources?.gpu?.available ? status.systemResources.gpu.memoryUsedPercent ?? null : null,
+    gpuTemp: status.systemResources?.gpu?.available ? status.systemResources.gpu.temperatureC ?? null : null,
+    gpuPower: status.systemResources?.gpu?.available ? status.systemResources.gpu.powerW ?? null : null,
+    processRamMiB: status.systemResources?.process?.memoryBytes ? status.systemResources.process.memoryBytes / (1024 * 1024) : null,
+    embeddingBatch: status.runtimeBatches?.embedding?.active ?? 0,
+    rerankerBatch: status.runtimeBatches?.reranker?.active ?? 0,
     chunks: status.chunks ?? 0,
     sources: status.sources ?? 0,
     images: status.imageIds ?? 0,
