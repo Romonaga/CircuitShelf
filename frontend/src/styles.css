@@ -226,6 +226,12 @@ h3 {
   white-space: nowrap;
 }
 
+.brand-block .brand-entity {
+  margin-top: 2px;
+  color: #a5f3de;
+  font-size: 0.75rem;
+}
+
 .logo-mark {
   position: relative;
   width: 54px;
@@ -1106,6 +1112,84 @@ nav {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-raised);
+}
+
+.entity-view {
+  display: grid;
+  gap: 18px;
+}
+
+.entity-hero,
+.policy-panel,
+.members-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  background: var(--panel);
+  box-shadow: var(--soft-shadow);
+}
+
+.entity-stat-row,
+.policy-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.entity-stat-row span {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--panel-raised);
+  font-size: 0.84rem;
+}
+
+.policy-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.settings-editor-stack {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.data-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  color: var(--table-head-text);
+  background: var(--table-head);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+}
+
+.data-table td small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
 }
 
 .inventory-table {

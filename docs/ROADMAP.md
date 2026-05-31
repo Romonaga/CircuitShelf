@@ -30,6 +30,14 @@
 
 ## Future Deepening
 
+- Recovery work after FastDrive loss
+  - Rebuild the entity model: entities, memberships, owner/admin/user roles, and system-admin privileges.
+  - Restore entity and user settings, including password policy controls and account profile fields.
+  - Restore global corpus versus entity-private document scope before large-scale dogfooding.
+  - Restore AI provider configuration, BYOK user keys, system/entity keys, usage auditing, pricing, and budgets.
+  - Split `circuitshelf.py` into modular backend domains: app factory, auth dependencies, API routers, services, stores, and workers.
+  - Keep the Kotlin/backend conversion separate until the Python baseline is feature-stable again.
+
 - Real photo-based wire tracing and component recognition.
 - Wider simulator netlist generation for common circuit families.
 - KiCad schematic export once node-level circuit inference exists.

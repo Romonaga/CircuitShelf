@@ -11,6 +11,9 @@ export function AppShell({
   siteName,
   user,
   isAdmin,
+  canManageSystem,
+  entityName,
+  entityRole,
   status,
   theme,
   onToggleTheme,
@@ -23,6 +26,9 @@ export function AppShell({
   siteName: string;
   user: string;
   isAdmin: boolean;
+  canManageSystem: boolean;
+  entityName?: string | null;
+  entityRole?: string | null;
   status: StatusPayload | null;
   theme: ThemeMode;
   onToggleTheme: () => void;
@@ -40,6 +46,7 @@ export function AppShell({
     trace: "Trace",
     status: "Status",
     settings: "Admin Settings",
+    entity: "Entity",
     account: "Account"
   };
   const navGroups: Array<{ label: string; items: Array<{ id: View; label: string }> }> = [
@@ -55,7 +62,8 @@ export function AppShell({
       label: "Lab",
       items: [
         { id: "inventory", label: "Inventory" },
-        { id: "documents", label: "Documents" }
+        { id: "documents", label: "Documents" },
+        { id: "entity", label: "Entity" }
       ]
     },
     {
@@ -65,12 +73,12 @@ export function AppShell({
         { id: "status" as View, label: "Status" }
       ]
     },
-    ...(isAdmin
+    ...(isAdmin || canManageSystem
       ? [{
       label: "Admin",
       items: [
-        { id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` },
-        { id: "settings" as View, label: "Settings" }
+        ...(isAdmin ? [{ id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` }] : []),
+        ...(canManageSystem ? [{ id: "settings" as View, label: "System Settings" }] : [])
       ]
     }]
       : [])
@@ -84,6 +92,7 @@ export function AppShell({
           <div>
             <h1>{siteName}</h1>
             <p>{user}</p>
+            {entityName ? <p className="brand-entity">{entityName} · {entityRole}</p> : null}
           </div>
         </div>
         <nav>

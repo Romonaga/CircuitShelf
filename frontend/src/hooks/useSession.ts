@@ -20,6 +20,9 @@ function readStoredSession(): SessionUser | null {
       userId: typeof parsed.userId === "number" ? parsed.userId : undefined,
       username: parsed.username,
       isAdmin: Boolean(parsed.isAdmin),
+      canManageSystem: Boolean(parsed.canManageSystem),
+      forcePasswordChange: Boolean(parsed.forcePasswordChange),
+      entity: parsed.entity ?? null,
       token: parsed.token,
       lastActivityAt: typeof parsed.lastActivityAt === "number" ? parsed.lastActivityAt : Date.now()
     };
@@ -52,16 +55,10 @@ export function useSession(config: AppConfig | null) {
     sessionRef.current = session;
   }, [session]);
 
-  useEffect(() => {
-    if (config && !config.authConfigured && !session) {
-      setSession({ username: "local", isAdmin: true, token: "" });
-    }
-  }, [config, session]);
-
   const clearSession = useCallback(() => {
     window.localStorage.removeItem(sessionStorageKey);
-    setSession(config?.authConfigured ? null : { username: "local", isAdmin: true, token: "", lastActivityAt: Date.now() });
-  }, [config]);
+    setSession(null);
+  }, []);
 
   const logout = useCallback(() => {
     void logoutApi().catch(() => undefined);

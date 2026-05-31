@@ -3,10 +3,12 @@ SELECT id,
        email,
        display_name,
        nickname,
+       phone,
+       address,
        is_admin,
        can_manage_system,
-       is_active,
-       created_at,
+       force_password_change,
+       password_changed_at,
        last_login_at
 FROM users
-ORDER BY username;
+WHERE id = %s;

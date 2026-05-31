@@ -9,6 +9,7 @@ pymupdf
 pytesseract
 psycopg[binary]
 python-docx
+python-multipart
 pyyaml
 requests
 sentence-transformers

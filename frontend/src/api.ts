@@ -25,6 +25,9 @@ import type {
   InventoryImportPreview,
   ProjectFinderResponse,
   StatusPayload,
+  EntityContext,
+  EntityMember,
+  PasswordPolicy,
   UploadDocumentsResponse
 } from "./types";
 
@@ -78,10 +81,40 @@ export function getAppConfig(): Promise<AppConfig> {
   return requestJson<AppConfig>("/api/app-config");
 }
 
-export function login(username: string, password: string): Promise<{ ok: boolean; userId?: number; username?: string; isAdmin?: boolean; token?: string; error?: string }> {
+export function login(username: string, password: string): Promise<{ ok: boolean; userId?: number; username?: string; isAdmin?: boolean; canManageSystem?: boolean; forcePasswordChange?: boolean; entity?: EntityContext | null; token?: string; error?: string }> {
   return requestJson("/api/login", {
     method: "POST",
     body: JSON.stringify({ username, password })
+  });
+}
+
+export function getCurrentEntity(): Promise<{ entity: EntityContext; user: unknown }> {
+  return requestJson<{ entity: EntityContext; user: unknown }>("/api/entity/current");
+}
+
+export function getEntityMembers(): Promise<{ entity: EntityContext; members: EntityMember[] }> {
+  return requestJson<{ entity: EntityContext; members: EntityMember[] }>("/api/entity/members");
+}
+
+export function getEntityPasswordPolicy(): Promise<{ policy: PasswordPolicy }> {
+  return requestJson<{ policy: PasswordPolicy }>("/api/entity/password-policy");
+}
+
+export function updateEntityPasswordPolicy(policy: PasswordPolicy): Promise<{ policy: PasswordPolicy }> {
+  return requestJson<{ policy: PasswordPolicy }>("/api/entity/password-policy", {
+    method: "PUT",
+    body: JSON.stringify(policy)
+  });
+}
+
+export function getSystemPasswordPolicy(): Promise<{ policy: PasswordPolicy }> {
+  return requestJson<{ policy: PasswordPolicy }>("/api/system/password-policy");
+}
+
+export function updateSystemPasswordPolicy(policy: PasswordPolicy): Promise<{ policy: PasswordPolicy }> {
+  return requestJson<{ policy: PasswordPolicy }>("/api/system/password-policy", {
+    method: "PUT",
+    body: JSON.stringify(policy)
   });
 }
 

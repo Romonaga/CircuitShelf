@@ -16,6 +16,7 @@ import { useSession } from "./hooks/useSession";
 import { useStatus } from "./hooks/useStatus";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { ErrorMessage } from "./components/ErrorMessage";
+import { EntitySettingsView } from "./components/EntitySettingsView";
 import type { View } from "./types";
 
 export default function App() {
@@ -49,6 +50,9 @@ export default function App() {
       siteName={config.siteName}
       user={user?.username || "local"}
       isAdmin={Boolean(user?.isAdmin)}
+      canManageSystem={Boolean(user?.canManageSystem)}
+      entityName={user?.entity?.name}
+      entityRole={user?.entity?.roleName}
       status={status}
       theme={theme}
       onToggleTheme={toggleTheme}
@@ -67,6 +71,9 @@ export default function App() {
       </div>
       <div hidden={activeView !== "inventory"}>
         <InventoryView isActive={activeView === "inventory"} />
+      </div>
+      <div hidden={activeView !== "entity"}>
+        <EntitySettingsView entity={user?.entity} canManage={Boolean(user?.entity?.canManage)} />
       </div>
       <div hidden={activeView !== "documents"}>
         <DocumentsView
@@ -96,7 +103,7 @@ export default function App() {
       <div hidden={activeView !== "account"}>
         <AccountView username={user?.username || "local"} theme={theme} setTheme={setTheme} />
       </div>
-      {user?.isAdmin ? (
+      {user?.canManageSystem ? (
         <div hidden={activeView !== "settings"}>
           <SettingsView />
         </div>

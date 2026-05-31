@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { getSettings, updateSetting } from "../api";
+import { getSettings, getSystemPasswordPolicy, updateSetting, updateSystemPasswordPolicy } from "../api";
 import type { AppSetting, SettingValue } from "../types";
 import { errorMessage } from "../lib/errors";
 import { ErrorMessage } from "./ErrorMessage";
+import { PasswordPolicyPanel } from "./PasswordPolicyPanel";
 import { SectionHeader } from "./SectionHeader";
 
 interface SettingsGroup {
@@ -180,39 +181,48 @@ export function SettingsView() {
         </div>
       </aside>
 
-      <form className="settings-editor-panel" onSubmit={submit}>
-        <SectionHeader
-          title={selected?.label || "No setting selected"}
-          description={selected?.restartRequired ? "Saved changes are stored in Postgres and applied on next restart." : ""}
-          actions={
-            <button className="ghost-button" type="button" onClick={loadSettings} disabled={busy || saving}>
-              Refresh
-            </button>
-          }
+      <div className="settings-editor-stack">
+        <PasswordPolicyPanel
+          title="System password policy"
+          description="Default account rules used when an entity has not set its own policy."
+          loadPolicy={getSystemPasswordPolicy}
+          savePolicy={updateSystemPasswordPolicy}
+          canManage
         />
-        {selected ? (
-          <>
-            <label>
-              Value
-              <SettingInput setting={selected} value={draftValue} onChange={setDraftValue} />
-            </label>
-            <div className="setting-meta">
-              <span>Key: {selected.key}</span>
-              <span>Group: {selected.groupLabel}</span>
-              <span>Type: {selected.valueType}</span>
-              {selected.advanced ? <span>Advanced</span> : null}
-              {selected.updatedAt ? <span>Updated: {new Date(selected.updatedAt).toLocaleString()}</span> : null}
-            </div>
-            {selected.description ? <p className="setting-description">{selected.description}</p> : null}
-            {message ? <p className="success-message">{message}</p> : null}
-            <button className="primary-button" disabled={saving}>
-              {saving ? "Saving..." : "Save setting"}
-            </button>
-          </>
-        ) : (
-          <div className="empty-state">No editable settings found.</div>
-        )}
-      </form>
+        <form className="settings-editor-panel" onSubmit={submit}>
+          <SectionHeader
+            title={selected?.label || "No setting selected"}
+            description={selected?.restartRequired ? "Saved changes are stored in Postgres and applied on next restart." : ""}
+            actions={
+              <button className="ghost-button" type="button" onClick={loadSettings} disabled={busy || saving}>
+                Refresh
+              </button>
+            }
+          />
+          {selected ? (
+            <>
+              <label>
+                Value
+                <SettingInput setting={selected} value={draftValue} onChange={setDraftValue} />
+              </label>
+              <div className="setting-meta">
+                <span>Key: {selected.key}</span>
+                <span>Group: {selected.groupLabel}</span>
+                <span>Type: {selected.valueType}</span>
+                {selected.advanced ? <span>Advanced</span> : null}
+                {selected.updatedAt ? <span>Updated: {new Date(selected.updatedAt).toLocaleString()}</span> : null}
+              </div>
+              {selected.description ? <p className="setting-description">{selected.description}</p> : null}
+              {message ? <p className="success-message">{message}</p> : null}
+              <button className="primary-button" disabled={saving}>
+                {saving ? "Saving..." : "Save setting"}
+              </button>
+            </>
+          ) : (
+            <div className="empty-state">No editable settings found.</div>
+          )}
+        </form>
+      </div>
     </section>
   );
 }

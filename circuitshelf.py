@@ -71,11 +71,14 @@ from db.connection import Database, database_url_from_config
 from db.assembly_plan_store import AssemblyPlanStore
 from db.conversation_store import ConversationStore
 from db.datasheet_intelligence_store import DatasheetIntelligenceStore
+from db.account_profile import AccountProfileStore
+from db.entities import EntityStore
 from db.image_store import ImageStore
 from db.lab_inventory import LabInventoryStore, ProjectFinderStore
 from db.query_log_store import QueryLogStore
 from db.response_cache_store import PostgresResponseCache
 from db.runtime_config_store import RuntimeConfigStore
+from db.security_policy import PasswordPolicyStore
 from db.settings import AppSettingsStore
 from db.user_preferences import UserPreferencesStore
 from db.users import UserStore
@@ -133,6 +136,9 @@ if seeded_settings or applied_settings or seeded_runtime_config or applied_runti
         f"runtime seeded: {seeded_runtime_config}, runtime tables: {sorted(applied_runtime_config.keys())}"
     )
 user_store = UserStore(database, trace_logger)
+entity_store = EntityStore(database, trace_logger)
+password_policy_store = PasswordPolicyStore(database, trace_logger)
+account_profile_store = AccountProfileStore(database, trace_logger)
 user_preferences_store = UserPreferencesStore(database, trace_logger)
 query_log_store = QueryLogStore(database, trace_logger)
 conversation_store = ConversationStore(database, trace_logger)
@@ -2868,6 +2874,18 @@ def user_id_for_user(user) -> int | None:
     return getattr(user, "user_id", None) if user else None
 
 
+def user_payload(user) -> dict:
+    entity = entity_store.current_for_user(user_id_for_user(user)) if user else None
+    return {
+        "userId": user_id_for_user(user),
+        "username": username_for_user(user),
+        "isAdmin": bool(getattr(user, "is_admin", False)),
+        "canManageSystem": bool(getattr(user, "can_manage_system", False)),
+        "forcePasswordChange": bool(getattr(user, "force_password_change", False)),
+        "entity": entity.to_api() if entity else None,
+    }
+
+
 def conversation_title_from_question(question: str) -> str:
     title = " ".join(str(question or "").split())
     if not title:
@@ -2885,6 +2903,34 @@ def require_admin_user(req: Request):
     if not user.is_admin:
         return None, JSONResponse({"error": "Admin access required."}, status_code=403)
     return user, None
+
+
+def require_system_admin_user(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return None, error
+    if not getattr(user, "can_manage_system", False):
+        return None, JSONResponse({"error": "System admin access required."}, status_code=403)
+    return user, None
+
+
+def require_entity_member(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return None, None, error
+    entity = entity_store.current_for_user(user_id_for_user(user))
+    if not entity:
+        return user, None, JSONResponse({"error": "No active entity membership found."}, status_code=403)
+    return user, entity, None
+
+
+def require_entity_admin(req: Request):
+    user, entity, error = require_entity_member(req)
+    if error:
+        return None, None, error
+    if not entity.can_manage:
+        return user, entity, JSONResponse({"error": "Entity admin access required."}, status_code=403)
+    return user, entity, None
 
 
 def require_authenticated_user(req: Request):
@@ -3033,7 +3079,9 @@ async def login(req: Request):
     user = verify_user(username, password)
     if user:
         session = user_store.create_session(user, ttl_seconds=session_timeout_seconds())
-        return {"ok": True, "userId": session.user_id, "username": session.username, "isAdmin": session.is_admin, "token": session.token}
+        payload = user_payload(session)
+        payload.update({"ok": True, "token": session.token})
+        return payload
     return {"ok": False, "error": "Invalid credentials"}
 
 
@@ -3041,6 +3089,77 @@ async def login(req: Request):
 async def logout(req: Request):
     user_store.delete_session(bearer_token_from_request(req))
     return {"ok": True}
+
+
+@app.get("/api/me")
+async def account_me(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    profile = account_profile_store.get(user_id_for_user(user))
+    payload = user_payload(user)
+    payload["profile"] = profile
+    return payload
+
+
+@app.put("/api/account/profile")
+async def account_profile_update(req: Request):
+    user, error = require_authenticated_user(req)
+    if error:
+        return error
+    data = await req.json()
+    profile = account_profile_store.update(user_id_for_user(user), data)
+    return {"profile": profile}
+
+
+@app.get("/api/entity/current")
+async def entity_current(req: Request):
+    user, entity, error = require_entity_member(req)
+    if error:
+        return error
+    return {"entity": entity.to_api(), "user": user_payload(user)}
+
+
+@app.get("/api/entity/members")
+async def entity_members(req: Request):
+    user, entity, error = require_entity_admin(req)
+    if error:
+        return error
+    return {"entity": entity.to_api(), "members": entity_store.members(entity.entity_id)}
+
+
+@app.get("/api/entity/password-policy")
+async def entity_password_policy(req: Request):
+    user, entity, error = require_entity_admin(req)
+    if error:
+        return error
+    return {"policy": password_policy_store.effective_policy(entity.entity_id)}
+
+
+@app.put("/api/entity/password-policy")
+async def entity_password_policy_update(req: Request):
+    user, entity, error = require_entity_admin(req)
+    if error:
+        return error
+    data = await req.json()
+    return {"policy": password_policy_store.upsert_policy(entity.entity_id, data, user_id_for_user(user))}
+
+
+@app.get("/api/system/password-policy")
+async def system_password_policy(req: Request):
+    user, error = require_system_admin_user(req)
+    if error:
+        return error
+    return {"policy": password_policy_store.effective_policy(None)}
+
+
+@app.put("/api/system/password-policy")
+async def system_password_policy_update(req: Request):
+    user, error = require_system_admin_user(req)
+    if error:
+        return error
+    data = await req.json()
+    return {"policy": password_policy_store.upsert_policy(None, data, user_id_for_user(user))}
 
 
 @app.get("/api/user/preferences/{key}")
