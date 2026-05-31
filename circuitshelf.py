@@ -14,7 +14,6 @@ import requests
 import time
 import base64
 import zipfile
-import uuid
 import tempfile
 import fitz  # PyMuPDF
 import pytesseract
@@ -27,8 +26,7 @@ import nltk
 import bench_tools
 from lxml import etree
 from datetime import datetime, timezone
-from fastapi import FastAPI, File, Form, Query, Request, UploadFile
-from fastapi.concurrency import run_in_threadpool
+from fastapi import FastAPI, Request
 from collections import deque, OrderedDict
 from contextlib import asynccontextmanager
 from docx import Document
@@ -47,7 +45,16 @@ from fastapi.staticfiles import StaticFiles
 from backend.api.dependencies import ApiDependencies
 from backend.api import account as account_api
 from backend.api import ai_settings as ai_settings_api
+from backend.api import app_config as app_config_api
+from backend.api import assembly_plans as assembly_plans_api
+from backend.api import conversations as conversations_api
+from backend.api import documents as documents_api
 from backend.api import entity as entity_api
+from backend.api import inventory as inventory_api
+from backend.api import query as query_api
+from backend.api import review as review_api
+from backend.api import settings as settings_api
+from backend.api import status as status_api
 from state_manager import StateManager
 from chunking_util import ChunkingUtils
 from tokenize_util import TokenUtils
@@ -2845,17 +2852,6 @@ def build_readiness_status():
     }
 
 
-@app.get("/healthz")
-async def healthz():
-    return {"status": "ok", "service": "CircuitShelf"}
-
-
-@app.get("/readyz")
-async def readyz():
-    ready, payload = build_readiness_status()
-    return JSONResponse(payload, status_code=200 if ready else 503)
-
-
 def verify_user(username, password):
     return user_store.verify_user(username, password)
 
@@ -2948,135 +2944,6 @@ def require_authenticated_user(req: Request):
     return user, None
 
 
-def safe_upload_filename(filename: str) -> str:
-    name = os.path.basename(str(filename or "")).strip()
-    if not name or name in {".", ".."}:
-        raise ValueError("Upload must include a file name.")
-    if name.startswith(".") or any(char in name for char in ("/", "\\")):
-        raise ValueError("Upload file name is not allowed.")
-    ext = os.path.splitext(name)[1].lower()
-    if ext not in supported_training_extensions():
-        allowed = ", ".join(sorted(supported_training_extensions()))
-        raise ValueError(f"Unsupported file type. Allowed: {allowed}")
-    return name
-
-
-async def write_uploaded_documents(files: list[UploadFile], overwrite: bool) -> dict:
-    if not files:
-        raise ValueError("Upload must include at least one file.")
-
-    os.makedirs(TRAINING_DIR, exist_ok=True)
-    training_root = os.path.abspath(TRAINING_DIR)
-    prepared = []
-    seen_names = set()
-    tmp_paths = []
-    uploaded = []
-    skipped = []
-
-    try:
-        for file in files:
-            filename = safe_upload_filename(file.filename or "")
-            if filename in seen_names:
-                skipped.append({"filename": filename, "reason": "duplicate selection"})
-                continue
-            seen_names.add(filename)
-
-            destination = os.path.abspath(os.path.join(TRAINING_DIR, filename))
-            if not destination.startswith(training_root + os.sep):
-                raise ValueError("Upload destination is outside the training directory.")
-            if os.path.exists(destination) and not overwrite:
-                skipped.append({"filename": filename, "reason": "already exists"})
-                continue
-
-            tmp_path = os.path.join(TRAINING_DIR, f".{filename}.{uuid.uuid4().hex}.upload")
-            prepared.append((file, filename, destination, tmp_path))
-            tmp_paths.append(tmp_path)
-
-        for file, filename, destination, tmp_path in prepared:
-            bytes_written = 0
-            with open(tmp_path, "wb") as out_file:
-                while True:
-                    chunk = await file.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    bytes_written += len(chunk)
-                    out_file.write(chunk)
-            if bytes_written <= 0:
-                raise ValueError(f"Uploaded file was empty: {filename}")
-            uploaded.append({
-                "filename": filename,
-                "destination": destination,
-                "tmpPath": tmp_path,
-                "bytes": bytes_written,
-            })
-
-        for item in uploaded:
-            os.replace(item["tmpPath"], item["destination"])
-        return {
-            "uploaded": [{"filename": item["filename"], "bytes": item["bytes"]} for item in uploaded],
-            "skipped": skipped,
-        }
-    except Exception:
-        for tmp_path in tmp_paths:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        raise
-    finally:
-        for file in files:
-            await file.close()
-
-
-def review_document_payload(row):
-    return {
-        "source": row["source_path"],
-        "displayName": row["display_name"],
-        "status": row["status"],
-        "sizeBytes": int(row["size_bytes"] or 0),
-        "fileExtension": row["file_extension"],
-        "chunkCount": int(row["chunk_count"] or 0),
-        "imageCount": int(row["image_count"] or 0),
-        "rawChunkCount": int(row["raw_chunk_count"] or 0),
-        "droppedChunkCount": int(row["dropped_chunk_count"] or 0),
-        "extractedImageCount": int(row["extracted_image_count"] or 0),
-        "storedImageCount": int(row["stored_image_count"] or 0),
-        "indexedImageTextCount": int(row["indexed_image_text_count"] or 0),
-        "ocrImageTextCount": int(row["ocr_image_text_count"] or 0),
-        "avgQuality": float(row["avg_quality"] or 0.0),
-        "lowQualityCount": int(row["low_quality_count"] or 0),
-        "lastIngestedAt": row["last_ingested_at"].isoformat() if row["last_ingested_at"] else None,
-        "lastError": row["last_error"],
-        "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
-    }
-
-
-def review_chunk_payload(row):
-    return {
-        "index": int(row["chunk_index"]),
-        "section": row["section_title"] or "Unknown",
-        "category": row["category"] or "Uncategorized",
-        "page": row["page_number"],
-        "tokens": int(row["token_count"] or 0),
-        "quality": float(row["quality_score"] or 0.0),
-        "isOcr": bool(row["is_ocr"]),
-        "hasMath": bool(row["has_math"]),
-        "sourceImageId": row["source_image_key"],
-        "qualityFlags": list(row["quality_flags"] or []),
-        "preview": row["chunk_text"][:700],
-    }
-
-
-def review_image_payload(row):
-    return {
-        "imageKey": row["image_key"],
-        "caption": row["caption"] or row["image_key"],
-        "page": row["page_number"],
-        "width": int(row["width_px"] or 0),
-        "height": int(row["height_px"] or 0),
-        "imageMimeType": row["image_mime_type"] or "image/png",
-        "imageBase64": row["image_base64"],
-    }
-
-
 api_dependencies = ApiDependencies(
     require_authenticated_user=require_authenticated_user,
     require_entity_member=require_entity_member,
@@ -3094,601 +2961,6 @@ api_dependencies = ApiDependencies(
     password_policy_store=password_policy_store,
     ai_provider_store=ai_provider_store,
 )
-app.include_router(account_api.create_router(api_dependencies, USER_PREFERENCE_KEYS))
-app.include_router(entity_api.create_router(api_dependencies))
-app.include_router(ai_settings_api.create_router(api_dependencies))
-
-
-@app.get("/api/app-config")
-async def app_config():
-    return {
-        "siteName": config.get("SITE_NAME", "CircuitShelf"),
-        "models": LLM_MODEL_OPTIONS,
-        "defaultModel": LLM_MODEL_NAME,
-        "authConfigured": database.configured and user_store.has_active_users(),
-        "retrievalStrategies": ["Vector only", "Vector + CrossEncoder"],
-        "statusPollIntervalSeconds": max(5, int(config.get("STATUS_POLL_INTERVAL_SECONDS", 15))),
-        "activeStatusPollIntervalSeconds": max(1, int(config.get("STATUS_POLL_ACTIVE_INTERVAL_SECONDS", 3))),
-        "sessionTimeoutSeconds": session_timeout_seconds(),
-        "defaults": {
-            "topK": 15,
-            "distanceThreshold": 4.0,
-            "maxTokens": 1800,
-            "showFullText": False,
-            "bypassCache": True,
-            "strategy": "Vector + CrossEncoder",
-        },
-    }
-
-
-@app.get("/api/conversations")
-async def conversations_list(req: Request, limit: int = 50):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    return {"conversations": conversation_store.list(user_id_for_user(user), limit=max(1, min(int(limit), 100)))}
-
-
-@app.post("/api/conversations")
-async def conversation_create(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    data = await req.json()
-    title = data.get("title") or "New conversation"
-    conversation = conversation_store.create(user_id_for_user(user), title)
-    return {"conversation": {**conversation, "turns": []}}
-
-
-@app.get("/api/conversations/{conversation_id}")
-async def conversation_get(conversation_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    conversation = conversation_store.get(conversation_id, user_id_for_user(user))
-    if not conversation:
-        return JSONResponse({"error": "Conversation not found."}, status_code=404)
-    return {"conversation": conversation}
-
-
-@app.delete("/api/conversations/{conversation_id}")
-async def conversation_delete(conversation_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    removed = conversation_store.archive(conversation_id, user_id_for_user(user))
-    if not removed:
-        return JSONResponse({"error": "Conversation not found."}, status_code=404)
-    return {"ok": True}
-
-
-@app.get("/api/inventory/parts")
-async def inventory_parts(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    return {"parts": lab_inventory_store.list_parts(user_id_for_user(user))}
-
-
-@app.post("/api/inventory/parts")
-async def inventory_part_upsert(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    data = await req.json()
-    try:
-        part = lab_inventory_store.upsert_part(user_id_for_user(user), data)
-    except (TypeError, ValueError) as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
-    return {"part": part}
-
-
-@app.post("/api/inventory/import/preview")
-async def inventory_import_preview(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    data = await req.json()
-    text = str(data.get("text") or "")
-    if not text.strip():
-        return JSONResponse({"error": "Inventory text is required."}, status_code=400)
-    existing = lab_inventory_store.list_parts(user_id_for_user(user))
-    return parse_inventory_import(text, existing)
-
-
-@app.post("/api/inventory/import/apply")
-async def inventory_import_apply(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    data = await req.json()
-    items = data.get("items") or []
-    if not isinstance(items, list) or not items:
-        return JSONResponse({"error": "At least one inventory item is required."}, status_code=400)
-    user_id = user_id_for_user(user)
-    existing_parts = {part["id"]: part for part in lab_inventory_store.list_parts(user_id)}
-    saved = []
-    for item in items[:200]:
-        try:
-            existing = existing_parts.get(str(item.get("existingPartId") or ""))
-            if existing:
-                item = {
-                    **item,
-                    "displayName": existing["displayName"],
-                    "partType": existing["partType"],
-                    "quantity": max(int(existing.get("quantity") or 0), int(item.get("quantity") or 0)),
-                    "location": existing.get("location") or item.get("location") or "",
-                    "notes": "\n".join(
-                        note
-                        for note in [
-                            existing.get("notes") or "",
-                            item.get("notes") or "",
-                        ]
-                        if note.strip()
-                    ),
-                    "aliases": sorted(set([*(existing.get("aliases") or []), *(item.get("aliases") or [])])),
-                }
-            saved.append(lab_inventory_store.upsert_part(user_id, item))
-        except (TypeError, ValueError) as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-    return {"parts": saved, "count": len(saved)}
-
-
-@app.delete("/api/inventory/parts/{part_id}")
-async def inventory_part_delete(part_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    removed = lab_inventory_store.delete_part(user_id_for_user(user), part_id)
-    if not removed:
-        return JSONResponse({"error": "Inventory part not found."}, status_code=404)
-    return {"ok": True}
-
-
-@app.get("/api/inventory/project-candidates")
-async def inventory_project_candidates(req: Request, limit: int = 24):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    return project_finder_store.find(user_id_for_user(user), limit=max(1, min(int(limit), 80)))
-
-
-@app.get("/api/settings")
-async def settings_list(req: Request):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-    return {"settings": settings_store.list_editable()}
-
-
-@app.put("/api/settings/{key}")
-async def settings_update(key: str, req: Request):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-    try:
-        data = await req.json()
-        updated = settings_store.update_setting(key, data.get("value"))
-        change = runtime_settings.apply_update(key, updated["value"])
-        if change.runtime_applied:
-            trace_logger.info(f"⚙️ Applied runtime setting update for {key}.")
-        elif change.restart_required:
-            trace_logger.info(f"⚙️ Stored setting update for {key}; restart required to apply it.")
-        return {"setting": updated}
-    except KeyError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=404)
-    except (PermissionError, ValueError, TypeError) as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
-
-
-@app.post("/api/index/check")
-async def index_check(req: Request):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-    result = start_index_check("manual")
-    return {"ok": True, **result}
-
-
-@app.get("/api/review/documents")
-async def review_documents(req: Request):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-    return {"documents": [review_document_payload(row) for row in vector_store.list_review_documents()]}
-
-
-@app.get("/api/review/document")
-async def review_document(req: Request, source: str, limit: int = 50):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-    rows = vector_store.review_document_chunks(source, limit=max(1, min(int(limit), 500)))
-    if not rows:
-        return {"document": source, "chunks": []}
-    return {
-        "document": source,
-        "displayName": rows[0]["display_name"],
-        "status": rows[0]["status"],
-        "chunks": [review_chunk_payload(row) for row in rows],
-    }
-
-
-@app.get("/api/review/document/images")
-async def review_document_images(req: Request, source: str):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-    rows = image_store.list_review_images(source)
-    return {"document": source, "images": [review_image_payload(row) for row in rows]}
-
-
-@app.post("/api/review/document/approve")
-async def review_document_approve(req: Request):
-    user, error = require_admin_user(req)
-    if error:
-        return error
-    data = await req.json()
-    source = data.get("source", "")
-    include_images = bool(data.get("includeImages", True))
-    if not include_images:
-        image_store.delete_document_images(source)
-    row = vector_store.set_document_status(source, "indexed", user.username)
-    if not row:
-        return JSONResponse({"error": "Document not found."}, status_code=404)
-    image_count = refresh_active_state_from_db()
-    return {"ok": True, "document": dict(row), "imageCount": image_count}
-
-
-@app.post("/api/review/document/reindex")
-async def review_document_reindex(req: Request):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-    data = await req.json()
-    source = data.get("source", "")
-    try:
-        result = reindex_review_source(source)
-    except FileNotFoundError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=404)
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
-    return {"ok": True, "chunks": result.chunks, "droppedChunks": result.dropped_chunks, "images": result.images}
-
-
-@app.post("/api/review/document/remove")
-async def review_document_remove(req: Request):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-    data = await req.json()
-    source = data.get("source", "")
-    delete_file = bool(data.get("deleteFile", True))
-    result, status_code = remove_document_from_store(source, delete_file=delete_file)
-    if status_code != 200:
-        return JSONResponse(result, status_code=status_code)
-    return result
-
-
-@app.post("/api/document/remove")
-async def indexed_document_remove(req: Request):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-    data = await req.json()
-    source = data.get("source", "")
-    delete_file = bool(data.get("deleteFile", True))
-    result, status_code = remove_document_from_store(source, delete_file=delete_file)
-    if status_code != 200:
-        return JSONResponse(result, status_code=status_code)
-    return result
-
-
-@app.get("/api/assembly-plans")
-async def assembly_plans(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    return {"plans": assembly_plan_store.list(user_id_for_user(user))}
-
-
-@app.get("/api/assembly-plans/{plan_id}")
-async def assembly_plan(plan_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    plan = assembly_plan_store.get(plan_id, user_id_for_user(user))
-    if not plan:
-        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-    return {"plan": plan}
-
-
-@app.delete("/api/assembly-plans/{plan_id}")
-async def assembly_plan_delete(plan_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    deleted = assembly_plan_store.delete(plan_id, user_id_for_user(user))
-    if not deleted:
-        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-    return {"ok": True, "deleted": deleted}
-
-
-@app.post("/api/assembly-plans/build")
-async def assembly_plan_build(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    data = await req.json()
-    objective = str(data.get("objective") or "").strip()
-    if not objective:
-        return JSONResponse({"error": "Build objective is required."}, status_code=400)
-    model_name = data.get("model") or LLM_MODEL_NAME
-
-    _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card, validation = await run_in_threadpool(
-        get_rag_response,
-        question=objective,
-        chat_history=[],
-        show_full_text=False,
-        top_k=int(data.get("topK", 15)),
-        dist_thresh=float(data.get("distanceThreshold", 4.0)),
-        max_tokens=int(data.get("maxTokens", 1800)),
-        bypass_cache=True,
-        strategy=data.get("strategy", "Vector + CrossEncoder"),
-        model_name=model_name,
-        user_id=user_id_for_user(user),
-        username=username_for_user(user),
-    )
-    api_sources = normalize_sources_for_api(sources)
-    if not build_card:
-        recovery_prompt = build_recovery_prompt(objective, answer, api_sources)
-        recovered = await run_in_threadpool(
-            query_ollama_chat_with_retry,
-            recovery_prompt,
-            model_name,
-            [],
-            system_prompt=RECOVERY_SYSTEM_PROMPT,
-        )
-        build_card = parse_recovered_build_card(recovered, api_sources)
-    if not build_card:
-        return JSONResponse(
-            {
-                "error": "CircuitShelf could not build an assembly plan from the current indexed sources.",
-                "answer": answer,
-                "sources": api_sources,
-                "confidence": confidence,
-                "averageQueryTime": avg_time,
-                "cacheStats": cache_stats,
-                "chatHistory": chat_history,
-                "validation": validation,
-            },
-            status_code=422,
-        )
-
-    plan = assembly_plan_store.create_from_card(
-        question=objective,
-        card=build_card,
-        user_id=user_id_for_user(user),
-        created_by=username_for_user(user),
-    )
-    return {
-        "plan": plan,
-        "answer": answer,
-        "sources": api_sources,
-        "confidence": confidence,
-        "averageQueryTime": avg_time,
-        "cacheStats": cache_stats,
-        "chatHistory": chat_history,
-        "validation": validation,
-    }
-
-
-@app.patch("/api/assembly-plans/{plan_id}/steps/{step_id}")
-async def assembly_step_update(plan_id: str, step_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    data = await req.json()
-    updated = assembly_plan_store.set_step_completed(plan_id, step_id, bool(data.get("completed")), user_id_for_user(user))
-    if not updated:
-        return JSONResponse({"error": "Assembly step not found."}, status_code=404)
-    plan = assembly_plan_store.get(plan_id, user_id_for_user(user))
-    return {"plan": plan}
-
-
-@app.post("/api/assembly-plans/{plan_id}/assistant")
-async def assembly_assistant(plan_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    data = await req.json()
-    message = str(data.get("message") or "").strip()
-    if not message:
-        return JSONResponse({"error": "Message is required."}, status_code=400)
-    plan = assembly_plan_store.get(plan_id, user_id_for_user(user))
-    if not plan:
-        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-
-    assembly_plan_store.add_note(plan_id, "user", message, user_id_for_user(user))
-    prompt = build_assembly_assistant_prompt(plan, message)
-    assistant_answer = await run_in_threadpool(query_ollama_chat_with_retry, prompt, data.get("model") or LLM_MODEL_NAME, [])
-    assembly_plan_store.add_note(plan_id, "assistant", assistant_answer, user_id_for_user(user))
-    return {"plan": assembly_plan_store.get(plan_id, user_id_for_user(user)), "answer": assistant_answer}
-
-
-@app.get("/api/assembly-plans/{plan_id}/steps/{step_id}/evidence")
-async def assembly_step_evidence(plan_id: str, step_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    user_id = user_id_for_user(user)
-    if not assembly_plan_store.get(plan_id, user_id):
-        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-    return assembly_plan_store.evidence_for_step(plan_id, step_id, user_id)
-
-
-@app.get("/api/assembly-plans/{plan_id}/export")
-async def assembly_plan_export(plan_id: str, req: Request, format: str = Query("markdown")):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    plan = assembly_plan_store.get(plan_id, user_id_for_user(user))
-    if not plan:
-        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-    export = bench_tools.build_assembly_export(plan, format)
-    return export
-
-
-@app.get("/api/assembly-plans/{plan_id}/learning")
-async def assembly_learning_get(plan_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    user_id = user_id_for_user(user)
-    plan = assembly_plan_store.get(plan_id, user_id)
-    if not plan:
-        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-    session = assembly_plan_store.get_learning(plan_id, user_id) or assembly_plan_store.start_learning(plan_id, user_id)
-    return {"learning": build_learning_payload(plan, session)}
-
-
-@app.patch("/api/assembly-plans/{plan_id}/learning")
-async def assembly_learning_update(plan_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    user_id = user_id_for_user(user)
-    data = await req.json()
-    plan = assembly_plan_store.get(plan_id, user_id)
-    if not plan:
-        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-    session = assembly_plan_store.get_learning(plan_id, user_id) or assembly_plan_store.start_learning(plan_id, user_id)
-    current = int((session or {}).get("currentOrdinal") or 1)
-    action = str(data.get("action") or "").lower()
-    if action == "next":
-        current += 1
-    elif action == "previous":
-        current -= 1
-    elif action == "disable":
-        session = assembly_plan_store.update_learning(plan_id, user_id, current_ordinal=current, mode_enabled=False)
-        return {"learning": build_learning_payload(plan, session)}
-    elif data.get("currentOrdinal") is not None:
-        current = int(data.get("currentOrdinal"))
-    max_ordinal = max((int(step["ordinal"]) for step in plan.get("steps", [])), default=1)
-    current = max(1, min(current, max_ordinal))
-    session = assembly_plan_store.update_learning(plan_id, user_id, current_ordinal=current, mode_enabled=True)
-    return {"learning": build_learning_payload(plan, session)}
-
-
-@app.post("/api/assembly-plans/{plan_id}/photo-check")
-async def assembly_photo_check(plan_id: str, req: Request, file: UploadFile = File(...), note: str = Form("")):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    user_id = user_id_for_user(user)
-    plan = assembly_plan_store.get(plan_id, user_id)
-    if not plan:
-        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-    mime_type = file.content_type or "application/octet-stream"
-    if not mime_type.startswith("image/"):
-        return JSONResponse({"error": "Upload must be an image."}, status_code=400)
-    image_bytes = await file.read()
-    await file.close()
-    if not image_bytes:
-        return JSONResponse({"error": "Uploaded image is empty."}, status_code=400)
-    if len(image_bytes) > 8 * 1024 * 1024:
-        return JSONResponse({"error": "Photo is too large. Use an image under 8 MB."}, status_code=400)
-    diagnostics = bench_tools.analyze_bench_photo(image_bytes)
-    checklist = bench_tools.build_photo_checklist(plan, note, diagnostics)
-    check = assembly_plan_store.add_photo_check(
-        plan_id,
-        user_id,
-        image_mime_type=mime_type,
-        image_base64=base64.b64encode(image_bytes).decode("ascii"),
-        note=note,
-        checklist=checklist,
-        diagnostics=diagnostics,
-    )
-    return {"check": check, "checks": assembly_plan_store.photo_checks(plan_id, user_id)}
-
-
-@app.get("/api/assembly-plans/{plan_id}/photo-checks")
-async def assembly_photo_checks(plan_id: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    user_id = user_id_for_user(user)
-    if not assembly_plan_store.get(plan_id, user_id):
-        return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-    return {"checks": assembly_plan_store.photo_checks(plan_id, user_id)}
-
-
-def build_learning_payload(plan: dict, session: dict | None) -> dict:
-    steps = plan.get("steps") or []
-    current_ordinal = int((session or {}).get("currentOrdinal") or 1)
-    current_step = next((step for step in steps if int(step.get("ordinal") or 0) == current_ordinal), None)
-    if not current_step and steps:
-        current_step = steps[0]
-        current_ordinal = int(current_step.get("ordinal") or 1)
-    prompt = ""
-    if current_step:
-        prompt = learning_prompt_for_step(current_step)
-    return {
-        "planId": plan.get("id"),
-        "currentOrdinal": current_ordinal,
-        "modeEnabled": bool((session or {}).get("modeEnabled", True)),
-        "stepCount": len(steps),
-        "currentStep": current_step,
-        "prompt": prompt,
-    }
-
-
-def learning_prompt_for_step(step: dict) -> str:
-    step_type = step.get("type")
-    title = step.get("title") or "this step"
-    if step_type == "wiring":
-        return (
-            f"Before doing step {step.get('ordinal')}, identify the source pin/rail and destination for {title}. "
-            "Say what should be connected, then make the connection and verify continuity before moving on."
-        )
-    if step_type == "warning":
-        return (
-            f"Pause on caution step {step.get('ordinal')}. Explain the risk in your own words before continuing."
-        )
-    return (
-        f"Before checking step {step.get('ordinal')}, predict what a correct circuit should show, then perform the test."
-    )
-
-
-def build_assembly_assistant_prompt(plan: dict, message: str) -> str:
-    steps = "\n".join(
-        f"{step['ordinal']}. [{'done' if step['completed'] else 'open'}] {step['title']}: {step['instruction']} {step.get('note') or ''}"
-        for step in plan.get("steps", [])
-    )
-    sources = "\n".join(
-        f"- {source['displayName']} pages {', '.join(str(page) for page in source.get('pages') or [])}"
-        for source in plan.get("sources", [])
-    )
-    notes = "\n".join(
-        f"{note['role']}: {note['message']}"
-        for note in (plan.get("notes") or [])[-8:]
-    )
-    return (
-        "You are CircuitShelf's electronics bench assistant. Use only the assembly plan, checklist, and source notes below. "
-        "Give practical next-step guidance, checks to perform, expected readings or behavior when supported, and safety cautions. "
-        "If the plan lacks enough evidence, say what is missing.\n\n"
-        f"Assembly plan: {plan.get('title')}\n"
-        f"Objective: {plan.get('objective')}\n"
-        f"Component: {plan.get('componentName')} ({plan.get('componentType')})\n"
-        f"Summary: {plan.get('summary')}\n\n"
-        f"Checklist:\n{steps}\n\n"
-        f"Sources:\n{sources}\n\n"
-        f"Recent bench conversation:\n{notes}\n\n"
-        f"User says: {message}\n\n"
-        "Respond as a concise lab assistant."
-    )
-
-
 def remove_document_from_store(source: str, *, delete_file: bool = True) -> tuple[dict, int]:
     if not source:
         return {"error": "Document source is required."}, 400
@@ -3709,278 +2981,106 @@ def remove_document_from_store(source: str, *, delete_file: bool = True) -> tupl
     return {"ok": True, "document": dict(row), "deletedFile": deleted_file}, 200
 
 
-@app.post("/api/query")
-async def react_query(req: Request):
-    try:
-        user, error = require_authenticated_user(req)
-        if error:
-            return error
-        data = await req.json()
-        question = data.get("question", "")
-        if not question.strip():
-            return {"error": "No question provided."}
-        username = username_for_user(user)
-        user_id = user_id_for_user(user)
-        conversation_id = data.get("conversationId")
-        conversation = None
-        if conversation_id:
-            conversation = conversation_store.get(str(conversation_id), user_id)
-            if not conversation:
-                return JSONResponse({"error": "Conversation not found."}, status_code=404)
-        else:
-            conversation = conversation_store.create(user_id, conversation_title_from_question(question))
-            conversation_id = conversation["id"]
-
-        _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card, validation = await run_in_threadpool(
-            get_rag_response,
-            question=question,
-            chat_history=data.get("chatHistory", []),
-            show_full_text=bool(data.get("showFullText", False)),
-            top_k=int(data.get("topK", 15)),
-            dist_thresh=float(data.get("distanceThreshold", 4.0)),
-            max_tokens=int(data.get("maxTokens", 1800)),
-            bypass_cache=bool(data.get("bypassCache", True)),
-            strategy=data.get("strategy", "Vector + CrossEncoder"),
-            model_name=data.get("model", LLM_MODEL_NAME),
-            user_id=user_id,
-            username=username,
-        )
-        stored_answer = chat_history[-1][1] if chat_history else answer
-        conversation_store.append_turn(
-            conversation_id=str(conversation_id),
-            question=question,
-            answer=stored_answer,
-            model_name=data.get("model", LLM_MODEL_NAME),
-            retrieval_strategy=data.get("strategy", "Vector + CrossEncoder"),
-            confidence_score=confidence,
-        )
-        conversation = conversation_store.get(str(conversation_id), user_id)
-
-        return {
-            "conversation": conversation,
-            "question": question,
-            "answer": answer,
-            "chatHistory": chat_history,
-            "sources": normalize_sources_for_api(sources),
-            "cacheStats": cache_stats,
-            "confidence": confidence,
-            "averageQueryTime": avg_time,
-            "buildCard": build_card,
-            "validation": validation,
-        }
-    except Exception as e:
-        trace_logger.error(f"❌ [API] React query failed: {e}")
-        return {"error": str(e)}
+def flush_trace_log():
+    for handler in trace_logger.handlers:
+        if hasattr(handler, 'flush'):
+            handler.flush()
 
 
-@app.get("/api/documents")
-async def documents():
-    docs = []
-    for row in vector_store.list_document_stats():
-        docs.append({
-            "source": row["source_path"],
-            "displayName": row["display_name"],
-            "chunkCount": int(row["actual_chunk_count"] or row["chunk_count"] or 0),
-            "imageCount": int(row["actual_image_count"] or row["stored_image_count"] or 0),
-            "rawChunkCount": int(row["raw_chunk_count"] or 0),
-            "droppedChunkCount": int(row["dropped_chunk_count"] or 0),
-            "extractedImageCount": int(row["extracted_image_count"] or 0),
-            "storedImageCount": int(row["stored_image_count"] or 0),
-            "indexedImageTextCount": int(row["indexed_image_text_count"] or 0),
-            "ocrImageTextCount": int(row["ocr_image_text_count"] or 0),
-        })
-    return {"documents": docs}
+def current_trace_log_file():
+    for handler in trace_logger.handlers:
+        base_filename = getattr(handler, "baseFilename", None)
+        if base_filename:
+            return base_filename
+    return TRACE_LOG_FILE
 
 
-@app.post("/api/documents/upload")
-async def upload_document(
-    req: Request,
-    file: UploadFile = File(...),
-    overwrite: bool = Query(False),
-):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-
-    try:
-        upload_result = await write_uploaded_documents([file], overwrite)
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
-    except Exception as exc:
-        trace_logger.error(f"❌ Document upload failed: {exc}")
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-    uploaded_files = upload_result["uploaded"]
-    skipped_files = upload_result["skipped"]
-    filename = uploaded_files[0]["filename"] if uploaded_files else ""
-    index_job = start_index_check(f"upload:{filename}") if uploaded_files else {"started": False, "status": dict(index_status)}
-    return {
-        "ok": True,
-        "filename": filename,
-        "bytes": sum(item["bytes"] for item in uploaded_files),
-        "files": uploaded_files,
-        "skippedFiles": skipped_files,
-        "count": len(uploaded_files),
-        "skippedCount": len(skipped_files),
-        "indexing": index_job,
-    }
-
-
-@app.post("/api/documents/upload-batch")
-async def upload_documents(
-    req: Request,
-    files: list[UploadFile] = File(...),
-    overwrite: bool = Query(False),
-):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-
-    try:
-        upload_result = await write_uploaded_documents(files, overwrite)
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
-    except Exception as exc:
-        trace_logger.error(f"❌ Batch document upload failed: {exc}")
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-    uploaded_files = upload_result["uploaded"]
-    skipped_files = upload_result["skipped"]
-    reason = f"upload-batch:{len(uploaded_files)}"
-    index_job = start_index_check(reason) if uploaded_files else {"started": False, "status": dict(index_status)}
-    return {
-        "ok": True,
-        "files": uploaded_files,
-        "skippedFiles": skipped_files,
-        "count": len(uploaded_files),
-        "skippedCount": len(skipped_files),
-        "bytes": sum(item["bytes"] for item in uploaded_files),
-        "indexing": index_job,
-    }
-
-
-def build_document_detail(doc_name):
-    rows = []
-    pages = OrderedDict()
-    image_assets = []
-    chunks = state.get_chunks()
-    metadata = state.get_metadata()
-    sources = state.get_sources()
-    image_store_payload = state.get_image_store()
-    image_captions = state.get_image_captions()
-    image_text = state.get_image_page_text()
-    image_mime_types = state.get_image_mime_types()
-
-    for image_id, image_base64 in sorted(image_store_payload.items()):
-        if not image_asset_belongs_to_document(image_id, doc_name):
-            continue
-        page = extract_page_number(image_id) or None
-        image_payload = {
-            "imageKey": image_id,
-            "caption": image_captions.get(image_id, image_id),
-            "page": page,
-            "imageMimeType": image_mime_types.get(image_id, "image/png"),
-            "imageBase64": image_base64,
-            "ocrText": image_text.get(image_id, ""),
-        }
-        image_assets.append(image_payload)
-        if page is not None:
-            pages.setdefault(page, {"page": page, "chunks": [], "images": []})["images"].append(image_payload)
-
-    for idx, source in enumerate(sources):
-        meta = metadata[idx] if idx < len(metadata) else {}
-        doc_source = document_source_from_metadata(source, meta)
-        if doc_source != doc_name:
-            continue
-        text = chunks[idx] if idx < len(chunks) else ""
-        row = {
-            "index": idx,
-            "section": meta.get("section", "Unknown"),
-            "category": meta.get("category", "Uncategorized"),
-            "page": meta.get("page"),
-            "sourceImageId": source_image_id_from_metadata(source, meta),
-            "tokens": TokenUtils.tokenize_len(text),
-            "preview": text[:500],
-        }
-        rows.append(row)
-        page = row["page"]
-        if page is not None:
-            page_entry = pages.setdefault(page, {"page": page, "chunks": [], "images": []})
-            page_entry["chunks"].append(row)
-
-    pinout_chunks = list(chunks)
-    pinout_metadata = list(metadata)
-    for image in image_assets:
-        if image.get("ocrText"):
-            pinout_chunks.append(image["ocrText"])
-            pinout_metadata.append({"source": doc_name, "page": image.get("page")})
-    pinout = extract_pinout_map(pinout_chunks, pinout_metadata, doc_name)
-    intelligence = get_or_build_datasheet_intelligence(doc_name)
-    return {
-        "document": doc_name,
-        "displayName": display_source_name(doc_name),
-        "chunks": rows,
-        "images": image_assets,
-        "pages": sorted(pages.values(), key=lambda item: int(item["page"])),
-        "ingestStats": next(
-            (
-                {
-                    "rawChunkCount": int(row["raw_chunk_count"] or 0),
-                    "chunkCount": int(row["actual_chunk_count"] or row["chunk_count"] or 0),
-                    "droppedChunkCount": int(row["dropped_chunk_count"] or 0),
-                    "extractedImageCount": int(row["extracted_image_count"] or 0),
-                    "storedImageCount": int(row["stored_image_count"] or 0),
-                    "indexedImageTextCount": int(row["indexed_image_text_count"] or 0),
-                    "ocrImageTextCount": int(row["ocr_image_text_count"] or 0),
-                }
-                for row in vector_store.list_document_stats()
-                if row["source_path"] == doc_name
-            ),
-            None,
-        ),
-        "pinout": intelligence.get("pinout") if intelligence.get("pinout", {}).get("pins") else pinout,
-        "intelligence": intelligence,
-    }
-
-
-@app.get("/api/document")
-async def document_detail_query(source: str):
-    return build_document_detail(source)
-
-
-@app.get("/api/documents/{doc_name:path}")
-async def document_detail(doc_name: str):
-    return build_document_detail(doc_name)
-
-
-@app.get("/api/trace")
-async def trace():
-    return sanitize_for_json(state.get_last_trace())
-
-
-@app.get("/api/status")
-async def status():
-    return build_runtime_status()
-
-
-@app.get("/api/status/log-tail")
-async def status_log_tail(req: Request, lines: int = Query(200, ge=20, le=1000)):
-    _, error = require_admin_user(req)
-    if error:
-        return error
-
-    flush_trace_log()
-    tail = tail_text_file(current_trace_log_file(), max_lines=lines)
-    return {
-        "path": tail.path,
-        "exists": tail.exists,
-        "sizeBytes": tail.size_bytes,
-        "lines": tail.lines,
-        "truncated": tail.truncated,
-        "error": tail.error,
-        "lineCount": len(tail.lines),
-        "updatedAt": datetime.now(timezone.utc).isoformat(),
-    }
+app.include_router(account_api.create_router(api_dependencies, USER_PREFERENCE_KEYS))
+app.include_router(entity_api.create_router(api_dependencies))
+app.include_router(ai_settings_api.create_router(api_dependencies))
+app.include_router(app_config_api.create_router(
+    config=config,
+    models=LLM_MODEL_OPTIONS,
+    default_model=LLM_MODEL_NAME,
+    auth_configured=lambda: database.configured and user_store.has_active_users(),
+    session_timeout_seconds=session_timeout_seconds,
+    build_readiness_status=build_readiness_status,
+))
+app.include_router(conversations_api.create_router(
+    api_dependencies,
+    conversation_store=conversation_store,
+    conversation_title_from_question=conversation_title_from_question,
+))
+app.include_router(inventory_api.create_router(
+    api_dependencies,
+    lab_inventory_store=lab_inventory_store,
+    project_finder_store=project_finder_store,
+    parse_inventory_import=parse_inventory_import,
+))
+app.include_router(settings_api.create_router(
+    require_admin_user=require_admin_user,
+    settings_store=settings_store,
+    runtime_settings=runtime_settings,
+    trace_logger=trace_logger,
+    start_index_check=start_index_check,
+))
+app.include_router(review_api.create_router(
+    require_admin_user=require_admin_user,
+    vector_store=vector_store,
+    image_store=image_store,
+    refresh_active_state_from_db=refresh_active_state_from_db,
+    reindex_review_source=reindex_review_source,
+    remove_document_from_store=remove_document_from_store,
+))
+app.include_router(assembly_plans_api.create_router(
+    api_dependencies,
+    assembly_plan_store=assembly_plan_store,
+    bench_tools=bench_tools,
+    get_rag_response=get_rag_response,
+    query_ollama_chat_with_retry=query_ollama_chat_with_retry,
+    normalize_sources_for_api=normalize_sources_for_api,
+    build_recovery_prompt=build_recovery_prompt,
+    parse_recovered_build_card=parse_recovered_build_card,
+    recovery_system_prompt=RECOVERY_SYSTEM_PROMPT,
+    default_model=LLM_MODEL_NAME,
+    username_for_user=username_for_user,
+))
+app.include_router(documents_api.create_router(
+    require_admin_user=require_admin_user,
+    training_dir=TRAINING_DIR,
+    supported_training_extensions=supported_training_extensions,
+    vector_store=vector_store,
+    image_store=image_store,
+    state=state,
+    trace_logger=trace_logger,
+    start_index_check=start_index_check,
+    image_asset_belongs_to_document=image_asset_belongs_to_document,
+    extract_page_number=extract_page_number,
+    document_source_from_metadata=document_source_from_metadata,
+    source_image_id_from_metadata=source_image_id_from_metadata,
+    extract_pinout_map=extract_pinout_map,
+    get_or_build_datasheet_intelligence=get_or_build_datasheet_intelligence,
+    display_source_name=display_source_name,
+))
+app.include_router(query_api.create_router(
+    api_dependencies,
+    conversation_store=conversation_store,
+    get_rag_response=get_rag_response,
+    normalize_sources_for_api=normalize_sources_for_api,
+    conversation_title_from_question=conversation_title_from_question,
+    username_for_user=username_for_user,
+    default_model=LLM_MODEL_NAME,
+    trace_logger=trace_logger,
+))
+app.include_router(status_api.create_router(
+    require_admin_user=require_admin_user,
+    build_runtime_status=build_runtime_status,
+    sanitize_for_json=sanitize_for_json,
+    get_last_trace=state.get_last_trace,
+    flush_trace_log=flush_trace_log,
+    current_trace_log_file=current_trace_log_file,
+    tail_text_file=tail_text_file,
+))
 
 
 def mount_react_app():
@@ -4003,21 +3103,6 @@ def mount_react_app():
         if full_path.startswith("api/") or full_path.startswith("assets/"):
             return {"error": "Not found"}
         return FileResponse(index_html, headers=index_headers)
-
-def flush_trace_log():
-    for handler in trace_logger.handlers:
-        if hasattr(handler, 'flush'):
-            handler.flush()
-
-
-def current_trace_log_file():
-    for handler in trace_logger.handlers:
-        base_filename = getattr(handler, "baseFilename", None)
-        if base_filename:
-            return base_filename
-    return TRACE_LOG_FILE
-            
-
 
 def start_app_server(host, port):
 
