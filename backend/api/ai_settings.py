@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 
 from backend.api.dependencies import ApiDependencies
@@ -94,5 +94,27 @@ def create_router(deps: ApiDependencies) -> APIRouter:
             provider,
         )
         return {"settings": settings}
+
+    @router.get("/api/entity/ai-usage")
+    async def entity_ai_usage(
+        req: Request,
+        days: int = Query(31, ge=1, le=366),
+        limit: int = Query(250, ge=1, le=1000),
+    ):
+        _, entity, error = deps.require_entity_admin(req)
+        if error:
+            return error
+        return deps.ai_provider_store.usage_report(entity_id=entity.entity_id, days=days, limit=limit)
+
+    @router.get("/api/system/ai-usage")
+    async def system_ai_usage(
+        req: Request,
+        days: int = Query(31, ge=1, le=366),
+        limit: int = Query(250, ge=1, le=1000),
+    ):
+        _, error = deps.require_system_admin_user(req)
+        if error:
+            return error
+        return deps.ai_provider_store.usage_report(entity_id=None, days=days, limit=limit)
 
     return router

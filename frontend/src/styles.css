@@ -3559,6 +3559,60 @@ nav {
   text-transform: uppercase;
 }
 
+.ai-usage-view {
+  display: grid;
+  gap: 18px;
+}
+
+.ai-usage-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ai-usage-breakdown {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.ai-usage-card-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-usage-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.ai-usage-card span,
+.ai-usage-card small {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-usage-card strong {
+  color: var(--ink);
+  font-size: 1.1rem;
+}
+
+.ai-usage-table {
+  min-width: 1160px;
+}
+
 .error,
 .top-error {
   color: var(--warn);
@@ -3735,7 +3789,8 @@ nav {
   .ai-provider-grid,
   .ai-provider-grid.compact,
   .ai-key-row,
-  .performance-stats {
+  .performance-stats,
+  .ai-usage-breakdown-grid {
     grid-template-columns: 1fr;
   }
 }

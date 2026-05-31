@@ -43,6 +43,32 @@ class AIProviderStore:
             for row in rows
         ]
 
+    def usage_report(self, *, entity_id: int | None, days: int = 31, limit: int = 250) -> dict[str, Any]:
+        with self.database.connection() as conn:
+            rows = conn.execute(
+                load_query("ai_assist_usage_events.sql"),
+                (entity_id, entity_id, max(1, int(days)), max(1, int(limit))),
+            ).fetchall()
+        events = [self._usage_event_row(row) for row in rows]
+        total_cost = sum(event["estimatedCost"] for event in events)
+        total_tokens = sum(event["inputTokens"] + event["cachedInputTokens"] + event["outputTokens"] for event in events)
+        return {
+            "events": events,
+            "summary": {
+                "calls": len(events),
+                "successfulCalls": sum(1 for event in events if event["success"]),
+                "tokens": total_tokens,
+                "inputTokens": sum(event["inputTokens"] for event in events),
+                "cachedInputTokens": sum(event["cachedInputTokens"] for event in events),
+                "outputTokens": sum(event["outputTokens"] for event in events),
+                "estimatedCost": round(total_cost, 8),
+            },
+            "byTask": self._usage_breakdown(events, "taskLabel"),
+            "byUser": self._usage_breakdown(events, "username"),
+            "byPayer": self._usage_breakdown(events, "paidBy"),
+            "byModel": self._usage_breakdown(events, "modelName"),
+        }
+
     def get_system_settings(self, provider: str = "openai") -> dict[str, Any]:
         with self.database.connection() as conn:
             row = conn.execute(load_query("system_ai_provider_get.sql"), (provider,)).fetchone()
@@ -187,6 +213,49 @@ class AIProviderStore:
             "stopPercent": int(row.get("stop_percent") or 100),
             "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
         }
+
+    @staticmethod
+    def _usage_event_row(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "createdAt": row["created_at"].isoformat() if row.get("created_at") else None,
+            "entityId": row.get("entity_id"),
+            "entityName": row.get("entity_name"),
+            "userId": row.get("user_id"),
+            "username": row.get("username") or "Unknown",
+            "provider": row.get("provider") or "unknown",
+            "taskType": row.get("task_type") or "unknown",
+            "taskLabel": row.get("task_label") or "Unknown",
+            "modelName": row.get("model_name") or "Unknown",
+            "contextType": row.get("context_type") or "",
+            "contextId": str(row.get("context_id")) if row.get("context_id") else "",
+            "roundNumber": int(row.get("round_number") or 1),
+            "roundCount": int(row.get("round_count") or 1),
+            "inputTokens": int(row.get("input_tokens") or 0),
+            "cachedInputTokens": int(row.get("cached_input_tokens") or 0),
+            "outputTokens": int(row.get("output_tokens") or 0),
+            "estimatedCost": float(row.get("estimated_cost") or 0),
+            "paidBy": row.get("paid_by") or "unknown",
+            "providerKeyOwnerUserId": row.get("provider_key_owner_user_id"),
+            "providerKeyOwnerUsername": row.get("provider_key_owner_username"),
+            "success": bool(row.get("success")),
+            "errorMessage": row.get("error_message"),
+        }
+
+    @staticmethod
+    def _usage_breakdown(events: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
+        grouped: dict[str, dict[str, Any]] = {}
+        for event in events:
+            label = str(event.get(key) or "Unknown")
+            current = grouped.setdefault(label, {"label": label, "calls": 0, "tokens": 0, "estimatedCost": 0.0})
+            current["calls"] += 1
+            current["tokens"] += int(event.get("inputTokens") or 0) + int(event.get("cachedInputTokens") or 0) + int(event.get("outputTokens") or 0)
+            current["estimatedCost"] += float(event.get("estimatedCost") or 0)
+        return sorted(
+            ({**value, "estimatedCost": round(value["estimatedCost"], 8)} for value in grouped.values()),
+            key=lambda item: item["estimatedCost"],
+            reverse=True,
+        )
 
     def _load_config(self) -> dict:
         with open(self.config_path, "r", encoding="utf-8") as f:

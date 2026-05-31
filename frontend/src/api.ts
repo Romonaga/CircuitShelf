@@ -32,6 +32,7 @@ import type {
   AIModelPricing,
   AIProviderSettings,
   AIProviderSettingsPayload,
+  AIUsageReport,
   UploadDocumentsResponse
 } from "./types";
 
@@ -157,6 +158,14 @@ export function updateSystemAIProvider(payload: AIProviderSettingsPayload): Prom
     method: "PUT",
     body: JSON.stringify(payload)
   });
+}
+
+export function getEntityAIUsage(days = 31): Promise<AIUsageReport> {
+  return requestJson<AIUsageReport>(`/api/entity/ai-usage?days=${encodeURIComponent(String(days))}`);
+}
+
+export function getSystemAIUsage(days = 31): Promise<AIUsageReport> {
+  return requestJson<AIUsageReport>(`/api/system/ai-usage?days=${encodeURIComponent(String(days))}`);
 }
 
 export function getUserPreference<T>(key: string): Promise<{ key: string; value: T }> {

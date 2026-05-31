@@ -1,5 +1,5 @@
 export type RetrievalStrategy = "Vector only" | "Vector + CrossEncoder" | string;
-export type View = "ask" | "bench" | "finder" | "inventory" | "documents" | "corpus" | "review" | "trace" | "status" | "performance" | "settings" | "entity" | "account";
+export type View = "ask" | "bench" | "finder" | "inventory" | "documents" | "corpus" | "review" | "trace" | "status" | "performance" | "aiUsage" | "settings" | "entity" | "account";
 
 export interface EntityContext {
   id: number;
@@ -671,6 +671,56 @@ export interface PerformanceReport {
   samples: PerformanceSample[];
   recentWork: PerformanceWorkRun[];
   error?: string;
+}
+
+export interface AIUsageBreakdown {
+  label: string;
+  calls: number;
+  tokens: number;
+  estimatedCost: number;
+}
+
+export interface AIUsageEvent {
+  id: number;
+  createdAt?: string | null;
+  entityId?: number | null;
+  entityName?: string | null;
+  userId?: number | null;
+  username: string;
+  provider: string;
+  taskType: string;
+  taskLabel: string;
+  modelName: string;
+  contextType: string;
+  contextId: string;
+  roundNumber: number;
+  roundCount: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+  paidBy: string;
+  providerKeyOwnerUserId?: number | null;
+  providerKeyOwnerUsername?: string | null;
+  success: boolean;
+  errorMessage?: string | null;
+}
+
+export interface AIUsageReport {
+  summary: {
+    calls: number;
+    successfulCalls: number;
+    tokens: number;
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+    estimatedCost: number;
+  };
+  byTask: AIUsageBreakdown[];
+  byUser: AIUsageBreakdown[];
+  byPayer: AIUsageBreakdown[];
+  byModel: AIUsageBreakdown[];
+  events: AIUsageEvent[];
 }
 
 export interface LogTailPayload {

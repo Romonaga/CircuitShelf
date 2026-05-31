@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AccountView } from "./components/AccountView";
+import { AIUsageView } from "./components/AIUsageView";
 import { AppShell } from "./components/AppShell";
 import { AskView } from "./components/AskView";
 import { BenchView } from "./components/BenchView";
@@ -125,6 +126,11 @@ export default function App() {
           onOpenReview={() => setActiveView("review")}
         />
       </div>
+      {(user?.entity?.canManage || user?.canManageSystem) ? (
+        <div hidden={activeView !== "aiUsage"}>
+          <AIUsageView isActive={activeView === "aiUsage"} canManageSystem={Boolean(user?.canManageSystem)} />
+        </div>
+      ) : null}
       <div hidden={activeView !== "account"}>
         <AccountView username={user?.username || "local"} theme={theme} setTheme={setTheme} />
       </div>
