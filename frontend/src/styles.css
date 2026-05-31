@@ -232,6 +232,29 @@ h3 {
   font-size: 0.75rem;
 }
 
+.brand-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.brand-actions button {
+  min-height: 26px;
+  border: 1px solid rgba(156, 230, 213, 0.32);
+  border-radius: 7px;
+  padding: 0 8px;
+  color: #f6fbff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: rgba(156, 230, 213, 0.1);
+}
+
+.brand-actions button:hover {
+  border-color: rgba(156, 230, 213, 0.62);
+  background: rgba(156, 230, 213, 0.18);
+}
+
 .logo-mark {
   position: relative;
   width: 54px;

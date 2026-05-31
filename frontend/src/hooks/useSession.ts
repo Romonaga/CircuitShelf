@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { logout as logoutApi, sessionStorageKey } from "../api";
+import { getMe, logout as logoutApi, sessionStorageKey } from "../api";
 import type { AppConfig, SessionUser } from "../types";
 
 const ACTIVITY_EVENTS = ["keydown", "mousedown", "mousemove", "scroll", "touchstart"] as const;
@@ -70,6 +70,36 @@ export function useSession(config: AppConfig | null) {
     window.localStorage.setItem(sessionStorageKey, JSON.stringify(storedSession));
     setSession(storedSession);
   }, []);
+
+  useEffect(() => {
+    if (!config?.authConfigured || !session?.token) {
+      return;
+    }
+    let active = true;
+    getMe()
+      .then((currentUser) => {
+        if (!active) {
+          return;
+        }
+        const refreshedSession: SessionUser = {
+          ...session,
+          userId: currentUser.userId,
+          username: currentUser.username,
+          isAdmin: Boolean(currentUser.isAdmin),
+          canManageSystem: Boolean(currentUser.canManageSystem),
+          forcePasswordChange: Boolean(currentUser.forcePasswordChange),
+          entity: currentUser.entity ?? null,
+          lastActivityAt: Date.now()
+        };
+        sessionRef.current = refreshedSession;
+        window.localStorage.setItem(sessionStorageKey, JSON.stringify(refreshedSession));
+        setSession(refreshedSession);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [config?.authConfigured, session?.token]);
 
   useEffect(() => {
     if (!config?.authConfigured || !session) {

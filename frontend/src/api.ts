@@ -91,6 +91,10 @@ export function login(username: string, password: string): Promise<{ ok: boolean
   });
 }
 
+export function getMe(): Promise<{ userId?: number; username: string; isAdmin: boolean; canManageSystem?: boolean; forcePasswordChange?: boolean; entity?: EntityContext | null; profile?: unknown }> {
+  return requestJson("/api/me");
+}
+
 export function getCurrentEntity(): Promise<{ entity: EntityContext; user: unknown }> {
   return requestJson<{ entity: EntityContext; user: unknown }>("/api/entity/current");
 }

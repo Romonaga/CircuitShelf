@@ -95,6 +95,10 @@ export function AppShell({
             <h1>{siteName}</h1>
             <p>{user}</p>
             {entityName ? <p className="brand-entity">{entityName} · {entityRole}</p> : null}
+            <div className="brand-actions">
+              <button type="button" onClick={() => setActiveView("account")}>Account</button>
+              <button type="button" onClick={onLogout}>Sign out</button>
+            </div>
           </div>
         </div>
         <nav>
@@ -118,12 +122,6 @@ export function AppShell({
           <Stat label="Sources" value={formatNumber(status?.sources)} />
           <button className="ghost-button" onClick={onRefresh}>
             Refresh
-          </button>
-          <button className="ghost-button" onClick={() => setActiveView("account")}>
-            Account
-          </button>
-          <button className="ghost-button" onClick={onLogout}>
-            Sign out
           </button>
         </div>
       </aside>
