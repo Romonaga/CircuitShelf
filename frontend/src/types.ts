@@ -1,5 +1,5 @@
 export type RetrievalStrategy = "Vector only" | "Vector + CrossEncoder" | string;
-export type View = "ask" | "bench" | "finder" | "inventory" | "documents" | "review" | "trace" | "status" | "settings" | "entity" | "account";
+export type View = "ask" | "bench" | "finder" | "inventory" | "documents" | "corpus" | "review" | "trace" | "status" | "settings" | "entity" | "account";
 
 export interface EntityContext {
   id: number;

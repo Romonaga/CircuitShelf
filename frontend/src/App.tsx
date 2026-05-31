@@ -85,6 +85,22 @@ export default function App() {
           onOpenReview={() => setActiveView("review")}
         />
       </div>
+      {user?.canManageSystem ? (
+        <div hidden={activeView !== "corpus"}>
+          <DocumentsView
+            isActive={activeView === "corpus"}
+            isAdmin={Boolean(user?.canManageSystem)}
+            status={status}
+            refreshSignal={`${status?.sources ?? 0}:${status?.chunks ?? 0}:${status?.imageIds ?? 0}`}
+            onStatusChange={refreshStatus}
+            onOpenReview={() => setActiveView("review")}
+            title="Corpus"
+            description={`${status?.sources ?? 0} global indexed sources`}
+            uploadHelp="Upload shared electronics books, datasheets, and notes for the global CircuitShelf corpus."
+            emptyText="Select a corpus document to inspect its pages, chunks, images, and pinout."
+          />
+        </div>
+      ) : null}
       {user?.isAdmin ? (
         <div hidden={activeView !== "review"}>
           <ReviewView

@@ -18,7 +18,11 @@ export function DocumentsView({
   status,
   refreshSignal,
   onStatusChange,
-  onOpenReview
+  onOpenReview,
+  title = "Documents",
+  description,
+  uploadHelp,
+  emptyText = "Select a document to inspect its pages, chunks, images, and pinout."
 }: {
   isActive: boolean;
   isAdmin: boolean;
@@ -26,6 +30,10 @@ export function DocumentsView({
   refreshSignal: string;
   onStatusChange: () => void;
   onOpenReview: () => void;
+  title?: string;
+  description?: string;
+  uploadHelp?: string;
+  emptyText?: string;
 }) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selected, setSelected] = useState("");
@@ -193,8 +201,8 @@ export function DocumentsView({
     <section className="view-grid docs-grid">
       <div className="document-list-panel">
         <SectionHeader
-          title="Documents"
-          description={busy ? "Loading..." : `${formatInteger(documents.length)} indexed sources`}
+          title={title}
+          description={busy ? "Loading..." : (description ?? `${formatInteger(documents.length)} indexed sources`)}
           actions={
             isAdmin ? (
               <button className="ghost-button" onClick={runIndexCheck} disabled={busy || uploading}>
@@ -205,6 +213,7 @@ export function DocumentsView({
         />
         {isAdmin ? (
           <div className="upload-panel">
+            {uploadHelp ? <p className="upload-help">{uploadHelp}</p> : null}
             <input
               key={uploadInputKey}
               type="file"
@@ -295,7 +304,7 @@ export function DocumentsView({
             </div>
           </div>
         ) : !detailBusy ? (
-          <div className="empty-state">Select a document to inspect its pages, chunks, images, and pinout.</div>
+          <div className="empty-state">{emptyText}</div>
         ) : null}
       </div>
     </section>

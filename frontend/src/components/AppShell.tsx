@@ -42,6 +42,7 @@ export function AppShell({
     finder: "Finder",
     inventory: "Inventory",
     documents: "Documents",
+    corpus: "Corpus",
     review: "Review",
     trace: "Trace",
     status: "Status",
@@ -77,6 +78,7 @@ export function AppShell({
       ? [{
       label: "Admin",
       items: [
+        ...(canManageSystem ? [{ id: "corpus" as View, label: "Corpus" }] : []),
         ...(isAdmin ? [{ id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` }] : []),
         ...(canManageSystem ? [{ id: "settings" as View, label: "System Settings" }] : [])
       ]
