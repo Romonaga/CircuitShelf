@@ -28,6 +28,9 @@ import type {
   EntityContext,
   EntityMember,
   PasswordPolicy,
+  AIModelPricing,
+  AIProviderSettings,
+  AIProviderSettingsPayload,
   UploadDocumentsResponse
 } from "./types";
 
@@ -115,6 +118,39 @@ export function updateSystemPasswordPolicy(policy: PasswordPolicy): Promise<{ po
   return requestJson<{ policy: PasswordPolicy }>("/api/system/password-policy", {
     method: "PUT",
     body: JSON.stringify(policy)
+  });
+}
+
+export function getAccountAIProvider(): Promise<{ settings: AIProviderSettings; pricing: AIModelPricing[] }> {
+  return requestJson<{ settings: AIProviderSettings; pricing: AIModelPricing[] }>("/api/account/ai-provider");
+}
+
+export function updateAccountAIProvider(payload: AIProviderSettingsPayload): Promise<{ settings: AIProviderSettings }> {
+  return requestJson<{ settings: AIProviderSettings }>("/api/account/ai-provider", {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getEntityAIProvider(): Promise<{ settings: AIProviderSettings; pricing: AIModelPricing[] }> {
+  return requestJson<{ settings: AIProviderSettings; pricing: AIModelPricing[] }>("/api/entity/ai-provider");
+}
+
+export function updateEntityAIProvider(payload: AIProviderSettingsPayload): Promise<{ settings: AIProviderSettings }> {
+  return requestJson<{ settings: AIProviderSettings }>("/api/entity/ai-provider", {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getSystemAIProvider(): Promise<{ settings: AIProviderSettings; pricing: AIModelPricing[] }> {
+  return requestJson<{ settings: AIProviderSettings; pricing: AIModelPricing[] }>("/api/system/ai-provider");
+}
+
+export function updateSystemAIProvider(payload: AIProviderSettingsPayload): Promise<{ settings: AIProviderSettings }> {
+  return requestJson<{ settings: AIProviderSettings }>("/api/system/ai-provider", {
+    method: "PUT",
+    body: JSON.stringify(payload)
   });
 }
 

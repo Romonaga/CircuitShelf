@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { getSettings, getSystemPasswordPolicy, updateSetting, updateSystemPasswordPolicy } from "../api";
+import { getSettings, getSystemAIProvider, getSystemPasswordPolicy, updateSetting, updateSystemAIProvider, updateSystemPasswordPolicy } from "../api";
 import type { AppSetting, SettingValue } from "../types";
 import { errorMessage } from "../lib/errors";
 import { ErrorMessage } from "./ErrorMessage";
+import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";
 import { PasswordPolicyPanel } from "./PasswordPolicyPanel";
 import { SectionHeader } from "./SectionHeader";
 
@@ -188,6 +189,15 @@ export function SettingsView() {
           loadPolicy={getSystemPasswordPolicy}
           savePolicy={updateSystemPasswordPolicy}
           canManage
+        />
+        <AIProviderSettingsPanel
+          title="System OpenAI key"
+          description="System-paid AI assist configuration for global corpus and operator workflows."
+          loadSettings={getSystemAIProvider}
+          saveSettings={updateSystemAIProvider}
+          canManage
+          showKeyPolicy={false}
+          showBudget={false}
         />
         <form className="settings-editor-panel" onSubmit={submit}>
           <SectionHeader

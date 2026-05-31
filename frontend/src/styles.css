@@ -1121,6 +1121,7 @@ nav {
 
 .entity-hero,
 .policy-panel,
+.ai-provider-panel,
 .members-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1150,6 +1151,64 @@ nav {
   grid-template-columns: repeat(4, minmax(140px, 1fr));
   gap: 12px;
   margin: 14px 0;
+}
+
+.ai-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.ai-provider-grid.compact {
+  grid-template-columns: repeat(3, minmax(130px, 1fr));
+}
+
+.ai-provider-enabled {
+  min-height: 42px;
+  align-self: end;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.ai-key-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(240px, 1.3fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.ai-key-row strong,
+.ai-key-row span {
+  display: block;
+}
+
+.ai-key-row span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.pricing-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 14px;
+}
+
+.pricing-strip span {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--panel-raised);
+  font-size: 0.82rem;
 }
 
 .settings-editor-stack {
@@ -3314,6 +3373,13 @@ nav {
   .assembly-builder-controls,
   .assembly-section-grid,
   .assembly-tool-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .policy-grid,
+  .ai-provider-grid,
+  .ai-provider-grid.compact,
+  .ai-key-row {
     grid-template-columns: 1fr;
   }
 }

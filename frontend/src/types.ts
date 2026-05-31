@@ -63,6 +63,44 @@ export interface PasswordPolicy {
   updatedAt?: string | null;
 }
 
+export interface AIModelPricing {
+  provider: string;
+  modelName: string;
+  inputPerMillion: number;
+  cachedInputPerMillion: number;
+  outputPerMillion: number;
+  currency: string;
+  isActive: boolean;
+  updatedAt?: string | null;
+}
+
+export interface AIProviderSettings {
+  scope: "system" | "entity" | "user" | string;
+  provider: string;
+  enabled: boolean;
+  hasApiKey: boolean;
+  keyPreview: string;
+  keyPolicy: string;
+  assistMode: string;
+  defaultModel: string;
+  monthlyBudget: number;
+  warnPercent: number;
+  stopPercent: number;
+  updatedAt?: string | null;
+}
+
+export interface AIProviderSettingsPayload {
+  enabled: boolean;
+  apiKey?: string;
+  clearApiKey?: boolean;
+  keyPolicy?: string;
+  assistMode: string;
+  defaultModel: string;
+  monthlyBudget: number;
+  warnPercent: number;
+  stopPercent: number;
+}
+
 export interface QueryOptions {
   topK: number;
   distanceThreshold: number;

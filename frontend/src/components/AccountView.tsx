@@ -1,7 +1,8 @@
 import { FormEvent, useState } from "react";
-import { updateAccountPassword } from "../api";
+import { getAccountAIProvider, updateAccountAIProvider, updateAccountPassword } from "../api";
 import type { ThemeMode } from "../hooks/useThemePreference";
 import { errorMessage } from "../lib/errors";
+import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 
@@ -77,6 +78,15 @@ export function AccountView({
           {busy ? "Updating..." : "Update password"}
         </button>
       </form>
+
+      <AIProviderSettingsPanel
+        title="Personal OpenAI key"
+        description="Optional bring-your-own-key settings. Personal usage is tracked separately from entity-paid work."
+        loadSettings={getAccountAIProvider}
+        saveSettings={updateAccountAIProvider}
+        canManage
+        showBudget
+      />
     </section>
   );
 }

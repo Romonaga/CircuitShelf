@@ -44,6 +44,10 @@ from fastapi.staticfiles import StaticFiles
 
 
 #internal
+from backend.api.dependencies import ApiDependencies
+from backend.api import account as account_api
+from backend.api import ai_settings as ai_settings_api
+from backend.api import entity as entity_api
 from state_manager import StateManager
 from chunking_util import ChunkingUtils
 from tokenize_util import TokenUtils
@@ -72,6 +76,7 @@ from db.assembly_plan_store import AssemblyPlanStore
 from db.conversation_store import ConversationStore
 from db.datasheet_intelligence_store import DatasheetIntelligenceStore
 from db.account_profile import AccountProfileStore
+from db.ai_provider_store import AIProviderStore
 from db.entities import EntityStore
 from db.image_store import ImageStore
 from db.lab_inventory import LabInventoryStore, ProjectFinderStore
@@ -139,6 +144,7 @@ user_store = UserStore(database, trace_logger)
 entity_store = EntityStore(database, trace_logger)
 password_policy_store = PasswordPolicyStore(database, trace_logger)
 account_profile_store = AccountProfileStore(database, trace_logger)
+ai_provider_store = AIProviderStore(database, "config/config.yaml", trace_logger)
 user_preferences_store = UserPreferencesStore(database, trace_logger)
 query_log_store = QueryLogStore(database, trace_logger)
 conversation_store = ConversationStore(database, trace_logger)
@@ -3071,131 +3077,26 @@ def review_image_payload(row):
     }
 
 
-@app.post("/api/login")
-async def login(req: Request):
-    data = await req.json()
-    username = data.get("username", "")
-    password = data.get("password", "")
-    user = verify_user(username, password)
-    if user:
-        session = user_store.create_session(user, ttl_seconds=session_timeout_seconds())
-        payload = user_payload(session)
-        payload.update({"ok": True, "token": session.token})
-        return payload
-    return {"ok": False, "error": "Invalid credentials"}
-
-
-@app.post("/api/logout")
-async def logout(req: Request):
-    user_store.delete_session(bearer_token_from_request(req))
-    return {"ok": True}
-
-
-@app.get("/api/me")
-async def account_me(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    profile = account_profile_store.get(user_id_for_user(user))
-    payload = user_payload(user)
-    payload["profile"] = profile
-    return payload
-
-
-@app.put("/api/account/profile")
-async def account_profile_update(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    data = await req.json()
-    profile = account_profile_store.update(user_id_for_user(user), data)
-    return {"profile": profile}
-
-
-@app.get("/api/entity/current")
-async def entity_current(req: Request):
-    user, entity, error = require_entity_member(req)
-    if error:
-        return error
-    return {"entity": entity.to_api(), "user": user_payload(user)}
-
-
-@app.get("/api/entity/members")
-async def entity_members(req: Request):
-    user, entity, error = require_entity_admin(req)
-    if error:
-        return error
-    return {"entity": entity.to_api(), "members": entity_store.members(entity.entity_id)}
-
-
-@app.get("/api/entity/password-policy")
-async def entity_password_policy(req: Request):
-    user, entity, error = require_entity_admin(req)
-    if error:
-        return error
-    return {"policy": password_policy_store.effective_policy(entity.entity_id)}
-
-
-@app.put("/api/entity/password-policy")
-async def entity_password_policy_update(req: Request):
-    user, entity, error = require_entity_admin(req)
-    if error:
-        return error
-    data = await req.json()
-    return {"policy": password_policy_store.upsert_policy(entity.entity_id, data, user_id_for_user(user))}
-
-
-@app.get("/api/system/password-policy")
-async def system_password_policy(req: Request):
-    user, error = require_system_admin_user(req)
-    if error:
-        return error
-    return {"policy": password_policy_store.effective_policy(None)}
-
-
-@app.put("/api/system/password-policy")
-async def system_password_policy_update(req: Request):
-    user, error = require_system_admin_user(req)
-    if error:
-        return error
-    data = await req.json()
-    return {"policy": password_policy_store.upsert_policy(None, data, user_id_for_user(user))}
-
-
-@app.get("/api/user/preferences/{key}")
-async def user_preference_get(key: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    if key not in USER_PREFERENCE_KEYS:
-        return JSONResponse({"error": "Unknown preference key."}, status_code=404)
-    return {"key": key, "value": user_preferences_store.get(user_id_for_user(user), key, {})}
-
-
-@app.put("/api/user/preferences/{key}")
-async def user_preference_update(key: str, req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    if key not in USER_PREFERENCE_KEYS:
-        return JSONResponse({"error": "Unknown preference key."}, status_code=404)
-    data = await req.json()
-    return {"key": key, "value": user_preferences_store.set(user_id_for_user(user), key, data.get("value") or {})}
-
-
-@app.put("/api/account/password")
-async def account_password_update(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return error
-    data = await req.json()
-    current_password = str(data.get("currentPassword") or "")
-    new_password = str(data.get("newPassword") or "")
-    if len(new_password) < 8:
-        return JSONResponse({"error": "New password must be at least 8 characters."}, status_code=400)
-    if not user_store.change_password(user_id_for_user(user), current_password, new_password):
-        return JSONResponse({"error": "Current password is not correct."}, status_code=400)
-    return {"ok": True}
+api_dependencies = ApiDependencies(
+    require_authenticated_user=require_authenticated_user,
+    require_entity_member=require_entity_member,
+    require_entity_admin=require_entity_admin,
+    require_system_admin_user=require_system_admin_user,
+    bearer_token_from_request=bearer_token_from_request,
+    session_timeout_seconds=session_timeout_seconds,
+    user_payload=user_payload,
+    user_id_for_user=user_id_for_user,
+    verify_user=verify_user,
+    user_store=user_store,
+    user_preferences_store=user_preferences_store,
+    account_profile_store=account_profile_store,
+    entity_store=entity_store,
+    password_policy_store=password_policy_store,
+    ai_provider_store=ai_provider_store,
+)
+app.include_router(account_api.create_router(api_dependencies, USER_PREFERENCE_KEYS))
+app.include_router(entity_api.create_router(api_dependencies))
+app.include_router(ai_settings_api.create_router(api_dependencies))
 
 
 @app.get("/api/app-config")

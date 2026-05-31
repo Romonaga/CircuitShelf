@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { getEntityMembers, getEntityPasswordPolicy, updateEntityPasswordPolicy } from "../api";
+import { getEntityAIProvider, getEntityMembers, getEntityPasswordPolicy, updateEntityAIProvider, updateEntityPasswordPolicy } from "../api";
 import type { EntityContext, EntityMember } from "../types";
 import { errorMessage } from "../lib/errors";
 import { ErrorMessage } from "./ErrorMessage";
+import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";
 import { PasswordPolicyPanel } from "./PasswordPolicyPanel";
 import { SectionHeader } from "./SectionHeader";
 
@@ -55,6 +56,17 @@ export function EntitySettingsView({
         savePolicy={updateEntityPasswordPolicy}
         canManage={canManage}
       />
+
+      {canManage ? (
+        <AIProviderSettingsPanel
+          title="Entity OpenAI key"
+          description="Entity-paid AI assist configuration for shared workflows inside this workspace."
+          loadSettings={getEntityAIProvider}
+          saveSettings={updateEntityAIProvider}
+          canManage={canManage}
+          showBudget
+        />
+      ) : null}
 
       {canManage ? (
         <div className="members-panel">
