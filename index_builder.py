@@ -23,12 +23,13 @@ class IndexBuilder:
     sources, metadata, and optional image OCR text.
     """
 
-    def __init__(self, state, chunker, embedder, config: dict[str, Any], logger):
+    def __init__(self, state, chunker, embedder, config: dict[str, Any], logger, batch_size_resolver=None):
         self.state = state
         self.chunker = chunker
         self.embedder = embedder
         self.config = config
         self.logger = logger
+        self.batch_size_resolver = batch_size_resolver
 
     def build(self) -> IndexBuildResult:
         raw_chunks = self.state.get_chunks()
@@ -86,7 +87,7 @@ class IndexBuilder:
         return len(image_ids)
 
     def _encode(self, texts: list[str]) -> np.ndarray:
-        batch_size = self.config.get("EMBED_BATCH_SIZE", 32)
+        batch_size = self.batch_size_resolver() if self.batch_size_resolver else self.config.get("EMBED_BATCH_SIZE", 32)
         embeddings = self.embedder.encode(texts, batch_size=batch_size, convert_to_numpy=True)
         embeddings = np.asarray(embeddings, dtype="float32")
         if embeddings.ndim != 2 or embeddings.shape[0] != len(texts):

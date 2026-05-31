@@ -1,7 +1,9 @@
 import type { StatusPayload } from "../types";
 import { formatNumber, formatObject } from "../lib/format";
 import { useLogTail } from "../hooks/useLogTail";
+import { IngestStatusPanel } from "./IngestStatusPanel";
 import { LogTailPanel } from "./LogTailPanel";
+import { RuntimeBatchPanel } from "./RuntimeBatchPanel";
 import { SectionHeader } from "./SectionHeader";
 import { Stat } from "./Stat";
 
@@ -39,7 +41,9 @@ export function StatusView({
       </div>
       <h3>Cache</h3>
       <pre className="json-view">{formatObject(status?.cacheStats)}</pre>
+      <RuntimeBatchPanel batches={status?.runtimeBatches} />
       <h3>Ingestion</h3>
+      <IngestStatusPanel ingest={status?.ingest} workerBudget={status?.ingestWorkerBudget} pendingReview={status?.pendingReview} />
       <pre className="json-view">{formatObject(status?.ingest)}</pre>
       {isAdmin ? <LogTailPanel tail={logTail.tail} loading={logTail.loading} error={logTail.error} onRefresh={logTail.refresh} /> : null}
     </section>

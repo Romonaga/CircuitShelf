@@ -4,6 +4,7 @@ import { formatNumber } from "../lib/format";
 import type { ThemeMode } from "../hooks/useThemePreference";
 import { LogoMark } from "./LogoMark";
 import { Stat } from "./Stat";
+import { SidebarSystemCard } from "./SidebarSystemCard";
 
 export function AppShell({
   activeView,
@@ -46,6 +47,7 @@ export function AppShell({
     review: "Review",
     trace: "Trace",
     status: "Status",
+    performance: "Performance",
     settings: "Admin Settings",
     entity: "Entity",
     account: "Account"
@@ -71,7 +73,8 @@ export function AppShell({
       label: "System",
       items: [
         { id: "trace" as View, label: "Trace" },
-        { id: "status" as View, label: "Status" }
+        { id: "status" as View, label: "Status" },
+        { id: "performance" as View, label: "Performance" }
       ]
     },
     ...(isAdmin || canManageSystem
@@ -118,11 +121,10 @@ export function AppShell({
           ))}
         </nav>
         <div className="sidebar-footer">
+          <SidebarSystemCard status={status} />
           <Stat label="Chunks" value={formatNumber(status?.chunks)} />
           <Stat label="Sources" value={formatNumber(status?.sources)} />
-          <button className="ghost-button" onClick={onRefresh}>
-            Refresh
-          </button>
+          <button className="ghost-button compact-refresh" onClick={onRefresh}>Refresh status</button>
         </div>
       </aside>
       <main className="workspace">

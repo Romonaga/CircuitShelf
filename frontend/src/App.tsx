@@ -7,6 +7,7 @@ import { DocumentsView } from "./components/DocumentsView";
 import { InventoryView } from "./components/InventoryView";
 import { LoginView } from "./components/LoginView";
 import { ProjectFinderView } from "./components/ProjectFinderView";
+import { PerformanceView } from "./components/PerformanceView";
 import { ReviewView } from "./components/ReviewView";
 import { StatusView } from "./components/StatusView";
 import { SettingsView } from "./components/SettingsView";
@@ -115,6 +116,14 @@ export default function App() {
       </div>
       <div hidden={activeView !== "status"}>
         <StatusView status={status} refresh={refreshStatus} isActive={activeView === "status"} isAdmin={Boolean(user?.isAdmin)} />
+      </div>
+      <div hidden={activeView !== "performance"}>
+        <PerformanceView
+          status={status}
+          refresh={refreshStatus}
+          isActive={activeView === "performance"}
+          onOpenReview={() => setActiveView("review")}
+        />
       </div>
       <div hidden={activeView !== "account"}>
         <AccountView username={user?.username || "local"} theme={theme} setTheme={setTheme} />

@@ -55,6 +55,11 @@ from backend.api import query as query_api
 from backend.api import review as review_api
 from backend.api import settings as settings_api
 from backend.api import status as status_api
+from backend.services.runtime_status_service import (
+    build_resource_status,
+    build_runtime_batch_status,
+    effective_embedding_batch_size as runtime_effective_embedding_batch_size,
+)
 from state_manager import StateManager
 from chunking_util import ChunkingUtils
 from tokenize_util import TokenUtils
@@ -699,7 +704,7 @@ def load_db_image_state():
     state.set_image_captions(captions)
     state.set_image_page_text(page_text)
     state.set_image_mime_types(mime_types)
-    builder = IndexBuilder(state, chunker, embedder, config, trace_logger)
+    builder = IndexBuilder(state, chunker, embedder, config, trace_logger, batch_size_resolver=effective_embedding_batch_size)
     return builder.build_image_index()
 
 
@@ -757,7 +762,7 @@ def persist_db_image_state(file_records, target_state=None, rel_paths=None, prog
             )
         encoded = embedder.encode(
             [image_text[key] for key in image_ids],
-            batch_size=config.get("EMBED_BATCH_SIZE", 32),
+            batch_size=effective_embedding_batch_size(),
             convert_to_numpy=True,
         ).astype("float32")
         image_embeddings = {key: encoded[idx] for idx, key in enumerate(image_ids)}
@@ -819,7 +824,7 @@ def backfill_missing_image_embeddings(limit=512):
     trace_logger.info(f"🖼️ Backfilling {len(missing)} missing DB image embeddings.")
     encoded = embedder.encode(
         [row["embedding_text"] for row in missing],
-        batch_size=config.get("EMBED_BATCH_SIZE", 32),
+        batch_size=effective_embedding_batch_size(),
         convert_to_numpy=True,
     ).astype("float32")
     image_store.update_embeddings(
@@ -1500,7 +1505,7 @@ def persist_incremental_document(extracted, current_manifest):
             "ocrImageTexts": sum(raw_ocr_image_counts.values()),
         },
     )
-    builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
+    builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger, batch_size_resolver=effective_embedding_batch_size)
     build_result = builder.build()
     update_index_progress(
         current_file=source,
@@ -1709,7 +1714,7 @@ def reindex_review_source(source):
             "ocrImageTexts": sum(raw_ocr_image_counts.values()),
         },
     )
-    builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger)
+    builder = IndexBuilder(ingested_state, ingest_chunker, embedder, config, trace_logger, batch_size_resolver=effective_embedding_batch_size)
     build_result = builder.build()
     update_index_progress(
         stage="persisting_chunks",
@@ -2779,6 +2784,10 @@ def get_response_cache():
     return db_response_cache
 
 
+def effective_embedding_batch_size():
+    return runtime_effective_embedding_batch_size(config)
+
+
 def current_index_fingerprint():
     return vector_store.catalog_fingerprint()
 
@@ -2812,6 +2821,7 @@ def build_runtime_status():
     image_counts = image_store.counts()
     image_ids = state.get_image_id_list()
     cpu_count = detected_cpu_count()
+    system_resources = build_resource_status(cpu_count)
     return {
         "chunks": vector_counts.get("chunks", 0),
         "sources": vector_counts.get("documents", 0),
@@ -2828,6 +2838,13 @@ def build_runtime_status():
             "usableCores": usable_core_count(cpu_count),
             "activeDocumentWorkers": active_document_worker_count() if index_status.get("running") else 0,
         },
+        "runtimeBatches": build_runtime_batch_status(
+            config=config,
+            embedding_model=EMBED_MODEL_NAME,
+            reranker_model=CROSS_ENCODER_MODEL,
+            gpu_status=system_resources.get("gpu", {}),
+        ),
+        "systemResources": system_resources,
         "ingest": dict(index_status),
     }
 

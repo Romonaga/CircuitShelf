@@ -1,5 +1,5 @@
 export type RetrievalStrategy = "Vector only" | "Vector + CrossEncoder" | string;
-export type View = "ask" | "bench" | "finder" | "inventory" | "documents" | "corpus" | "review" | "trace" | "status" | "settings" | "entity" | "account";
+export type View = "ask" | "bench" | "finder" | "inventory" | "documents" | "corpus" | "review" | "trace" | "status" | "performance" | "settings" | "entity" | "account";
 
 export interface EntityContext {
   id: number;
@@ -566,6 +566,8 @@ export interface StatusPayload {
   pendingReview?: number;
   cacheStats: unknown;
   ingestWorkerBudget?: IngestWorkerBudget;
+  runtimeBatches?: RuntimeBatches;
+  systemResources?: SystemResources;
   ingest?: IngestStatus;
 }
 
@@ -574,6 +576,51 @@ export interface IngestWorkerBudget {
   reservedCores: number;
   usableCores: number;
   activeDocumentWorkers: number;
+}
+
+export interface RuntimeBatchStatus {
+  model?: string | null;
+  configured: number;
+  recommended: number;
+  active: number;
+  auto: boolean;
+}
+
+export interface RuntimeBatches {
+  embedding: RuntimeBatchStatus;
+  reranker: RuntimeBatchStatus;
+}
+
+export interface SystemResources {
+  sampledAt?: string;
+  cpu?: {
+    cores?: number;
+    utilizationPercent?: number | null;
+    loadAverage?: number[] | null;
+  };
+  memory?: {
+    totalBytes?: number;
+    usedBytes?: number;
+    availableBytes?: number;
+    usedPercent?: number | null;
+  };
+  process?: {
+    pid?: number;
+    memoryBytes?: number;
+    cpuPercent?: number | null;
+    threads?: number;
+  };
+  gpu?: {
+    available?: boolean;
+    name?: string;
+    utilizationPercent?: number | null;
+    memoryUsedMiB?: number;
+    memoryTotalMiB?: number;
+    memoryUsedPercent?: number | null;
+    temperatureC?: number | null;
+    powerW?: number | null;
+    error?: string | null;
+  };
 }
 
 export interface LogTailPayload {

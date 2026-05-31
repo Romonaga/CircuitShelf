@@ -12,6 +12,27 @@ export function formatInteger(value: number | null | undefined): string {
   return value.toLocaleString();
 }
 
+export function formatBytes(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "n/a";
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = Math.max(0, value);
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toLocaleString(undefined, { maximumFractionDigits: unit === 0 ? 0 : 1 })} ${units[unit]}`;
+}
+
+export function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "n/a";
+  }
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
+}
+
 export function formatObject(value: unknown): string {
   if (value === null || value === undefined) {
     return "n/a";
