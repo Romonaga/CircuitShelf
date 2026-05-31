@@ -40,7 +40,7 @@ def create_router(
     @router.post("/api/query")
     async def react_query(req: Request, payload: QueryRequest):
         try:
-            user, error = deps.require_authenticated_user(req)
+            user, entity, error = deps.require_entity_member(req)
             if error:
                 return error
             question = payload.question
@@ -71,6 +71,9 @@ def create_router(
                 model_name=model_name,
                 user_id=user_id,
                 username=username,
+                entity_id=entity.entity_id,
+                ai_context_type="conversation",
+                ai_context_id=str(conversation_id),
             )
             stored_answer = chat_history[-1][1] if chat_history else answer
             conversation_store.append_turn(

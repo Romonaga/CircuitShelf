@@ -720,6 +720,7 @@ export interface AIUsageReport {
   byUser: AIUsageBreakdown[];
   byPayer: AIUsageBreakdown[];
   byModel: AIUsageBreakdown[];
+  byContext: AIUsageBreakdown[];
   events: AIUsageEvent[];
 }
 

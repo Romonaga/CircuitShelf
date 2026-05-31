@@ -11,6 +11,7 @@ from response_cache import (
 class ResponseCacheTests(unittest.TestCase):
     def make_key(self, **overrides):
         values = {
+            "entity_id": 1,
             "index_fingerprint": "index-a",
             "model": "electronics-helper:latest",
             "strategy": "Vector + CrossEncoder",
@@ -34,6 +35,12 @@ class ResponseCacheTests(unittest.TestCase):
         self.assertNotEqual(
             self.make_key(top_k=5).digest(),
             self.make_key(top_k=15).digest(),
+        )
+
+    def test_cache_key_includes_entity(self):
+        self.assertNotEqual(
+            self.make_key(entity_id=1).digest(),
+            self.make_key(entity_id=2).digest(),
         )
 
     def test_response_cache_round_trip(self):

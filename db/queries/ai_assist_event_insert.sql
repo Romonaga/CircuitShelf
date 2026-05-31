@@ -1,0 +1,39 @@
+INSERT INTO ai_assist_events (
+    entity_id,
+    user_id,
+    provider_type_id,
+    task_type_id,
+    model_name,
+    context_type,
+    context_id,
+    round_number,
+    round_count,
+    input_tokens,
+    cached_input_tokens,
+    output_tokens,
+    estimated_cost,
+    paid_by,
+    provider_key_owner_user_id,
+    success,
+    error_message
+)
+VALUES (
+    %s,
+    %s,
+    (SELECT id FROM ai_provider_types WHERE code = %s),
+    (SELECT id FROM ai_task_types WHERE code = %s),
+    %s,
+    %s,
+    %s::uuid,
+    %s,
+    %s,
+    %s,
+    %s,
+    %s,
+    %s,
+    %s,
+    %s,
+    %s,
+    %s
+)
+RETURNING id;

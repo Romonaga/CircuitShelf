@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import yaml
 
@@ -43,6 +44,119 @@ class AIProviderStore:
             for row in rows
         ]
 
+    def pricing_for_model(self, model_name: str, provider: str = "openai") -> dict[str, Any]:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("ai_model_pricing_get.sql"), (provider, model_name)).fetchone()
+        if not row:
+            return {
+                "provider": provider,
+                "modelName": model_name,
+                "inputPerMillion": 0.0,
+                "cachedInputPerMillion": 0.0,
+                "outputPerMillion": 0.0,
+                "currency": "USD",
+            }
+        return {
+            "provider": row["provider_code"],
+            "modelName": row["model_name"],
+            "inputPerMillion": float(row["input_per_million"] or 0),
+            "cachedInputPerMillion": float(row["cached_input_per_million"] or 0),
+            "outputPerMillion": float(row["output_per_million"] or 0),
+            "currency": row["currency"],
+        }
+
+    def estimate_cost(
+        self,
+        *,
+        provider: str,
+        model_name: str,
+        input_tokens: int,
+        cached_input_tokens: int = 0,
+        output_tokens: int = 0,
+    ) -> float:
+        pricing = self.pricing_for_model(model_name, provider)
+        regular_input_tokens = max(0, int(input_tokens or 0) - int(cached_input_tokens or 0))
+        cost = (
+            regular_input_tokens * pricing["inputPerMillion"]
+            + int(cached_input_tokens or 0) * pricing["cachedInputPerMillion"]
+            + int(output_tokens or 0) * pricing["outputPerMillion"]
+        ) / 1_000_000
+        return round(float(cost), 8)
+
+    def resolve_openai_assist(
+        self,
+        *,
+        entity_id: int | None,
+        user_id: int | None,
+        default_model: str = "gpt-5-chat-latest",
+    ) -> dict[str, Any] | None:
+        system = self._secret_row("system", provider="openai")
+        entity = self._secret_row("entity", entity_id=entity_id, provider="openai") if entity_id else None
+        user = self._secret_row("user", user_id=user_id, provider="openai") if user_id else None
+
+        def usable(row: dict[str, Any] | None) -> bool:
+            return bool(row and row.get("enabled") and row.get("apiKey") and row.get("assistMode") != "off")
+
+        entity_policy = (entity or {}).get("keyPolicy") or "entity"
+        user_policy = (user or {}).get("keyPolicy") or "user_when_available"
+
+        if usable(user) and user_policy in {"user_when_available", "user_only"}:
+            return self._resolved_provider(row=user, paid_by="user", owner_user_id=user_id, default_model=default_model)
+        if entity_policy == "user_only":
+            return None
+        if usable(entity) and entity_policy in {"entity", "user_when_available"}:
+            return self._resolved_provider(row=entity, paid_by="entity", owner_user_id=None, default_model=default_model)
+        if usable(system):
+            return self._resolved_provider(row=system, paid_by="system", owner_user_id=None, default_model=default_model)
+        return None
+
+    def record_ai_assist_event(
+        self,
+        *,
+        entity_id: int | None,
+        user_id: int | None,
+        provider: str,
+        task_type: str,
+        model_name: str,
+        context_type: str = "",
+        context_id: str | None = None,
+        round_number: int = 1,
+        round_count: int = 1,
+        input_tokens: int = 0,
+        cached_input_tokens: int = 0,
+        output_tokens: int = 0,
+        estimated_cost: float = 0.0,
+        paid_by: str = "unknown",
+        provider_key_owner_user_id: int | None = None,
+        success: bool = True,
+        error_message: str | None = None,
+    ) -> int | None:
+        safe_context_id = self._uuid_or_none(context_id)
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("ai_assist_event_insert.sql"),
+                (
+                    entity_id,
+                    user_id,
+                    provider,
+                    task_type,
+                    model_name,
+                    context_type or "",
+                    safe_context_id,
+                    int(round_number or 1),
+                    int(round_count or 1),
+                    int(input_tokens or 0),
+                    int(cached_input_tokens or 0),
+                    int(output_tokens or 0),
+                    float(estimated_cost or 0),
+                    paid_by,
+                    provider_key_owner_user_id,
+                    bool(success),
+                    str(error_message or "")[:1000] if error_message else None,
+                ),
+            ).fetchone()
+        return int(row["id"]) if row else None
+
     def usage_report(self, *, entity_id: int | None, days: int = 31, limit: int = 250) -> dict[str, Any]:
         with self.database.connection() as conn:
             rows = conn.execute(
@@ -67,6 +181,7 @@ class AIProviderStore:
             "byUser": self._usage_breakdown(events, "username"),
             "byPayer": self._usage_breakdown(events, "paidBy"),
             "byModel": self._usage_breakdown(events, "modelName"),
+            "byContext": self._usage_breakdown(events, "contextLabel"),
         }
 
     def get_system_settings(self, provider: str = "openai") -> dict[str, Any]:
@@ -182,6 +297,79 @@ class AIProviderStore:
         key = str(api_key).strip()
         return key, f"{key[:7]}...{key[-4:]}", True
 
+    def _secret_row(
+        self,
+        scope: str,
+        *,
+        provider: str,
+        entity_id: int | None = None,
+        user_id: int | None = None,
+    ) -> dict[str, Any] | None:
+        try:
+            if scope == "system":
+                args = (self.encryption_secret(), provider)
+                query = "system_ai_provider_secret_get.sql"
+            elif scope == "entity":
+                if entity_id is None:
+                    return None
+                args = (self.encryption_secret(), int(entity_id), provider)
+                query = "entity_ai_provider_secret_get.sql"
+            elif scope == "user":
+                if user_id is None:
+                    return None
+                args = (self.encryption_secret(), int(user_id), provider)
+                query = "user_ai_provider_secret_get.sql"
+            else:
+                return None
+            with self.database.connection() as conn:
+                row = conn.execute(load_query(query), args).fetchone()
+        except Exception as exc:
+            if self.logger:
+                self.logger.warning(f"AI provider secret lookup failed for {scope}: {exc}")
+            return None
+        if not row:
+            return None
+        return {
+            "scope": scope,
+            "provider": row["provider_code"],
+            "enabled": bool(row["enabled"]),
+            "apiKey": row.get("api_key") or "",
+            "keyPreview": row.get("key_preview") or "",
+            "keyPolicy": row.get("key_policy") or ("system" if scope == "system" else scope),
+            "assistMode": row.get("assist_mode") or "auto",
+            "defaultModel": row.get("default_model") or "",
+            "monthlyBudget": float(row.get("monthly_budget") or 0),
+            "warnPercent": int(row.get("warn_percent") or 80),
+            "stopPercent": int(row.get("stop_percent") or 100),
+        }
+
+    @staticmethod
+    def _resolved_provider(
+        *,
+        row: dict[str, Any],
+        paid_by: str,
+        owner_user_id: int | None,
+        default_model: str,
+    ) -> dict[str, Any]:
+        return {
+            "provider": row.get("provider") or "openai",
+            "apiKey": row.get("apiKey") or "",
+            "assistMode": row.get("assistMode") or "auto",
+            "modelName": row.get("defaultModel") or default_model,
+            "paidBy": paid_by,
+            "providerKeyOwnerUserId": owner_user_id if paid_by == "user" else None,
+            "scope": row.get("scope"),
+        }
+
+    @staticmethod
+    def _uuid_or_none(value: str | None) -> str | None:
+        if not value:
+            return None
+        try:
+            return str(UUID(str(value)))
+        except Exception:
+            return None
+
     @staticmethod
     def _settings_row(row: dict[str, Any] | None, *, scope: str, provider: str) -> dict[str, Any]:
         if not row:
@@ -229,6 +417,7 @@ class AIProviderStore:
             "modelName": row.get("model_name") or "Unknown",
             "contextType": row.get("context_type") or "",
             "contextId": str(row.get("context_id")) if row.get("context_id") else "",
+            "contextLabel": self._context_label(row.get("context_type"), row.get("context_id")),
             "roundNumber": int(row.get("round_number") or 1),
             "roundCount": int(row.get("round_count") or 1),
             "inputTokens": int(row.get("input_tokens") or 0),
@@ -256,6 +445,14 @@ class AIProviderStore:
             key=lambda item: item["estimatedCost"],
             reverse=True,
         )
+
+    @staticmethod
+    def _context_label(context_type: Any, context_id: Any) -> str:
+        if not context_type:
+            return "Unscoped"
+        if not context_id:
+            return str(context_type)
+        return f"{context_type}:{str(context_id)[:8]}"
 
     def _load_config(self) -> dict:
         with open(self.config_path, "r", encoding="utf-8") as f:

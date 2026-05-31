@@ -61,6 +61,7 @@ from backend.services.runtime_status_service import (
     build_runtime_batch_status,
     effective_embedding_batch_size as runtime_effective_embedding_batch_size,
 )
+from backend.services.openai_assist_service import OpenAIAssistService
 from state_manager import StateManager
 from chunking_util import ChunkingUtils
 from tokenize_util import TokenUtils
@@ -159,6 +160,7 @@ entity_store = EntityStore(database, trace_logger)
 password_policy_store = PasswordPolicyStore(database, trace_logger)
 account_profile_store = AccountProfileStore(database, trace_logger)
 ai_provider_store = AIProviderStore(database, "config/config.yaml", trace_logger)
+openai_assist_service = OpenAIAssistService(ai_provider_store, trace_logger)
 user_preferences_store = UserPreferencesStore(database, trace_logger)
 query_log_store = QueryLogStore(database, trace_logger)
 performance_store = PerformanceStore(database, trace_logger, sample_interval_seconds=5)
@@ -2355,6 +2357,9 @@ def get_rag_response(
     model_name=None,
     user_id=None,
     username=None,
+    entity_id=None,
+    ai_context_type="",
+    ai_context_id=None,
 ):
     start_time = time.time()
     model_name = model_name or (LLM_MODEL_OPTIONS[0] if LLM_MODEL_OPTIONS else LLM_MODEL_NAME)
@@ -2364,6 +2369,7 @@ def get_rag_response(
     cache_enabled = should_cache_response(chat_history, bypass_cache)
     response_cache = get_response_cache()
     cache_key = build_response_cache_key(
+        entity_id=entity_id,
         model_name=model_name,
         strategy=strategy,
         norm_q=norm_q,
@@ -2425,6 +2431,16 @@ def get_rag_response(
     if not all_hits:
         response = f"No relevant documents found for: {norm_q}"
         trace_logger.warning(f"⚠️ No results for query: {norm_q}")
+        validation_payload = None
+        openai_fallback = openai_assist_service.answer_without_sources(
+            question=norm_q,
+            entity_id=entity_id,
+            user_id=user_id,
+            context_type=ai_context_type,
+            context_id=ai_context_id,
+        )
+        if openai_fallback:
+            response, validation_payload = openai_fallback
         chat_history = append_chat_turn(
             chat_history,
             norm_q,
@@ -2432,7 +2448,7 @@ def get_rag_response(
             max_turns=MAX_CHAT_HISTORY_TURNS,
             max_chars=MAX_CHAT_HISTORY_CHARS,
         )
-        return norm_q, response, chat_history, [], response_cache.stats(), "0.00", get_average_query_time(), None, None
+        return norm_q, response, chat_history, [], response_cache.stats(), "0.00", get_average_query_time(), None, validation_payload
 
     dedup_hits = deduplicate_hits_by_index(all_hits)
     rerank_duration = None
@@ -2471,24 +2487,43 @@ def get_rag_response(
         intelligence_for_question_and_sources(retrieval_q, source_payload),
         context_question=retrieval_q,
     )
-    revised_response, validation = finalize_response(
+    openai_finalized = openai_assist_service.finalize_response(
         question=norm_q,
         answer=response,
         source_payload=source_payload,
         build_card=build_card,
-        model_name=model_name,
+        local_model_name=model_name,
         confidence=confidence,
         enabled=RESPONSE_FINALIZER_ENABLED,
         mode=RESPONSE_FINALIZER_MODE,
         min_confidence=RESPONSE_FINALIZER_MIN_CONFIDENCE,
         max_context_chars=RESPONSE_FINALIZER_MAX_CONTEXT_CHARS,
-        llm_call=lambda finalizer_prompt: query_ollama_chat_with_retry(
-            finalizer_prompt,
-            model_name,
-            [],
-            system_prompt=RESPONSE_FINALIZER_SYSTEM_PROMPT,
-        ),
+        entity_id=entity_id,
+        user_id=user_id,
+        context_type=ai_context_type,
+        context_id=ai_context_id,
     )
+    if openai_finalized:
+        revised_response, validation = openai_finalized
+    else:
+        revised_response, validation = finalize_response(
+            question=norm_q,
+            answer=response,
+            source_payload=source_payload,
+            build_card=build_card,
+            model_name=model_name,
+            confidence=confidence,
+            enabled=RESPONSE_FINALIZER_ENABLED,
+            mode=RESPONSE_FINALIZER_MODE,
+            min_confidence=RESPONSE_FINALIZER_MIN_CONFIDENCE,
+            max_context_chars=RESPONSE_FINALIZER_MAX_CONTEXT_CHARS,
+            llm_call=lambda finalizer_prompt: query_ollama_chat_with_retry(
+                finalizer_prompt,
+                model_name,
+                [],
+                system_prompt=RESPONSE_FINALIZER_SYSTEM_PROMPT,
+            ),
+        )
 
     # === Format Output
     image_md_blocks = build_image_markdown_blocks(retrieval_q, selected_chunks) if show_full_text else []
@@ -2848,6 +2883,7 @@ def current_index_fingerprint():
 
 def build_response_cache_key(
     *,
+    entity_id=None,
     model_name,
     strategy,
     norm_q,
@@ -2858,6 +2894,7 @@ def build_response_cache_key(
     show_full_text,
 ):
     return ResponseCacheKey(
+        entity_id=int(entity_id) if entity_id is not None else None,
         index_fingerprint=current_index_fingerprint(),
         model=model_name or "",
         strategy=strategy,

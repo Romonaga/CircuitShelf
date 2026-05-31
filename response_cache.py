@@ -15,6 +15,7 @@ CACHE_SCHEMA_VERSION = 1
 
 @dataclass(frozen=True)
 class ResponseCacheKey:
+    entity_id: int | None
     index_fingerprint: str
     model: str
     strategy: str

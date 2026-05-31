@@ -137,7 +137,7 @@ def create_router(
 
     @router.post("/api/assembly-plans/build")
     async def assembly_plan_build(req: Request, payload: AssemblyBuildRequest):
-        user, error = deps.require_authenticated_user(req)
+        user, entity, error = deps.require_entity_member(req)
         if error:
             return error
         objective = payload.objective.strip()
@@ -158,6 +158,8 @@ def create_router(
             model_name=model_name,
             user_id=deps.user_id_for_user(user),
             username=username_for_user(user),
+            entity_id=entity.entity_id,
+            ai_context_type="assembly_plan",
         )
         api_sources = normalize_sources_for_api(sources)
         if not build_card:

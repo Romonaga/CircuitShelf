@@ -123,6 +123,7 @@ export function AIUsageView({
         <BreakdownCards title="By user" rows={report.report?.byUser ?? []} />
         <BreakdownCards title="By payer" rows={report.report?.byPayer ?? []} />
         <BreakdownCards title="By model" rows={report.report?.byModel ?? []} />
+        <BreakdownCards title="By context" rows={report.report?.byContext ?? []} />
       </div>
       <UsageEventsTable events={report.report?.events ?? []} />
     </section>
