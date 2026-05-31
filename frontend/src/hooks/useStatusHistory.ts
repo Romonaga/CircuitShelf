@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { StatusPayload } from "../types";
+import type { PerformanceSample, StatusPayload } from "../types";
 
 export interface StatusHistoryPoint {
   sampledAt: number;
@@ -12,6 +12,22 @@ export interface StatusHistoryPoint {
   sources: number;
   images: number;
   workers: number;
+}
+
+export function pointFromPerformanceSample(sample: PerformanceSample): StatusHistoryPoint {
+  const sampled = sample.sampledAt ? Date.parse(sample.sampledAt) : Date.now();
+  return {
+    sampledAt: Number.isFinite(sampled) ? sampled : Date.now(),
+    cpu: sample.cpu ?? null,
+    processCpu: sample.processCpu ?? null,
+    ram: sample.ram ?? null,
+    gpu: sample.gpu ?? null,
+    vram: sample.vram ?? null,
+    chunks: sample.chunks ?? 0,
+    sources: sample.sources ?? 0,
+    images: sample.images ?? 0,
+    workers: sample.workers ?? 0,
+  };
 }
 
 function pointFromStatus(status: StatusPayload): StatusHistoryPoint {

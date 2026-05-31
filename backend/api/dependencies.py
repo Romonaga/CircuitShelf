@@ -21,3 +21,4 @@ class ApiDependencies:
     entity_store: Any
     password_policy_store: Any
     ai_provider_store: Any
+    performance_store: Any | None = None

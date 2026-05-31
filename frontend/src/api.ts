@@ -24,6 +24,7 @@ import type {
   InventoryImportItem,
   InventoryImportPreview,
   ProjectFinderResponse,
+  PerformanceReport,
   StatusPayload,
   EntityContext,
   EntityMember,
@@ -407,6 +408,10 @@ export function getTrace(): Promise<Record<string, unknown>> {
 
 export function getStatus(): Promise<StatusPayload> {
   return requestJson<StatusPayload>("/api/status");
+}
+
+export function getPerformanceReport(hours = 24): Promise<PerformanceReport> {
+  return requestJson<PerformanceReport>(`/api/performance?hours=${encodeURIComponent(String(hours))}`);
 }
 
 export function getStatusLogTail(lines = 200): Promise<LogTailPayload> {

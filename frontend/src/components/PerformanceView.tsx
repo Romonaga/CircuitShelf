@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import type { StatusPayload } from "../types";
 import { formatBytes, formatInteger, formatNumber, formatPercent } from "../lib/format";
-import { useStatusHistory } from "../hooks/useStatusHistory";
+import { pointFromPerformanceSample, useStatusHistory } from "../hooks/useStatusHistory";
+import { usePerformanceReport } from "../hooks/usePerformanceReport";
 import { IngestStatusPanel } from "./IngestStatusPanel";
 import { MetricBar } from "./MetricBar";
 import { PerformanceChart } from "./PerformanceChart";
+import { RecentWorkTable } from "./RecentWorkTable";
 import { RuntimeBatchPanel } from "./RuntimeBatchPanel";
 import { SectionHeader } from "./SectionHeader";
 import { Stat } from "./Stat";
@@ -22,7 +24,8 @@ export function PerformanceView({
   isActive: boolean;
   onOpenReview: () => void;
 }) {
-  const history = useStatusHistory(isActive ? status : null);
+  const liveHistory = useStatusHistory(isActive ? status : null);
+  const report = usePerformanceReport(isActive, 24, `${status?.systemResources?.sampledAt ?? ""}:${status?.ingest?.lastFinishedAt ?? ""}`);
   const [chartChoice, setChartChoice] = useState<ChartChoice>("utilization");
   const resources = status?.systemResources;
   const gpu = resources?.gpu;
@@ -30,6 +33,16 @@ export function PerformanceView({
   const process = resources?.process;
   const showChart = (choice: ChartChoice) => chartChoice === "all" || chartChoice === choice;
   const processCpuMax = useMemo(() => Math.max(100, (resources?.cpu?.cores ?? 1) * 100), [resources?.cpu?.cores]);
+  const persistedHistory = useMemo(
+    () => (report.report?.samples ?? []).map(pointFromPerformanceSample),
+    [report.report?.samples]
+  );
+  const history = persistedHistory.length ? persistedHistory : liveHistory;
+
+  function refreshAll() {
+    refresh();
+    void report.refresh();
+  }
 
   return (
     <section className="performance-page">
@@ -45,10 +58,11 @@ export function PerformanceView({
               <option value="workers">Workers and batches</option>
               <option value="all">All charts</option>
             </select>
-            <button className="ghost-button" onClick={refresh}>Refresh</button>
+            <button className="ghost-button" onClick={refreshAll}>Refresh</button>
           </div>
         }
       />
+      {report.error ? <p className="error">{report.error}</p> : null}
 
       <div className="status-grid performance-stats">
         <Stat label="CPU cores" value={formatInteger(resources?.cpu?.cores)} />
@@ -138,6 +152,7 @@ export function PerformanceView({
           />
         </aside>
       </div>
+      <RecentWorkTable rows={report.report?.recentWork ?? []} />
     </section>
   );
 }

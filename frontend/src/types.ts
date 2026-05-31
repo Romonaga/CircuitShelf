@@ -623,6 +623,56 @@ export interface SystemResources {
   };
 }
 
+export interface PerformanceSample {
+  sampledAt?: string | null;
+  cpu?: number | null;
+  processCpu?: number | null;
+  processMemoryBytes?: number | null;
+  processThreads?: number | null;
+  ram?: number | null;
+  gpu?: number | null;
+  vram?: number | null;
+  gpuMemoryUsedMiB?: number | null;
+  gpuMemoryTotalMiB?: number | null;
+  gpuTemperatureC?: number | null;
+  gpuPowerW?: number | null;
+  workers: number;
+  embeddingBatch: number;
+  rerankerBatch: number;
+  chunks: number;
+  sources: number;
+  images: number;
+}
+
+export interface PerformanceWorkRun {
+  id: number;
+  workType: string;
+  workTypeLabel: string;
+  entityId?: number | null;
+  entityName?: string | null;
+  userId?: number | null;
+  username?: string | null;
+  label: string;
+  triggerReason: string;
+  status: string;
+  sourcePath: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  durationMs: number;
+  chunks: number;
+  images: number;
+  droppedChunks: number;
+  details: Record<string, unknown>;
+  errorMessage?: string | null;
+}
+
+export interface PerformanceReport {
+  available: boolean;
+  samples: PerformanceSample[];
+  recentWork: PerformanceWorkRun[];
+  error?: string;
+}
+
 export interface LogTailPayload {
   path: string;
   exists: boolean;

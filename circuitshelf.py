@@ -51,6 +51,7 @@ from backend.api import conversations as conversations_api
 from backend.api import documents as documents_api
 from backend.api import entity as entity_api
 from backend.api import inventory as inventory_api
+from backend.api import performance as performance_api
 from backend.api import query as query_api
 from backend.api import review as review_api
 from backend.api import settings as settings_api
@@ -92,6 +93,7 @@ from db.ai_provider_store import AIProviderStore
 from db.entities import EntityStore
 from db.image_store import ImageStore
 from db.lab_inventory import LabInventoryStore, ProjectFinderStore
+from db.performance_store import PerformanceStore
 from db.query_log_store import QueryLogStore
 from db.response_cache_store import PostgresResponseCache
 from db.runtime_config_store import RuntimeConfigStore
@@ -159,6 +161,7 @@ account_profile_store = AccountProfileStore(database, trace_logger)
 ai_provider_store = AIProviderStore(database, "config/config.yaml", trace_logger)
 user_preferences_store = UserPreferencesStore(database, trace_logger)
 query_log_store = QueryLogStore(database, trace_logger)
+performance_store = PerformanceStore(database, trace_logger, sample_interval_seconds=5)
 conversation_store = ConversationStore(database, trace_logger)
 vector_store = VectorStore(database, config.get("TRAINING_DIR", "training"), config.get("EMBED_MODEL_NAME"), trace_logger)
 image_store = ImageStore(database, config.get("TRAINING_DIR", "training"), trace_logger)
@@ -430,6 +433,10 @@ def run_index_housekeeping():
 
 def utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
 def set_index_status(**updates):
@@ -1763,8 +1770,20 @@ def reindex_review_source(source):
 def check_for_training_changes(reason="watch"):
     if not INDEX_JOB_LOCK.acquire(blocking=False):
         trace_logger.info(f"⏳ Index check skipped for {reason}; another index job is running.")
+        performance_store.record_work_run(
+            work_type="index_check",
+            label="Index check skipped",
+            trigger_reason=reason,
+            status="skipped",
+            details={"reason": "already_running"},
+        )
         return set_index_status(lastResult="already_running")
 
+    started_at = utc_now()
+    work_status = "completed"
+    work_label = "Index check"
+    work_error = None
+    work_details = {}
     set_index_status(
         running=True,
         stage="scanning",
@@ -1789,6 +1808,9 @@ def check_for_training_changes(reason="watch"):
         set_index_status(lastChanges=file_changes_payload(changes))
         if not changes.has_changes:
             trace_logger.info(f"✅ Index check found no training changes for {reason}.")
+            work_label = "Index check: no changes"
+            work_status = "skipped"
+            work_details = file_changes_payload(changes)
             return set_index_status(
                 running=False,
                 stage="idle",
@@ -1818,8 +1840,15 @@ def check_for_training_changes(reason="watch"):
         result = "updated"
         if build_result:
             result = f"review_ready {build_result.chunks} changed chunks"
+            work_label = "Document ingest"
+            work_details = final_details
         elif changes.removed and not changes.changed_or_added:
             result = f"ignored {len(changes.removed)} missing source files"
+            work_label = "Index check: ignored missing sources"
+            work_status = "skipped"
+            work_details = final_details
+        else:
+            work_details = final_details
         return set_index_status(
             running=False,
             stage="idle",
@@ -1834,6 +1863,9 @@ def check_for_training_changes(reason="watch"):
         )
     except Exception as exc:
         trace_logger.error(f"❌ Incremental index check failed for {reason}: {exc}")
+        work_status = "failed"
+        work_label = "Index check failed"
+        work_error = str(exc)
         return set_index_status(
             running=False,
             stage="failed",
@@ -1845,6 +1877,28 @@ def check_for_training_changes(reason="watch"):
             details={},
         )
     finally:
+        finished_at = utc_now()
+        with INDEX_PROGRESS_LOCK:
+            detail_snapshot = dict(index_status.get("details") or {})
+            last_changes = index_status.get("lastChanges")
+        merged_details = {
+            **(work_details or {}),
+            **detail_snapshot,
+            "lastChanges": last_changes,
+        }
+        performance_store.record_work_run(
+            work_type="document_ingest" if work_label == "Document ingest" else "index_check",
+            label=work_label,
+            trigger_reason=reason,
+            status=work_status,
+            started_at=started_at,
+            finished_at=finished_at,
+            chunks=int(merged_details.get("chunks") or 0),
+            images=int(merged_details.get("storedImages") or merged_details.get("extractedImages") or 0),
+            dropped_chunks=int(merged_details.get("droppedChunks") or 0),
+            details=merged_details,
+            error_message=work_error,
+        )
         run_index_housekeeping()
         INDEX_JOB_LOCK.release()
 
@@ -2822,7 +2876,7 @@ def build_runtime_status():
     image_ids = state.get_image_id_list()
     cpu_count = detected_cpu_count()
     system_resources = build_resource_status(cpu_count)
-    return {
+    payload = {
         "chunks": vector_counts.get("chunks", 0),
         "sources": vector_counts.get("documents", 0),
         "embeddings": vector_counts.get("embeddings", 0),
@@ -2847,6 +2901,8 @@ def build_runtime_status():
         "systemResources": system_resources,
         "ingest": dict(index_status),
     }
+    performance_store.record_resource_sample(payload)
+    return payload
 
 
 def build_readiness_status():
@@ -2977,6 +3033,7 @@ api_dependencies = ApiDependencies(
     entity_store=entity_store,
     password_policy_store=password_policy_store,
     ai_provider_store=ai_provider_store,
+    performance_store=performance_store,
 )
 def remove_document_from_store(source: str, *, delete_file: bool = True) -> tuple[dict, int]:
     if not source:
@@ -3097,6 +3154,10 @@ app.include_router(status_api.create_router(
     flush_trace_log=flush_trace_log,
     current_trace_log_file=current_trace_log_file,
     tail_text_file=tail_text_file,
+))
+app.include_router(performance_api.create_router(
+    api_dependencies,
+    performance_store=performance_store,
 ))
 
 
