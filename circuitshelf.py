@@ -51,6 +51,7 @@ from backend.services.runtime_status_service import (
 from backend.services.openai_assist_service import OpenAIAssistService
 from backend.services.openai_model_service import OpenAIModelService
 from backend.services.document_intelligence_service import DocumentIntelligenceService
+from backend.services.prompt_service import PromptService
 from backend.services.retrieval_service import QueryPreprocessor, RuntimeChunkMapper
 from backend.services.source_metadata import (
     build_source_payload,
@@ -2191,52 +2192,16 @@ runtime_chunk_mapper = RuntimeChunkMapper(
     vector_store=vector_store,
     trace_logger=trace_logger,
 )
+prompt_service = PromptService(
+    config=config,
+    prompt_dir=PROMPT_DIR,
+    trace_logger=trace_logger,
+    token_length=TokenUtils.tokenize_len,
+)
 
 
 #def clean_response(text):
 #    return re.sub(r"<[^>]+>", "", text).strip()
-
-
-
-#Prompt file processing        
-@trace_timer("load_prompt_template")
-def load_prompt_template(path: str, context: str, question: str) -> str:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            template = f.read()
-        return template.format(context=context, question=question)
-    except Exception as e:
-        trace_logger.error(f"❌ Failed to load prompt template {path}: {e}")
-        return f"[Prompt load error: {e}]"
-
-def build_prompt(context: str, question: str, is_math: bool = False) -> str:
-    db_template_key = "PROMPT_TEMPLATE_MATH" if is_math else "PROMPT_TEMPLATE_GENERAL"
-    db_template = config.get(db_template_key)
-    if db_template:
-        try:
-            return db_template.format(context=context, question=question)
-        except Exception as e:
-            trace_logger.error(f"❌ Failed to format DB prompt template {db_template_key}: {e}")
-
-    prompt_file = os.path.join(PROMPT_DIR, "math_prompt.txt" if is_math else "general_prompt.txt")
-
-    return load_prompt_template(prompt_file, context, question)
-
-
-def trim_chunks_to_token_budget(selected_chunks, max_tokens):
-    if not max_tokens:
-        return selected_chunks
-
-    trimmed = []
-    token_total = 0
-    for chunk in selected_chunks:
-        chunk_tokens = TokenUtils.tokenize_len(chunk.get("text", ""))
-        if trimmed and token_total + chunk_tokens > max_tokens:
-            break
-        trimmed.append(chunk)
-        token_total += chunk_tokens
-
-    return trimmed
 
 def get_average_query_time():
     if not query_timings:
@@ -2437,11 +2402,11 @@ def get_rag_response(
             confidence = chunker.compute_vector_confidence(selected, dist_thresh)
             profile = f"{profile} (vector fallback)"
 
-    selected_chunks = trim_chunks_to_token_budget(selected_chunks, max_tokens)
+    selected_chunks = prompt_service.trim_chunks_to_token_budget(selected_chunks, max_tokens)
 
     # === Build Final Prompt
     context = "\n\n".join([c["text"] for c in selected_chunks])
-    prompt = build_prompt(context, norm_q, chunker.is_math_heavy_question(norm_q))
+    prompt = prompt_service.build_prompt(context, norm_q, chunker.is_math_heavy_question(norm_q))
 
     source_payload = build_source_payload(selected_chunks)
 
