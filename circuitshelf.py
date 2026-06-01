@@ -15,12 +15,9 @@ import base64
 import zipfile
 import tempfile
 import fitz  # PyMuPDF
-import pytesseract
-import nltk
 import numpy as np
 import pandas as pd
 import threading
-import nltk
 import bench_tools
 from lxml import etree
 from datetime import datetime, timezone
@@ -39,6 +36,7 @@ from fastapi.responses import JSONResponse
 from backend.app_factory import create_circuitshelf_app, register_api_routes
 from backend.api.dependencies import ApiDependencies
 from backend.auth_dependencies import AuthDependencyService
+from backend.bootstrap_environment import configure_nltk_and_tesseract
 from backend.bootstrap_settings import bootstrap_database_settings
 from backend.server import mount_react_app, start_app_server
 from backend.store_container import create_store_container
@@ -143,30 +141,7 @@ def trace_timer(label):
         return wrapper
     return decorator
 
-
-
-
-# === NLTK Data Directory HARDENED ===
-# Ensure NLTK searches here first/insure it can not download 
-# Check to insure the path is there or halt system.
-if config.get("BYPASS_NLTK_DOWNLOAD", True):
-
-    NLTK_DATA_DIR = config.get("NLTK_DATA_DIR")
-    if os.path.exists(NLTK_DATA_DIR):
-        trace_logger.info(f"NLTK_DATA_DIR '{NLTK_DATA_DIR}' exists. Using it for NLTK data.")
-        # here is where we override the NLTK download info to throw a Runtime error if it tries to download
-        if NLTK_DATA_DIR not in nltk.data.path:
-            nltk.data.path.insert(0, NLTK_DATA_DIR)
-        nltk.download = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("Downloading NLTK data is disabled in production."))
-
-    else:
-        trace_logger.warning(f"NLTK_DATA_DIR '{NLTK_DATA_DIR}' does not exist. Please check falling back to Local.")
-
-# === pytesseract path if needed Doing an OS check , only for windoooooows
-
-if os.name == 'nt':    
-    trace_logger.info("We are on Windows, Set the tesseract_cmd")
-    pytesseract.pytesseract.tesseract_cmd = config.get("TESSERACT_CMD",r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe")
+configure_nltk_and_tesseract(config=config, trace_logger=trace_logger)
 
 
 # === System Configuration ===
