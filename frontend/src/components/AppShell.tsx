@@ -74,7 +74,7 @@ export function AppShell({
         { id: "trace" as View, label: "Trace" },
         { id: "status" as View, label: "Status" },
         { id: "performance" as View, label: "Performance" },
-        ...((isAdmin || canManageSystem) ? [{ id: "aiUsage" as View, label: "AI Usage" }] : [])
+        { id: "aiUsage" as View, label: "AI Usage" }
       ]
     },
     ...(isAdmin || canManageSystem

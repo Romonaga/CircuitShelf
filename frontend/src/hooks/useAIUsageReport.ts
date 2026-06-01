@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { getEntityAIUsage, getSystemAIUsage } from "../api";
+import { getAccountAIUsage, getEntityAIUsage, getSystemAIUsage } from "../api";
 import { errorMessage } from "../lib/errors";
 import type { AIUsageReport } from "../types";
 
-export function useAIUsageReport(isActive: boolean, scope: "entity" | "system", days = 31) {
+export type AIUsageScope = "personal" | "entity" | "system";
+
+export function useAIUsageReport(isActive: boolean, scope: AIUsageScope, days = 31) {
   const [report, setReport] = useState<AIUsageReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -14,7 +16,13 @@ export function useAIUsageReport(isActive: boolean, scope: "entity" | "system", 
     }
     try {
       setLoading(true);
-      setReport(scope === "system" ? await getSystemAIUsage(days) : await getEntityAIUsage(days));
+      if (scope === "system") {
+        setReport(await getSystemAIUsage(days));
+      } else if (scope === "entity") {
+        setReport(await getEntityAIUsage(days));
+      } else {
+        setReport(await getAccountAIUsage(days));
+      }
       setError("");
     } catch (err) {
       setError(errorMessage(err, "Could not load AI usage"));

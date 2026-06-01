@@ -146,11 +146,13 @@ export default function App() {
           onOpenReview={() => setGuardedActiveView("review")}
         />
       </div>
-      {(user?.entity?.canManage || user?.canManageSystem) ? (
-        <div hidden={activeView !== "aiUsage"}>
-          <AIUsageView isActive={activeView === "aiUsage"} canManageSystem={Boolean(user?.canManageSystem)} />
-        </div>
-      ) : null}
+      <div hidden={activeView !== "aiUsage"}>
+        <AIUsageView
+          isActive={activeView === "aiUsage"}
+          canManageEntity={Boolean(user?.entity?.canManage)}
+          canManageSystem={Boolean(user?.canManageSystem)}
+        />
+      </div>
       <div hidden={activeView !== "account"}>
         <AccountView username={user?.username || "local"} theme={theme} setTheme={setTheme} onPasswordChanged={refreshSession} />
       </div>

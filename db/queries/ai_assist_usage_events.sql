@@ -27,7 +27,11 @@ LEFT JOIN users u ON u.id = ev.user_id
 LEFT JOIN users key_owner ON key_owner.id = ev.provider_key_owner_user_id
 LEFT JOIN ai_provider_types p ON p.id = ev.provider_type_id
 LEFT JOIN ai_task_types t ON t.id = ev.task_type_id
-WHERE (%s::bigint IS NULL OR ev.entity_id = %s::bigint)
+WHERE (
+      %s = 'system'
+      OR (%s = 'entity' AND ev.entity_id = %s::bigint)
+      OR (%s = 'user' AND (ev.user_id = %s::bigint OR ev.provider_key_owner_user_id = %s::bigint))
+  )
   AND ev.created_at >= now() - (%s::integer * interval '1 day')
 ORDER BY ev.created_at DESC
 LIMIT %s;

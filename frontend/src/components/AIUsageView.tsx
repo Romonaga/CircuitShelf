@@ -4,7 +4,7 @@ import { downloadBlob } from "../lib/download";
 import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
 import { money } from "../lib/money";
-import { useAIUsageReport } from "../hooks/useAIUsageReport";
+import { type AIUsageScope, useAIUsageReport } from "../hooks/useAIUsageReport";
 import { AIUsageBreakdownCards } from "./AIUsageBreakdownCards";
 import { AIUsageEventsTable } from "./AIUsageEventsTable";
 import { ErrorMessage } from "./ErrorMessage";
@@ -13,12 +13,14 @@ import { Stat } from "./Stat";
 
 export function AIUsageView({
   isActive,
+  canManageEntity,
   canManageSystem
 }: {
   isActive: boolean;
+  canManageEntity: boolean;
   canManageSystem: boolean;
 }) {
-  const [scope, setScope] = useState<"entity" | "system">(canManageSystem ? "system" : "entity");
+  const [scope, setScope] = useState<AIUsageScope>(canManageSystem ? "system" : canManageEntity ? "entity" : "personal");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const report = useAIUsageReport(isActive, scope);
@@ -45,12 +47,16 @@ export function AIUsageView({
         description={report.loading ? "Loading usage..." : "Token spend, budget context, and audited provider calls."}
         actions={
           <div className="performance-actions">
-            {canManageSystem ? (
-              <select value={scope} onChange={(event) => setScope(event.target.value as "entity" | "system")}>
+            <select value={scope} onChange={(event) => setScope(event.target.value as AIUsageScope)}>
+              {canManageSystem ? (
+                <>
                 <option value="system">System</option>
                 <option value="entity">Entity</option>
-              </select>
-            ) : null}
+                </>
+              ) : null}
+              {!canManageSystem && canManageEntity ? <option value="entity">Entity</option> : null}
+                <option value="personal">Personal</option>
+            </select>
             <button className="ghost-button" onClick={() => void exportCsv()} disabled={exporting}>
               {exporting ? "Exporting..." : "Export CSV"}
             </button>

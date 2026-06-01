@@ -151,7 +151,7 @@ def create_router(deps: ApiDependencies) -> APIRouter:
         _, entity, error = deps.require_entity_admin(req)
         if error:
             return error
-        return deps.ai_provider_store.usage_report(entity_id=entity.entity_id, days=days, limit=limit)
+        return deps.ai_provider_store.usage_report(scope="entity", entity_id=entity.entity_id, days=days, limit=limit)
 
     @router.get("/api/entity/ai-usage/export")
     async def entity_ai_usage_export(
@@ -161,7 +161,7 @@ def create_router(deps: ApiDependencies) -> APIRouter:
         _, entity, error = deps.require_entity_admin(req)
         if error:
             return error
-        report = deps.ai_provider_store.usage_report(entity_id=entity.entity_id, days=days, limit=10000)
+        report = deps.ai_provider_store.usage_report(scope="entity", entity_id=entity.entity_id, days=days, limit=10000)
         return Response(
             ai_usage_report_to_csv(report),
             media_type="text/csv",
@@ -177,7 +177,7 @@ def create_router(deps: ApiDependencies) -> APIRouter:
         _, error = deps.require_system_admin_user(req)
         if error:
             return error
-        return deps.ai_provider_store.usage_report(entity_id=None, days=days, limit=limit)
+        return deps.ai_provider_store.usage_report(scope="system", days=days, limit=limit)
 
     @router.get("/api/system/ai-usage/export")
     async def system_ai_usage_export(
@@ -187,11 +187,47 @@ def create_router(deps: ApiDependencies) -> APIRouter:
         _, error = deps.require_system_admin_user(req)
         if error:
             return error
-        report = deps.ai_provider_store.usage_report(entity_id=None, days=days, limit=10000)
+        report = deps.ai_provider_store.usage_report(scope="system", days=days, limit=10000)
         return Response(
             ai_usage_report_to_csv(report),
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=circuit-shelf-system-ai-usage.csv"},
+        )
+
+    @router.get("/api/account/ai-usage")
+    async def account_ai_usage(
+        req: Request,
+        days: int = Query(31, ge=1, le=366),
+        limit: int = Query(250, ge=1, le=1000),
+    ):
+        user, error = deps.require_authenticated_user(req)
+        if error:
+            return error
+        return deps.ai_provider_store.usage_report(
+            scope="user",
+            user_id=deps.user_id_for_user(user),
+            days=days,
+            limit=limit,
+        )
+
+    @router.get("/api/account/ai-usage/export")
+    async def account_ai_usage_export(
+        req: Request,
+        days: int = Query(31, ge=1, le=366),
+    ):
+        user, error = deps.require_authenticated_user(req)
+        if error:
+            return error
+        report = deps.ai_provider_store.usage_report(
+            scope="user",
+            user_id=deps.user_id_for_user(user),
+            days=days,
+            limit=10000,
+        )
+        return Response(
+            ai_usage_report_to_csv(report),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=circuit-shelf-personal-ai-usage.csv"},
         )
 
     return router

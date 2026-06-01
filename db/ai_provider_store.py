@@ -327,11 +327,29 @@ class AIProviderStore:
             ).fetchone()
         return int(row["id"]) if row else None
 
-    def usage_report(self, *, entity_id: int | None, days: int = 31, limit: int = 250) -> dict[str, Any]:
+    def usage_report(
+        self,
+        *,
+        scope: str = "entity",
+        entity_id: int | None = None,
+        user_id: int | None = None,
+        days: int = 31,
+        limit: int = 250,
+    ) -> dict[str, Any]:
+        usage_scope = scope if scope in {"system", "entity", "user"} else "entity"
         with self.database.connection() as conn:
             rows = conn.execute(
                 load_query("ai_assist_usage_events.sql"),
-                (entity_id, entity_id, max(1, int(days)), max(1, int(limit))),
+                (
+                    usage_scope,
+                    usage_scope,
+                    entity_id,
+                    usage_scope,
+                    user_id,
+                    user_id,
+                    max(1, int(days)),
+                    max(1, int(limit)),
+                ),
             ).fetchall()
         events = [self._usage_event_row(row) for row in rows]
         total_cost = sum(event["estimatedCost"] for event in events)

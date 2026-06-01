@@ -235,9 +235,17 @@ export function getSystemAIUsage(days = 31): Promise<AIUsageReport> {
   return requestJson<AIUsageReport>(`/api/system/ai-usage?days=${encodeURIComponent(String(days))}`);
 }
 
-export async function downloadAIUsageCsv(scope: "entity" | "system", days = 31): Promise<Blob> {
+export function getAccountAIUsage(days = 31): Promise<AIUsageReport> {
+  return requestJson<AIUsageReport>(`/api/account/ai-usage?days=${encodeURIComponent(String(days))}`);
+}
+
+export async function downloadAIUsageCsv(scope: "entity" | "system" | "personal", days = 31): Promise<Blob> {
   const session = readSessionToken();
-  const path = scope === "system" ? "/api/system/ai-usage/export" : "/api/entity/ai-usage/export";
+  const path = scope === "system"
+    ? "/api/system/ai-usage/export"
+    : scope === "personal"
+      ? "/api/account/ai-usage/export"
+      : "/api/entity/ai-usage/export";
   const response = await fetch(`${path}?days=${encodeURIComponent(String(days))}`, {
     headers: {
       ...(session ? { Authorization: `Bearer ${session}` } : {})
