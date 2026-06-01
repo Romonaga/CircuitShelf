@@ -87,6 +87,7 @@ export function useInventory(isActive: boolean) {
         return null;
       }
       return savePart({
+        id: part.id,
         displayName: part.displayName,
         partType: part.partType,
         quantity,

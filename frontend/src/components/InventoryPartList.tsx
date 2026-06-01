@@ -17,12 +17,16 @@ export function InventoryPartList({
   parts,
   loading,
   savingQuantityId,
+  selectedPartId,
+  onSelect,
   onQuantityChange,
   onRemove
 }: {
   parts: InventoryPart[];
   loading: boolean;
   savingQuantityId?: string;
+  selectedPartId?: string;
+  onSelect?: (part: InventoryPart) => void;
   onQuantityChange: (partId: string, quantity: number) => void;
   onRemove: (partId: string) => void;
 }) {
@@ -76,7 +80,17 @@ export function InventoryPartList({
         </thead>
         <tbody>
           {sortedParts.map((part) => (
-            <tr key={part.id}>
+            <tr
+              key={part.id}
+              className={selectedPartId === part.id ? "active-row" : ""}
+              onClick={() => onSelect?.(part)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                if (window.confirm(`Remove ${part.displayName} from inventory?`)) {
+                  onRemove(part.id);
+                }
+              }}
+            >
               <td className="inventory-part-name" title={part.displayName}>
                 {part.displayName}
               </td>

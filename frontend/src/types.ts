@@ -506,6 +506,7 @@ export interface InventoryPart {
 }
 
 export interface InventoryPartInput {
+  id?: string;
   displayName: string;
   partType: string;
   quantity: number;

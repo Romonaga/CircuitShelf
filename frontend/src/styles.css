@@ -1178,6 +1178,12 @@ nav {
   min-height: 84px;
 }
 
+.inventory-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .inventory-import-panel {
   padding: 12px;
   border: 1px solid var(--line);
@@ -1508,6 +1514,12 @@ nav {
 
 .inventory-table tbody tr:hover td {
   background: var(--row-hover);
+}
+
+.inventory-table tbody tr.active-row td {
+  color: var(--text);
+  background: rgba(20, 184, 166, 0.18);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .inventory-part-name {

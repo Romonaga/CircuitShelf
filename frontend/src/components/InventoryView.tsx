@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { InventoryPartInput } from "../types";
+import type { InventoryPart, InventoryPartInput } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
 import { InventoryPartForm } from "./InventoryPartForm";
 import { InventoryImportPanel } from "./InventoryImportPanel";
@@ -20,6 +20,7 @@ export function InventoryView({ isActive }: { isActive: boolean }) {
   } = useInventory(isActive);
   const [saving, setSaving] = useState(false);
   const [quantitySavingId, setQuantitySavingId] = useState("");
+  const [editingPart, setEditingPart] = useState<InventoryPart | null>(null);
   const [message, setMessage] = useState("");
 
   const inventoryStats = useMemo(() => {
@@ -39,7 +40,8 @@ export function InventoryView({ isActive }: { isActive: boolean }) {
     try {
       const saved = await savePart(part);
       if (saved) {
-        setMessage(`${saved.displayName} added to inventory.`);
+        setMessage(`${saved.displayName} ${part.id ? "updated" : "added to inventory"}.`);
+        setEditingPart(null);
         return true;
       }
       return false;
@@ -61,6 +63,15 @@ export function InventoryView({ isActive }: { isActive: boolean }) {
     }
   }
 
+  async function removeInventoryPart(partId: string) {
+    setMessage("");
+    const removed = await removePart(partId);
+    if (removed) {
+      setEditingPart((current) => (current?.id === partId ? null : current));
+      setMessage("Inventory part removed.");
+    }
+  }
+
   return (
     <section className="inventory-workflow">
       <header className="inventory-command-panel">
@@ -78,8 +89,16 @@ export function InventoryView({ isActive }: { isActive: boolean }) {
       <div className="inventory-layout">
         <aside className="inventory-entry-column">
           <section className="inventory-panel">
-            <SectionHeader title="Add part" description="Single component, board, tool, or module." />
-            <InventoryPartForm saving={saving} onSave={submitPart} />
+            <SectionHeader
+              title={editingPart ? "Edit part" : "Add part"}
+              description={editingPart ? "Update quantity, aliases, location, notes, or display name." : "Single component, board, tool, or module."}
+            />
+            <InventoryPartForm
+              saving={saving}
+              editingPart={editingPart}
+              onCancel={() => setEditingPart(null)}
+              onSave={submitPart}
+            />
           </section>
           <InventoryImportPanel
             onImported={(count) => {
@@ -99,8 +118,10 @@ export function InventoryView({ isActive }: { isActive: boolean }) {
             parts={parts}
             loading={loading}
             savingQuantityId={quantitySavingId}
+            selectedPartId={editingPart?.id}
+            onSelect={setEditingPart}
             onQuantityChange={(partId, quantity) => void saveQuantity(partId, quantity)}
-            onRemove={(partId) => void removePart(partId)}
+            onRemove={(partId) => void removeInventoryPart(partId)}
           />
         </section>
       </div>

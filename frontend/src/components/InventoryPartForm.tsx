@@ -1,5 +1,5 @@
-import { FormEvent, useState } from "react";
-import type { InventoryPartInput } from "../types";
+import { FormEvent, useEffect, useState } from "react";
+import type { InventoryPart, InventoryPartInput } from "../types";
 
 const partTypes = ["component", "ic", "resistor", "capacitor", "diode", "transistor", "sensor", "module", "board", "display", "tooling", "power"];
 
@@ -14,13 +14,35 @@ const initialPart: InventoryPartInput = {
 
 export function InventoryPartForm({
   saving,
+  editingPart,
+  onCancel,
   onSave
 }: {
   saving: boolean;
+  editingPart?: InventoryPart | null;
+  onCancel?: () => void;
   onSave: (part: InventoryPartInput) => Promise<boolean>;
 }) {
   const [part, setPart] = useState<InventoryPartInput>(initialPart);
   const [aliasesText, setAliasesText] = useState("");
+
+  useEffect(() => {
+    if (!editingPart) {
+      setPart(initialPart);
+      setAliasesText("");
+      return;
+    }
+    setPart({
+      id: editingPart.id,
+      displayName: editingPart.displayName,
+      partType: editingPart.partType,
+      quantity: editingPart.quantity,
+      location: editingPart.location,
+      notes: editingPart.notes,
+      aliases: editingPart.aliases
+    });
+    setAliasesText(editingPart.aliases.join("\n"));
+  }, [editingPart]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -31,7 +53,7 @@ export function InventoryPartForm({
         .map((alias) => alias.trim())
         .filter(Boolean)
     });
-    if (saved) {
+    if (saved && !editingPart) {
       setPart(initialPart);
       setAliasesText("");
     }
@@ -94,9 +116,16 @@ export function InventoryPartForm({
           placeholder="Voltage range, package, bin notes"
         />
       </label>
-      <button className="primary-button" disabled={saving || !part.displayName.trim()}>
-        {saving ? "Saving..." : "Add part"}
-      </button>
+      <div className="inventory-form-actions">
+        <button className="primary-button" disabled={saving || !part.displayName.trim()}>
+          {saving ? "Saving..." : editingPart ? "Save changes" : "Add part"}
+        </button>
+        {editingPart && onCancel ? (
+          <button className="ghost-button" type="button" disabled={saving} onClick={onCancel}>
+            Cancel edit
+          </button>
+        ) : null}
+      </div>
     </form>
   );
 }

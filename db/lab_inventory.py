@@ -100,19 +100,28 @@ class LabInventoryStore:
 
         normalized = normalize_part_name(display_name)
         aliases = self._normalized_aliases(payload.get("aliases") or [])
+        part_id = str(payload.get("id") or "").strip()
         with self.database.connection() as conn:
-            row = conn.execute(
-                load_query("lab_part_upsert.sql"),
-                (
-                    user_id,
-                    display_name,
-                    normalized,
-                    clean_db_text(payload.get("partType") or payload.get("type") or "component"),
-                    max(0, int(payload.get("quantity") or 0)),
-                    clean_db_text(payload.get("location") or ""),
-                    clean_db_text(payload.get("notes") or ""),
-                ),
-            ).fetchone()
+            values = (
+                display_name,
+                normalized,
+                clean_db_text(payload.get("partType") or payload.get("type") or "component"),
+                max(0, int(payload.get("quantity") or 0)),
+                clean_db_text(payload.get("location") or ""),
+                clean_db_text(payload.get("notes") or ""),
+            )
+            if part_id:
+                row = conn.execute(load_query("lab_part_update.sql"), (*values, part_id, user_id)).fetchone()
+                if not row:
+                    raise ValueError("Inventory part not found.")
+            else:
+                row = conn.execute(
+                    load_query("lab_part_upsert.sql"),
+                    (
+                        user_id,
+                        *values,
+                    ),
+                ).fetchone()
             part_id = row["id"]
             conn.execute(load_query("lab_part_aliases_delete.sql"), (part_id,))
             for alias in aliases:
