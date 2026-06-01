@@ -52,6 +52,7 @@ from backend.services.ingest_stats import (
     file_changes_payload,
     summarize_document_ingest_stats,
 )
+from backend.services.ingest_progress import IngestProgressTracker, utc_now, utc_now_iso
 from backend.services.runtime_status_service import (
     RuntimeStatusReporter,
     effective_embedding_batch_size as runtime_effective_embedding_batch_size,
@@ -245,29 +246,11 @@ image_retrieval_service = ImageRetrievalService(
 reranker_engine = Reranker(config, state, chunker, trace_logger)
 runtime_settings.register_callback("RERANK_PROFILES", lambda value: setattr(reranker_engine, "rerank_profiles", value))
 INDEX_JOB_LOCK = threading.Lock()
-INDEX_PROGRESS_LOCK = threading.Lock()
-ACTIVE_DOCUMENT_WORKERS_LOCK = threading.Lock()
-ACTIVE_DOCUMENT_WORKERS = 0
 INGEST_WATCH_STOP = threading.Event()
 INGEST_WATCH_RESCHEDULE = threading.Event()
 INGEST_WATCH_THREAD = None
-index_status = {
-    "enabled": bool(config.get("INGEST_WATCH_ENABLED", True)),
-    "running": False,
-    "stage": "idle",
-    "currentFiles": [],
-    "fileProgress": {},
-    "processedFiles": 0,
-    "totalFiles": 0,
-    "lastStartedAt": None,
-    "lastFinishedAt": None,
-    "lastReason": None,
-    "lastResult": "idle",
-    "lastError": None,
-    "lastChanges": None,
-    "nextCheckAt": None,
-    "details": {},
-}
+ingest_progress = IngestProgressTracker(config=config)
+index_status = ingest_progress.status
 
 
 def supported_training_extensions():
@@ -348,102 +331,16 @@ def run_index_housekeeping():
         trace_logger.warning(f"Index housekeeping could not clean expired trace logs: {exc}")
 
 
-def utc_now_iso():
-    return datetime.now(timezone.utc).isoformat()
-
-
-def utc_now():
-    return datetime.now(timezone.utc)
-
-
-def set_index_status(**updates):
-    with INDEX_PROGRESS_LOCK:
-        index_status.update(updates)
-        return dict(index_status)
-
-
-def ingest_watch_interval_seconds():
-    return max(30, int(config.get("INGEST_WATCH_INTERVAL_SECONDS", 300)))
-
-
-def schedule_next_ingest_check(interval=None):
-    interval_seconds = interval if interval is not None else ingest_watch_interval_seconds()
-    next_check = datetime.now(timezone.utc).timestamp() + interval_seconds
-    return set_index_status(
-        nextCheckAt=datetime.fromtimestamp(next_check, timezone.utc).isoformat()
-    )
-
-
-def seconds_until_next_ingest_check(interval=None):
-    with INDEX_PROGRESS_LOCK:
-        next_check_at = index_status.get("nextCheckAt")
-    if not next_check_at:
-        status = schedule_next_ingest_check(interval)
-        next_check_at = status["nextCheckAt"]
-    try:
-        next_check = datetime.fromisoformat(next_check_at).timestamp()
-    except (TypeError, ValueError):
-        status = schedule_next_ingest_check(interval)
-        next_check = datetime.fromisoformat(status["nextCheckAt"]).timestamp()
-    return max(0, next_check - datetime.now(timezone.utc).timestamp())
-
-
-def update_index_progress(*, stage=None, current_file=None, finished_file=None, total_files=None, details=None, file_details=None):
-    with INDEX_PROGRESS_LOCK:
-        active_files = list(index_status.get("currentFiles") or [])
-        file_progress = dict(index_status.get("fileProgress") or {})
-        if total_files is not None:
-            index_status["totalFiles"] = int(total_files)
-        if stage is not None:
-            index_status["stage"] = stage
-        if details is not None:
-            index_status["details"] = details
-        if current_file and current_file not in active_files:
-            active_files.append(current_file)
-            file_progress.setdefault(current_file, {})
-        if current_file and file_details is not None:
-            current_progress = dict(file_progress.get(current_file) or {})
-            current_progress.update({key: value for key, value in file_details.items() if value is not None})
-            file_progress[current_file] = current_progress
-        if finished_file:
-            active_files = [name for name in active_files if name != finished_file]
-            file_progress.pop(finished_file, None)
-            index_status["processedFiles"] = int(index_status.get("processedFiles") or 0) + 1
-        index_status["currentFiles"] = active_files
-        index_status["fileProgress"] = {name: file_progress.get(name, {}) for name in active_files}
-        return dict(index_status)
-
-
-def update_index_detail(**updates):
-    with INDEX_PROGRESS_LOCK:
-        details = dict(index_status.get("details") or {})
-        details.update({key: value for key, value in updates.items() if value is not None})
-        index_status["details"] = details
-        return dict(index_status)
-
-
-def begin_document_worker() -> int:
-    global ACTIVE_DOCUMENT_WORKERS
-    with ACTIVE_DOCUMENT_WORKERS_LOCK:
-        ACTIVE_DOCUMENT_WORKERS += 1
-        return ACTIVE_DOCUMENT_WORKERS
-
-
-def finish_document_worker() -> int:
-    global ACTIVE_DOCUMENT_WORKERS
-    with ACTIVE_DOCUMENT_WORKERS_LOCK:
-        ACTIVE_DOCUMENT_WORKERS = max(0, ACTIVE_DOCUMENT_WORKERS - 1)
-        return ACTIVE_DOCUMENT_WORKERS
-
-
-def current_document_workers() -> int:
-    with ACTIVE_DOCUMENT_WORKERS_LOCK:
-        return max(1, ACTIVE_DOCUMENT_WORKERS)
-
-
-def active_document_worker_count() -> int:
-    with ACTIVE_DOCUMENT_WORKERS_LOCK:
-        return ACTIVE_DOCUMENT_WORKERS
+set_index_status = ingest_progress.set_status
+ingest_watch_interval_seconds = ingest_progress.watch_interval_seconds
+schedule_next_ingest_check = ingest_progress.schedule_next_check
+seconds_until_next_ingest_check = ingest_progress.seconds_until_next_check
+update_index_progress = ingest_progress.update_progress
+update_index_detail = ingest_progress.update_detail
+begin_document_worker = ingest_progress.begin_document_worker
+finish_document_worker = ingest_progress.finish_document_worker
+current_document_workers = ingest_progress.current_document_workers
+active_document_worker_count = ingest_progress.active_document_worker_count
 
 
 def source_ingest_scope(source):
@@ -1796,9 +1693,9 @@ def check_for_training_changes(reason="watch"):
         )
     finally:
         finished_at = utc_now()
-        with INDEX_PROGRESS_LOCK:
-            detail_snapshot = dict(index_status.get("details") or {})
-            last_changes = index_status.get("lastChanges")
+        index_snapshot = ingest_progress.snapshot()
+        detail_snapshot = dict(index_snapshot.get("details") or {})
+        last_changes = index_snapshot.get("lastChanges")
         merged_details = {
             **(work_details or {}),
             **detail_snapshot,
