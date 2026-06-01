@@ -43,6 +43,7 @@
   - Done: Polish inventory management: row edit, rename by stable part ID, alias editing, location persistence, and right-click delete.
   - Done: Finish account/admin workflows: user creation, password reset, unlock, force-password-change gating, and role management.
   - Decide and implement AI use during ingestion, including which payer scope is charged for corpus versus entity-private documents.
+  - Revisit AI key encryption-secret operations: backup/restore process, rotation, and moving secret management out of ad hoc local YAML.
   - Split `circuitshelf.py` into modular backend domains: app factory, auth dependencies, API routers, services, stores, and workers.
   - Continue moving frontend logic into focused components, hooks, and shared libs so `App.tsx` stays orchestration-only.
   - Build a stronger global corpus workflow: corpus-specific review labels, promotion/demotion audit, and clear global/entity-private visibility in review.
