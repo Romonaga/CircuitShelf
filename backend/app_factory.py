@@ -15,6 +15,7 @@ from backend.api import inventory as inventory_api
 from backend.api import performance as performance_api
 from backend.api import query as query_api
 from backend.api import review as review_api
+from backend.api import runtime_catalog as runtime_catalog_api
 from backend.api import settings as settings_api
 from backend.api import status as status_api
 
@@ -42,6 +43,7 @@ def register_api_routes(
     parse_inventory_import: Any,
     require_admin_user: Any,
     settings_store: Any,
+    runtime_config_store: Any,
     runtime_settings: Any,
     trace_logger: Any,
     start_index_check: Any,
@@ -104,6 +106,10 @@ def register_api_routes(
         runtime_settings=runtime_settings,
         trace_logger=trace_logger,
         start_index_check=start_index_check,
+    ))
+    app.include_router(runtime_catalog_api.create_router(
+        api_dependencies,
+        runtime_config_store=runtime_config_store,
     ))
     app.include_router(review_api.create_router(
         deps=api_dependencies,

@@ -70,6 +70,66 @@ class RuntimeConfigStore:
             target.update(loaded)
         return loaded
 
+    def admin_catalog(self) -> dict[str, Any]:
+        if not self.database.configured:
+            return {
+                "llmModels": [],
+                "rerankProfiles": [],
+                "equationPatterns": [],
+            }
+
+        try:
+            with self.database.connection() as conn:
+                llm_models = conn.execute(load_query("runtime_llm_models_admin_list.sql")).fetchall()
+                rerank_profiles = conn.execute(load_query("runtime_rerank_profiles_admin_list.sql")).fetchall()
+                equation_patterns = conn.execute(load_query("runtime_equation_patterns_admin_list.sql")).fetchall()
+        except UndefinedTable:
+            return {
+                "llmModels": [],
+                "rerankProfiles": [],
+                "equationPatterns": [],
+            }
+
+        return {
+            "llmModels": [
+                {
+                    "id": int(row["id"]),
+                    "modelName": row["model_name"],
+                    "displayName": row["display_name"],
+                    "provider": row["provider"],
+                    "isDefault": bool(row["is_default"]),
+                    "isEnabled": bool(row["is_enabled"]),
+                    "temperature": float(row["temperature"]),
+                    "numPredict": int(row["num_predict"]),
+                    "numCtx": int(row["num_ctx"]) if row["num_ctx"] is not None else None,
+                    "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
+                }
+                for row in llm_models
+            ],
+            "rerankProfiles": [
+                {
+                    "id": int(row["id"]),
+                    "name": row["name"],
+                    "weightVector": float(row["weight_vector"]),
+                    "weightRerank": float(row["weight_rerank"]),
+                    "isDefault": bool(row["is_default"]),
+                    "keywords": list(row["keywords"] or []),
+                    "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
+                }
+                for row in rerank_profiles
+            ],
+            "equationPatterns": [
+                {
+                    "id": int(row["id"]),
+                    "patternType": row["pattern_type"],
+                    "pattern": row["pattern"],
+                    "isRegex": bool(row["is_regex"]),
+                    "createdAt": row["created_at"].isoformat() if row["created_at"] else None,
+                }
+                for row in equation_patterns
+            ],
+        }
+
     def _count(self, conn, query_name: str) -> int:
         row = conn.execute(load_query(query_name)).fetchone()
         return int(row["count"] or 0)

@@ -48,6 +48,7 @@ export function AppShell({
     performance: "Performance",
     aiUsage: "AI Usage",
     settings: "Admin Settings",
+    runtime: "Runtime Catalog",
     entity: "Entity",
     account: "Account"
   };
@@ -83,7 +84,10 @@ export function AppShell({
       items: [
         ...(canManageSystem ? [{ id: "corpus" as View, label: "Corpus" }] : []),
         ...(isAdmin ? [{ id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` }] : []),
-        ...(canManageSystem ? [{ id: "settings" as View, label: "System Settings" }] : [])
+        ...(canManageSystem ? [
+          { id: "settings" as View, label: "System Settings" },
+          { id: "runtime" as View, label: "Runtime Catalog" }
+        ] : [])
       ]
     }]
       : [])

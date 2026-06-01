@@ -171,6 +171,7 @@ register_api_routes(
     parse_inventory_import=parse_inventory_import,
     require_admin_user=auth_dependencies.require_admin_user,
     settings_store=settings_store,
+    runtime_config_store=runtime_config_store,
     runtime_settings=runtime_settings,
     trace_logger=trace_logger,
     start_index_check=start_index_check,

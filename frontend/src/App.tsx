@@ -10,6 +10,7 @@ import { LoginView } from "./components/LoginView";
 import { ProjectFinderView } from "./components/ProjectFinderView";
 import { PerformanceView } from "./components/PerformanceView";
 import { ReviewView } from "./components/ReviewView";
+import { RuntimeCatalogView } from "./components/RuntimeCatalogView";
 import { StatusView } from "./components/StatusView";
 import { SettingsView } from "./components/SettingsView";
 import { TraceView } from "./components/TraceView";
@@ -160,6 +161,11 @@ export default function App() {
       {user?.canManageSystem ? (
         <div hidden={activeView !== "settings"}>
           <SettingsView />
+        </div>
+      ) : null}
+      {user?.canManageSystem ? (
+        <div hidden={activeView !== "runtime"}>
+          <RuntimeCatalogView isActive={activeView === "runtime"} />
         </div>
       ) : null}
     </AppShell>

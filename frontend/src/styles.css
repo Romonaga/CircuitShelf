@@ -3888,6 +3888,159 @@ nav {
   min-width: 1160px;
 }
 
+.runtime-catalog-page {
+  display: grid;
+  gap: 18px;
+}
+
+.runtime-panel {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.runtime-table {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.runtime-table-head,
+.runtime-table-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.6fr) repeat(5, minmax(110px, 1fr));
+  gap: 12px;
+  align-items: center;
+  min-width: 920px;
+  padding: 11px 13px;
+}
+
+.runtime-table-head {
+  color: var(--accent);
+  background: var(--panel-soft);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.runtime-table-row {
+  border-top: 1px solid var(--line);
+  color: var(--text);
+}
+
+.runtime-table-row strong {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-table-row span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.runtime-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.runtime-profile-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.runtime-profile-card > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.runtime-profile-card h3 {
+  margin: 0;
+  color: var(--ink);
+}
+
+.runtime-profile-card > div:first-child span,
+.runtime-keywords span,
+.runtime-keywords em,
+.runtime-pattern-row span,
+.runtime-pattern-row em {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-raised);
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.runtime-profile-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.runtime-profile-card dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.runtime-profile-card dd {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.runtime-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.runtime-pattern-list {
+  display: grid;
+  gap: 8px;
+  max-height: 480px;
+  overflow: auto;
+}
+
+.runtime-pattern-row {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) 80px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.runtime-pattern-row code {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .error,
 .top-error {
   color: var(--warn);

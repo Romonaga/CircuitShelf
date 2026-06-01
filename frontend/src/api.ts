@@ -20,6 +20,7 @@ import type {
   ReviewDocument,
   ReviewImage,
   ReviewScopeAudit,
+  RuntimeCatalog,
   LogTailPayload,
   InventoryPart,
   InventoryPartInput,
@@ -234,6 +235,10 @@ export function getEntityAIUsage(days = 31): Promise<AIUsageReport> {
 
 export function getSystemAIUsage(days = 31): Promise<AIUsageReport> {
   return requestJson<AIUsageReport>(`/api/system/ai-usage?days=${encodeURIComponent(String(days))}`);
+}
+
+export function getRuntimeCatalog(): Promise<RuntimeCatalog> {
+  return requestJson<RuntimeCatalog>("/api/runtime/catalog");
 }
 
 export function getAccountAIUsage(days = 31): Promise<AIUsageReport> {
