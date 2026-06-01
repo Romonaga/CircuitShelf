@@ -22,7 +22,8 @@ export function DocumentsView({
   title = "Documents",
   description,
   uploadHelp,
-  emptyText = "Select a document to inspect its pages, chunks, images, and pinout."
+  emptyText = "Select a document to inspect its pages, chunks, images, and pinout.",
+  scope = "visible"
 }: {
   isActive: boolean;
   isAdmin: boolean;
@@ -34,6 +35,7 @@ export function DocumentsView({
   description?: string;
   uploadHelp?: string;
   emptyText?: string;
+  scope?: "visible" | "global";
 }) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selected, setSelected] = useState("");
@@ -74,7 +76,7 @@ export function DocumentsView({
     setBusy(true);
     setError("");
     try {
-      const response = await getDocuments();
+      const response = await getDocuments(scope);
       setDocuments(response.documents);
       const nextSelected = response.documents.find((document) => document.source === selectedRef.current) || response.documents[0];
       setSelected(nextSelected?.source || "");
@@ -83,7 +85,7 @@ export function DocumentsView({
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     if (isActive || refreshSignal) {
@@ -175,7 +177,7 @@ export function DocumentsView({
     setDetail(null);
     setSelectedPage(null);
     setError("");
-    getDocument(selected)
+    getDocument(selected, scope)
       .then((response) => {
         if (active) {
           setDetail(response);
@@ -195,7 +197,7 @@ export function DocumentsView({
     return () => {
       active = false;
     };
-  }, [selected]);
+  }, [selected, scope]);
 
   return (
     <section className="view-grid docs-grid">

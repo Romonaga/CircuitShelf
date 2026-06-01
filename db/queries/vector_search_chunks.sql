@@ -14,6 +14,7 @@ FROM document_chunks c
 JOIN documents d ON d.id = c.document_id
 LEFT JOIN document_pages p ON p.id = c.page_id
 WHERE d.status = 'indexed'
+  AND document_visible_to_entity(d.is_global, d.entity_id, %s::bigint)
   AND c.embedding IS NOT NULL
 ORDER BY c.embedding <-> %s::vector
 LIMIT %s;

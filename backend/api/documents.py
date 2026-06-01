@@ -10,6 +10,7 @@ from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from tokenize_util import TokenUtils
+from backend.api.dependencies import ApiDependencies
 
 
 def safe_upload_filename(filename: str, supported_extensions: set[str]) -> str:
@@ -91,6 +92,7 @@ async def write_uploaded_documents(files: list[UploadFile], overwrite: bool, tra
 
 
 def create_router(
+    deps: ApiDependencies,
     *,
     require_admin_user: Callable[[Request], tuple[Any, Any]],
     training_dir: str,
@@ -193,9 +195,21 @@ def create_router(
         }
 
     @router.get("/api/documents")
-    async def documents():
+    async def documents(req: Request, scope: str = Query("visible")):
+        entity_id = None
+        stats_scope = "visible"
+        if scope == "global":
+            _, error = deps.require_system_admin_user(req)
+            if error:
+                return error
+            stats_scope = "global"
+        else:
+            _, entity, error = deps.require_entity_member(req)
+            if error:
+                return error
+            entity_id = entity.entity_id
         docs = []
-        for row in vector_store.list_document_stats():
+        for row in vector_store.list_document_stats(entity_id=entity_id, scope=stats_scope):
             docs.append({
                 "source": row["source_path"],
                 "displayName": row["display_name"],
@@ -276,11 +290,47 @@ def create_router(
         }
 
     @router.get("/api/document")
-    async def document_detail_query(source: str):
+    async def document_detail_query(req: Request, source: str, scope: str = Query("visible")):
+        entity_id = None
+        stats_scope = "visible"
+        if scope == "global":
+            _, error = deps.require_system_admin_user(req)
+            if error:
+                return error
+            stats_scope = "global"
+        else:
+            _, entity, error = deps.require_entity_member(req)
+            if error:
+                return error
+            entity_id = entity.entity_id
+        visible_sources = {
+            row["source_path"]
+            for row in vector_store.list_document_stats(entity_id=entity_id, scope=stats_scope)
+        }
+        if source not in visible_sources:
+            return JSONResponse({"error": "Document not found."}, status_code=404)
         return build_document_detail(source)
 
     @router.get("/api/documents/{doc_name:path}")
-    async def document_detail(doc_name: str):
+    async def document_detail(req: Request, doc_name: str, scope: str = Query("visible")):
+        entity_id = None
+        stats_scope = "visible"
+        if scope == "global":
+            _, error = deps.require_system_admin_user(req)
+            if error:
+                return error
+            stats_scope = "global"
+        else:
+            _, entity, error = deps.require_entity_member(req)
+            if error:
+                return error
+            entity_id = entity.entity_id
+        visible_sources = {
+            row["source_path"]
+            for row in vector_store.list_document_stats(entity_id=entity_id, scope=stats_scope)
+        }
+        if doc_name not in visible_sources:
+            return JSONResponse({"error": "Document not found."}, status_code=404)
         return build_document_detail(doc_name)
 
     return router

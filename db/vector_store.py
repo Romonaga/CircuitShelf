@@ -77,9 +77,9 @@ class VectorStore:
             rows = conn.execute(load_query("vector_documents_find_by_term.sql"), (pattern, pattern, int(limit))).fetchall()
         return [row["source_path"] for row in rows]
 
-    def counts(self) -> dict[str, int]:
+    def counts(self, *, entity_id: int | None = None) -> dict[str, int]:
         with self.database.connection() as conn:
-            row = conn.execute(load_query("vector_catalog_counts.sql")).fetchone()
+            row = conn.execute(load_query("vector_catalog_counts.sql"), (entity_id, entity_id, entity_id)).fetchone()
         return {
             "documents": int(row["documents"] or 0),
             "chunks": int(row["chunks"] or 0),
@@ -91,9 +91,9 @@ class VectorStore:
             row = conn.execute(load_query("review_pending_count.sql")).fetchone()
         return int(row["pending"] or 0)
 
-    def catalog_fingerprint(self) -> str:
+    def catalog_fingerprint(self, *, entity_id: int | None = None) -> str:
         with self.database.connection() as conn:
-            row = conn.execute(load_query("vector_catalog_fingerprint.sql")).fetchone()
+            row = conn.execute(load_query("vector_catalog_fingerprint.sql"), (entity_id,)).fetchone()
         payload = row["fingerprint_source"] or ""
         digest = hashlib.sha256()
         digest.update(payload.encode("utf-8"))
@@ -261,10 +261,10 @@ class VectorStore:
 
         return chunks, sources, metadata, embeddings
 
-    def search_chunks(self, query_embedding: np.ndarray, *, top_k: int) -> list[dict]:
+    def search_chunks(self, query_embedding: np.ndarray, *, top_k: int, entity_id: int | None = None) -> list[dict]:
         vector = vector_to_sql(query_embedding)
         with self.database.connection() as conn:
-            rows = conn.execute(load_query("vector_search_chunks.sql"), (vector, vector, int(top_k))).fetchall()
+            rows = conn.execute(load_query("vector_search_chunks.sql"), (vector, entity_id, vector, int(top_k))).fetchall()
 
         results = []
         for row in rows:
@@ -286,9 +286,10 @@ class VectorStore:
             rows = conn.execute(load_query("review_documents_list.sql")).fetchall()
         return [dict(row) for row in rows]
 
-    def list_document_stats(self) -> list[dict]:
+    def list_document_stats(self, *, entity_id: int | None = None, scope: str = "visible") -> list[dict]:
+        scope = "global" if scope == "global" else "visible"
         with self.database.connection() as conn:
-            rows = conn.execute(load_query("vector_documents_stats.sql")).fetchall()
+            rows = conn.execute(load_query("vector_documents_stats.sql"), (scope, scope, entity_id)).fetchall()
         return [dict(row) for row in rows]
 
     def review_document_chunks(self, source_path: str, *, limit: int = 50) -> list[dict]:

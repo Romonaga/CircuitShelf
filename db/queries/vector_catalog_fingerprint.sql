@@ -7,4 +7,5 @@ SELECT coalesce(
     ''
 ) AS fingerprint_source
 FROM documents
-WHERE status = 'indexed';
+WHERE status = 'indexed'
+  AND document_visible_to_entity(is_global, entity_id, %s::bigint);

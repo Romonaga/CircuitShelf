@@ -118,7 +118,8 @@ export default function App() {
             title="Corpus"
             description={`${status?.sources ?? 0} global indexed sources`}
             uploadHelp="Upload shared electronics books, datasheets, and notes for the global CircuitShelf corpus."
-            emptyText="Select a corpus document to inspect its pages, chunks, images, and pinout."
+          emptyText="Select a corpus document to inspect its pages, chunks, images, and pinout."
+            scope="global"
           />
         </div>
       ) : null}

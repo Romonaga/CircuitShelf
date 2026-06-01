@@ -2423,7 +2423,7 @@ def get_rag_response(
     vector_start = time.time()
     for syn in synonyms:
         emb = embedder.encode([syn], convert_to_numpy=True).astype("float32")
-        vector_results = vector_store.search_chunks(emb[0], top_k=top_k)
+        vector_results = vector_store.search_chunks(emb[0], top_k=top_k, entity_id=entity_id)
         for i, dist in vector_results_to_hits(vector_results):
             adjusted = dist * (1 + 0.1 * (1 - len(state.chunks[i]) / 500))
             if adjusted < dist_thresh:
@@ -2879,8 +2879,8 @@ def effective_embedding_batch_size():
     return runtime_effective_embedding_batch_size(config)
 
 
-def current_index_fingerprint():
-    return vector_store.catalog_fingerprint()
+def current_index_fingerprint(entity_id=None):
+    return vector_store.catalog_fingerprint(entity_id=entity_id)
 
 
 def build_response_cache_key(
@@ -2897,7 +2897,7 @@ def build_response_cache_key(
 ):
     return ResponseCacheKey(
         entity_id=int(entity_id) if entity_id is not None else None,
-        index_fingerprint=current_index_fingerprint(),
+        index_fingerprint=current_index_fingerprint(entity_id),
         model=model_name or "",
         strategy=strategy,
         question=norm_q,
@@ -3160,6 +3160,7 @@ app.include_router(assembly_plans_api.create_router(
     username_for_user=username_for_user,
 ))
 app.include_router(documents_api.create_router(
+    api_dependencies,
     require_admin_user=require_admin_user,
     training_dir=TRAINING_DIR,
     supported_training_extensions=supported_training_extensions,

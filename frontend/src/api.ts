@@ -427,8 +427,8 @@ export function getProjectCandidates(limit = 24): Promise<ProjectFinderResponse>
   return requestJson<ProjectFinderResponse>(`/api/inventory/project-candidates?limit=${encodeURIComponent(String(limit))}`);
 }
 
-export function getDocuments(): Promise<{ documents: DocumentSummary[] }> {
-  return requestJson<{ documents: DocumentSummary[] }>("/api/documents");
+export function getDocuments(scope = "visible"): Promise<{ documents: DocumentSummary[] }> {
+  return requestJson<{ documents: DocumentSummary[] }>(`/api/documents?scope=${encodeURIComponent(scope)}`);
 }
 
 export function uploadDocuments(files: File[], overwrite: boolean): Promise<UploadDocumentsResponse> {
@@ -492,8 +492,8 @@ export function triggerIndexCheck(): Promise<{ ok: boolean; started: boolean; st
   return requestJson<{ ok: boolean; started: boolean; status: unknown }>("/api/index/check", { method: "POST" });
 }
 
-export function getDocument(source: string): Promise<DocumentDetail> {
-  return requestJson<DocumentDetail>(`/api/document?source=${encodeURIComponent(source)}`);
+export function getDocument(source: string, scope = "visible"): Promise<DocumentDetail> {
+  return requestJson<DocumentDetail>(`/api/document?source=${encodeURIComponent(source)}&scope=${encodeURIComponent(scope)}`);
 }
 
 export function getTrace(): Promise<Record<string, unknown>> {
