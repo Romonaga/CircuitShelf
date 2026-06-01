@@ -41,6 +41,7 @@ from backend.api.dependencies import ApiDependencies
 from backend.auth_dependencies import AuthDependencyService
 from backend.bootstrap_settings import bootstrap_database_settings
 from backend.server import mount_react_app, start_app_server
+from backend.store_container import create_store_container
 from backend.services.app_runtime_helpers import (
     TraceLogHelper,
     conversation_title_from_question,
@@ -58,8 +59,6 @@ from backend.services.runtime_status_service import (
     effective_embedding_batch_size as runtime_effective_embedding_batch_size,
 )
 from backend.services.image_retrieval_service import ImageRetrievalService
-from backend.services.openai_assist_service import OpenAIAssistService
-from backend.services.openai_model_service import OpenAIModelService
 from backend.services.ollama_chat_client import OllamaChatClient
 from backend.services.document_intelligence_service import DocumentIntelligenceService
 from backend.services.document_management_service import DocumentManagementService
@@ -95,21 +94,6 @@ from ingest_workers import detected_cpu_count, document_worker_count, ocr_worker
 from log_tail import tail_text_file
 from log_retention import cleanup_old_logs
 from db.connection import Database, database_url_from_config
-from db.assembly_plan_store import AssemblyPlanStore
-from db.conversation_store import ConversationStore
-from db.datasheet_intelligence_store import DatasheetIntelligenceStore
-from db.account_profile import AccountProfileStore
-from db.ai_provider_store import AIProviderStore
-from db.entities import EntityStore
-from db.image_store import ImageStore
-from db.lab_inventory import LabInventoryStore, ProjectFinderStore
-from db.performance_store import PerformanceStore
-from db.query_log_store import QueryLogStore
-from db.response_cache_store import PostgresResponseCache
-from db.security_policy import PasswordPolicyStore
-from db.user_preferences import UserPreferencesStore
-from db.users import UserStore
-from db.vector_store import VectorStore
 from process_lock import ProcessLockError, acquire_process_lock
 from settings_runtime import RuntimeSettingsManager
 
@@ -125,46 +109,26 @@ settings_store, runtime_config_store = bootstrap_database_settings(
     config=config,
     trace_logger=trace_logger,
 )
-user_store = UserStore(database, trace_logger)
-entity_store = EntityStore(database, trace_logger)
-password_policy_store = PasswordPolicyStore(database, trace_logger)
-account_profile_store = AccountProfileStore(database, trace_logger)
-ai_provider_store = AIProviderStore(database, "config/config.yaml", trace_logger)
-openai_assist_service = OpenAIAssistService(ai_provider_store, trace_logger)
-openai_model_service = OpenAIModelService(ai_provider_store, trace_logger)
-user_preferences_store = UserPreferencesStore(database, trace_logger)
-query_log_store = QueryLogStore(database, trace_logger)
-performance_store = PerformanceStore(database, trace_logger, sample_interval_seconds=5)
-conversation_store = ConversationStore(database, trace_logger)
-vector_store = VectorStore(database, config.get("TRAINING_DIR", "training"), config.get("EMBED_MODEL_NAME"), trace_logger)
-image_store = ImageStore(database, config.get("TRAINING_DIR", "training"), trace_logger)
-intelligence_store = DatasheetIntelligenceStore(database, trace_logger)
-assembly_plan_store = AssemblyPlanStore(database, config.get("TRAINING_DIR", "training"), trace_logger)
-lab_inventory_store = LabInventoryStore(database, trace_logger)
-project_finder_store = ProjectFinderStore(database, lab_inventory_store, trace_logger)
-db_response_cache = PostgresResponseCache(
-    database,
-    capacity=config.get("RESPONSE_CACHE_CAPACITY", 200),
-    logger=trace_logger,
-)
-if not vector_store.available():
-    raise RuntimeError("Postgres vector store is unavailable. Run database migrations before starting CircuitShelf.")
-if not image_store.available():
-    raise RuntimeError("Postgres image store is unavailable. Run database migrations before starting CircuitShelf.")
-if not intelligence_store.available():
-    raise RuntimeError("Postgres datasheet intelligence store is unavailable. Run database migrations before starting CircuitShelf.")
-if not db_response_cache.available():
-    raise RuntimeError("Postgres response cache is unavailable. Run database migrations before starting CircuitShelf.")
-if not query_log_store.available():
-    raise RuntimeError("Postgres query log is unavailable. Run database migrations before starting CircuitShelf.")
-if not conversation_store.available():
-    raise RuntimeError("Postgres conversation store is unavailable. Run database migrations before starting CircuitShelf.")
-if not assembly_plan_store.available():
-    raise RuntimeError("Postgres assembly plan store is unavailable. Run database migrations before starting CircuitShelf.")
-if not user_preferences_store.available():
-    raise RuntimeError("Postgres user preferences store is unavailable. Run database migrations before starting CircuitShelf.")
-if not lab_inventory_store.available():
-    raise RuntimeError("Postgres lab inventory store is unavailable. Run database migrations before starting CircuitShelf.")
+stores = create_store_container(database=database, config=config, trace_logger=trace_logger)
+stores.assert_available()
+user_store = stores.user_store
+entity_store = stores.entity_store
+password_policy_store = stores.password_policy_store
+account_profile_store = stores.account_profile_store
+ai_provider_store = stores.ai_provider_store
+openai_assist_service = stores.openai_assist_service
+openai_model_service = stores.openai_model_service
+user_preferences_store = stores.user_preferences_store
+query_log_store = stores.query_log_store
+performance_store = stores.performance_store
+conversation_store = stores.conversation_store
+vector_store = stores.vector_store
+image_store = stores.image_store
+intelligence_store = stores.intelligence_store
+assembly_plan_store = stores.assembly_plan_store
+lab_inventory_store = stores.lab_inventory_store
+project_finder_store = stores.project_finder_store
+db_response_cache = stores.db_response_cache
 trace_logger.info("🛠️ Configuration and logger successfully initialized.")
 
 # === Decorators ===
