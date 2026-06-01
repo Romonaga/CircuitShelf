@@ -42,7 +42,7 @@
   - Done: Restore and harden Project Finder: deduplicate candidates, reject non-project fragments, and use inventory aliases/substitutions correctly.
   - Done: Polish inventory management: row edit, rename by stable part ID, alias editing, location persistence, and right-click delete.
   - Done: Finish account/admin workflows: user creation, password reset, unlock, force-password-change gating, and role management.
-  - Decide and implement AI use during ingestion, including which payer scope is charged for corpus versus entity-private documents.
+  - Done: Add optional OpenAI ingestion review with audited usage. Corpus uses system billing; entity-private documents use entity billing with user-key fallback.
   - Revisit AI key encryption-secret operations: backup/restore process, rotation, and moving secret management out of ad hoc local YAML.
   - Split `circuitshelf.py` into modular backend domains: app factory, auth dependencies, API routers, services, stores, and workers.
   - Continue moving frontend logic into focused components, hooks, and shared libs so `App.tsx` stays orchestration-only.
