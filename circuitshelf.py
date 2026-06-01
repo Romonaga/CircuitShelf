@@ -51,6 +51,7 @@ from backend.services.image_retrieval_service import ImageRetrievalService
 from backend.services.openai_assist_service import OpenAIAssistService
 from backend.services.openai_model_service import OpenAIModelService
 from backend.services.document_intelligence_service import DocumentIntelligenceService
+from backend.services.document_management_service import DocumentManagementService
 from backend.services.prompt_service import PromptService
 from backend.services.retrieval_service import QueryPreprocessor, RuntimeChunkMapper
 from backend.services.source_metadata import (
@@ -2630,24 +2631,13 @@ api_dependencies = ApiDependencies(
     openai_model_service=openai_model_service,
     performance_store=performance_store,
 )
-def remove_document_from_store(source: str, *, delete_file: bool = True) -> tuple[dict, int]:
-    if not source:
-        return {"error": "Document source is required."}, 400
 
-    rel_source = vector_store.rel_path_for_source(source)
-    row = vector_store.delete_document(rel_source)
-    if not row:
-        return {"error": "Document not found."}, 404
-    prune_training_files_from_state([rel_source])
-    deleted_file = False
-    if delete_file:
-        target = os.path.abspath(os.path.join(TRAINING_DIR, rel_source))
-        training_root = os.path.abspath(TRAINING_DIR)
-        if target.startswith(training_root + os.sep) and os.path.exists(target):
-            os.remove(target)
-            deleted_file = True
-    trace_logger.info(f"🧹 Removed document from store: {rel_source} | deleted source file: {deleted_file}")
-    return {"ok": True, "document": dict(row), "deletedFile": deleted_file}, 200
+document_management_service = DocumentManagementService(
+    vector_store=vector_store,
+    training_dir=TRAINING_DIR,
+    trace_logger=trace_logger,
+    prune_training_files_from_state=prune_training_files_from_state,
+)
 
 
 def flush_trace_log():
@@ -2689,7 +2679,7 @@ register_api_routes(
     image_store=image_store,
     refresh_active_state_from_db=refresh_active_state_from_db,
     reindex_review_source=reindex_review_source,
-    remove_document_from_store=remove_document_from_store,
+    remove_document_from_store=document_management_service.remove_document_from_store,
     assembly_plan_store=assembly_plan_store,
     bench_tools=bench_tools,
     get_rag_response=get_rag_response,
