@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  createEntityMember,
   forceEntityMemberPasswordChange,
   getEntityAIProvider,
   getEntityAIProviderModels,
   getEntityMembers,
   getEntityPasswordPolicy,
+  resetEntityMemberPassword,
   unlockEntityMember,
+  updateEntityMemberRole,
   updateEntityAIProvider,
   updateEntityPasswordPolicy
 } from "../api";
@@ -27,6 +30,15 @@ export function EntitySettingsView({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [newMember, setNewMember] = useState({
+    username: "",
+    temporaryPassword: "",
+    email: "",
+    displayName: "",
+    role: "user",
+    forcePasswordChange: true
+  });
+  const [resetDrafts, setResetDrafts] = useState<Record<number, string>>({});
 
   const loadMembers = useCallback(() => {
     if (!canManage) {
@@ -50,6 +62,55 @@ export function EntitySettingsView({
       loadMembers();
     } catch (err) {
       setError(errorMessage(err, "Could not update member"));
+    }
+  }
+
+  async function createMember() {
+    setError("");
+    setMessage("");
+    try {
+      const response = await createEntityMember(newMember);
+      setMembers(response.members);
+      setNewMember({
+        username: "",
+        temporaryPassword: "",
+        email: "",
+        displayName: "",
+        role: "user",
+        forcePasswordChange: true
+      });
+      setMessage("Entity member created.");
+    } catch (err) {
+      setError(errorMessage(err, "Could not create member"));
+    }
+  }
+
+  async function changeRole(member: EntityMember, role: string) {
+    setError("");
+    setMessage("");
+    try {
+      const response = await updateEntityMemberRole(member.userId, role);
+      setMembers(response.members);
+      setMessage(`${member.username} role updated.`);
+    } catch (err) {
+      setError(errorMessage(err, "Could not update member role"));
+    }
+  }
+
+  async function resetPassword(member: EntityMember) {
+    const temporaryPassword = resetDrafts[member.userId] || "";
+    setError("");
+    setMessage("");
+    try {
+      const response = await resetEntityMemberPassword(member.userId, {
+        temporaryPassword,
+        forcePasswordChange: true
+      });
+      setMembers(response.members);
+      setResetDrafts((current) => ({ ...current, [member.userId]: "" }));
+      setMessage(`${member.username} password reset.`);
+    } catch (err) {
+      setError(errorMessage(err, "Could not reset member password"));
     }
   }
 
@@ -104,6 +165,60 @@ export function EntitySettingsView({
           />
           <ErrorMessage message={error} />
           {message ? <p className="success-message">{message}</p> : null}
+          <div className="member-create-panel">
+            <label>
+              Username
+              <input
+                value={newMember.username}
+                onChange={(event) => setNewMember({ ...newMember, username: event.target.value })}
+                placeholder="new-user"
+              />
+            </label>
+            <label>
+              Temporary password
+              <input
+                type="password"
+                value={newMember.temporaryPassword}
+                onChange={(event) => setNewMember({ ...newMember, temporaryPassword: event.target.value })}
+                placeholder="Force change on login"
+              />
+            </label>
+            <label>
+              Email
+              <input
+                value={newMember.email}
+                onChange={(event) => setNewMember({ ...newMember, email: event.target.value })}
+                placeholder="optional"
+              />
+            </label>
+            <label>
+              Display name
+              <input
+                value={newMember.displayName}
+                onChange={(event) => setNewMember({ ...newMember, displayName: event.target.value })}
+                placeholder="optional"
+              />
+            </label>
+            <label>
+              Role
+              <select value={newMember.role} onChange={(event) => setNewMember({ ...newMember, role: event.target.value })}>
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+                <option value="owner">Owner</option>
+              </select>
+            </label>
+            <label className="inline-check">
+              <input
+                type="checkbox"
+                checked={newMember.forcePasswordChange}
+                onChange={(event) => setNewMember({ ...newMember, forcePasswordChange: event.target.checked })}
+              />
+              Force change
+            </label>
+            <button className="primary-button" type="button" disabled={!newMember.username || !newMember.temporaryPassword} onClick={() => void createMember()}>
+              Create member
+            </button>
+          </div>
           <div className="table-wrap">
             <table className="data-table">
               <thead>
@@ -124,7 +239,13 @@ export function EntitySettingsView({
                       <strong>{member.displayName || member.nickname || member.username}</strong>
                       <small>{member.username}</small>
                     </td>
-                    <td>{member.roleName}</td>
+                    <td>
+                      <select value={member.role} onChange={(event) => void changeRole(member, event.target.value)}>
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                        <option value="owner">Owner</option>
+                      </select>
+                    </td>
                     <td>{member.email || "Not set"}</td>
                     <td>{member.canManageSystem ? "System admin" : "No"}</td>
                     <td>{member.disabledAt ? "Disabled" : (member.isActive ? "Active" : "Inactive")}</td>
@@ -159,6 +280,22 @@ export function EntitySettingsView({
                             Force reset
                           </button>
                         ) : null}
+                        <div className="member-reset-row">
+                          <input
+                            type="password"
+                            value={resetDrafts[member.userId] || ""}
+                            onChange={(event) => setResetDrafts((current) => ({ ...current, [member.userId]: event.target.value }))}
+                            placeholder="temporary password"
+                          />
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={!resetDrafts[member.userId]}
+                            onClick={() => void resetPassword(member)}
+                          >
+                            Reset
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>

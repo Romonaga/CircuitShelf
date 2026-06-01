@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import bcrypt
-from psycopg.errors import UndefinedTable
+from psycopg.errors import UndefinedTable, UniqueViolation
 
 from db.connection import Database
 from db.sql import load_query
@@ -108,6 +108,56 @@ class UserStore:
                 load_query("users_upsert.sql"),
                 (username, password_hash, is_admin, is_active),
             )
+
+    def create_user(
+        self,
+        *,
+        username: str,
+        password: str,
+        email: str = "",
+        display_name: str = "",
+        nickname: str = "",
+        phone: str = "",
+        address: str = "",
+        is_admin: bool = False,
+        force_password_change: bool = True,
+    ) -> dict:
+        clean_username = str(username or "").strip()
+        if not clean_username:
+            raise ValueError("Username is required.")
+        if not password:
+            raise ValueError("Temporary password is required.")
+        password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        try:
+            with self.database.connection() as conn:
+                row = conn.execute(
+                    load_query("users_create.sql"),
+                    (
+                        clean_username,
+                        password_hash,
+                        bool(is_admin),
+                        str(email or "").strip(),
+                        str(display_name or "").strip(),
+                        str(nickname or "").strip(),
+                        str(phone or "").strip(),
+                        str(address or "").strip(),
+                        bool(force_password_change),
+                    ),
+                ).fetchone()
+        except UniqueViolation as exc:
+            raise ValueError("Username or email already exists.") from exc
+        return dict(row)
+
+    def reset_password(self, user_id: int, new_password: str, *, force_password_change: bool = True) -> dict | None:
+        if not new_password:
+            raise ValueError("Temporary password is required.")
+        password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("users_admin_password_reset.sql"),
+                (password_hash, bool(force_password_change), int(user_id)),
+            ).fetchone()
+        return dict(row) if row else None
 
     def change_password(self, user_id: int, current_password: str, new_password: str) -> bool:
         if not current_password or not new_password:

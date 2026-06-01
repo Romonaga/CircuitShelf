@@ -1417,6 +1417,25 @@ nav {
   font-size: 0.82rem;
 }
 
+.member-create-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) minmax(100px, 0.7fr) minmax(110px, auto) auto;
+  gap: 10px;
+  align-items: end;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.member-reset-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto;
+  gap: 8px;
+  width: min(280px, 100%);
+}
+
 .settings-editor-stack {
   display: grid;
   gap: 16px;

@@ -114,9 +114,43 @@ export function getEntityMembers(): Promise<{ entity: EntityContext; members: En
   return requestJson<{ entity: EntityContext; members: EntityMember[] }>("/api/entity/members");
 }
 
+export function createEntityMember(payload: {
+  username: string;
+  temporaryPassword: string;
+  email?: string;
+  displayName?: string;
+  nickname?: string;
+  phone?: string;
+  address?: string;
+  role: string;
+  forcePasswordChange: boolean;
+}): Promise<{ ok: boolean; members: EntityMember[] }> {
+  return requestJson<{ ok: boolean; members: EntityMember[] }>("/api/entity/members", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateEntityMemberRole(userId: number, role: string): Promise<{ ok: boolean; members: EntityMember[] }> {
+  return requestJson<{ ok: boolean; members: EntityMember[] }>(`/api/entity/members/${encodeURIComponent(String(userId))}/role`, {
+    method: "PUT",
+    body: JSON.stringify({ role })
+  });
+}
+
 export function unlockEntityMember(userId: number): Promise<{ ok: boolean }> {
   return requestJson<{ ok: boolean }>(`/api/entity/members/${encodeURIComponent(String(userId))}/unlock`, {
     method: "POST"
+  });
+}
+
+export function resetEntityMemberPassword(
+  userId: number,
+  payload: { temporaryPassword: string; forcePasswordChange: boolean }
+): Promise<{ ok: boolean; members: EntityMember[] }> {
+  return requestJson<{ ok: boolean; members: EntityMember[] }>(`/api/entity/members/${encodeURIComponent(String(userId))}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify(payload)
   });
 }
 

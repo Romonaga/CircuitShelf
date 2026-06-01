@@ -92,6 +92,14 @@ class EntityStore:
             ).fetchone()
         return dict(row) if row else None
 
+    def update_member_role(self, entity_id: int, user_id: int, role: str) -> dict[str, Any] | None:
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("entity_member_role_update.sql"),
+                (int(entity_id), int(user_id), str(role or "user")),
+            ).fetchone()
+        return dict(row) if row else None
+
     def upsert_entity(self, name: str, owner_user_id: int | None = None) -> dict[str, Any]:
         slug = slugify_entity_name(name)
         with self.database.connection() as conn:
