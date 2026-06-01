@@ -38,6 +38,37 @@ def normalize_part_name(value: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def compact_part_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", normalize_part_name(value))
+
+
+def part_lookup_keys(value: str, part_type: str = "") -> list[str]:
+    text = normalize_part_name(value)
+    compact = compact_part_key(value)
+    keys = OrderedDict()
+    for key in (text, compact):
+        if key:
+            keys.setdefault(key, key)
+
+    combined = f"{text} {normalize_part_name(part_type)}"
+    if re.search(r"\b(?:ne|lm)?555\b|\b555 timer\b", combined):
+        for key in ("555", "555 timer", "ne555", "lm555", "ne555 timer", "lm555 timer"):
+            keys.setdefault(key, key)
+    if re.search(r"\bleds?\b|light emitting diode", combined):
+        for key in ("led", "leds", "light emitting diode"):
+            keys.setdefault(key, key)
+    if re.search(r"\bpower supply\b|\bbattery\b", combined):
+        for key in ("power supply", "battery", "bench supply"):
+            keys.setdefault(key, key)
+    if "breadboard" in combined:
+        keys.setdefault("breadboard", "breadboard")
+    if "jumper" in combined:
+        keys.setdefault("jumper wires", "jumper wires")
+        keys.setdefault("jumpers", "jumpers")
+
+    return list(keys.values())
+
+
 class LabInventoryStore:
     def __init__(self, database: Database, logger=None):
         self.database = database
@@ -180,10 +211,13 @@ class ProjectFinderStore:
     def _inventory_index(self, inventory: list[dict[str, Any]], term_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         index: dict[str, dict[str, Any]] = {}
         for part in inventory:
-            index[normalize_part_name(part["displayName"])] = part
-            index[normalize_part_name(part.get("partType") or "")] = part
+            for key in part_lookup_keys(part["displayName"], part.get("partType") or ""):
+                index[key] = part
+            for key in part_lookup_keys(part.get("partType") or "", part.get("partType") or ""):
+                index[key] = part
             for alias in part.get("aliases") or []:
-                index[normalize_part_name(alias)] = part
+                for key in part_lookup_keys(alias, part.get("partType") or ""):
+                    index[key] = part
         for row in term_rows:
             part = {
                 "id": str(row["part_id"]),
@@ -194,9 +228,12 @@ class ProjectFinderStore:
                 "location": row["location"] or "",
                 "notes": row["notes"] or "",
             }
-            index[normalize_part_name(row.get("term") or row.get("normalized_term") or "")] = part
-            index[normalize_part_name(row.get("normalized_term") or "")] = part
-            index[normalize_part_name(row.get("part_type") or "")] = part
+            for key in part_lookup_keys(row.get("term") or row.get("normalized_term") or "", row.get("part_type") or ""):
+                index[key] = part
+            for key in part_lookup_keys(row.get("normalized_term") or "", row.get("part_type") or ""):
+                index[key] = part
+            for key in part_lookup_keys(row.get("part_type") or "", row.get("part_type") or ""):
+                index[key] = part
         return {key: value for key, value in index.items() if key}
 
     def _chunk_candidate(self, row, inventory_index: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -205,7 +242,8 @@ class ProjectFinderStore:
         required = infer_required_parts(text)
         missing = self._missing_parts(required, inventory_index)
         score = int(row["matched_count"] or 0) * 18 + float(row["quality_score"] or 0.0) * 10 - len(missing) * 4
-        if re.search(r"\b(project|experiment|build)\b", text, re.IGNORECASE):
+        project_like = self._is_project_like(text, required, matched)
+        if project_like:
             score += 10
         title = self._candidate_title(row["display_name"], row["section_title"], required, matched)
         return {
@@ -224,6 +262,7 @@ class ProjectFinderStore:
             "missingParts": missing,
             "suggestedSubstitutions": [],
             "buildable": len(missing) == 0 and len(matched) > 0,
+            "projectLike": project_like,
             "score": round(score, 2),
         }
 
@@ -247,13 +286,14 @@ class ProjectFinderStore:
             "missingParts": [],
             "suggestedSubstitutions": [],
             "buildable": len(matched) > 0,
+            "projectLike": True,
             "score": round(14 + len(matched) * 20 + float(row["confidence"] or 0.0) * 15, 2),
         }
 
     def _matched_parts(self, terms: list[str], inventory_index: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         result = OrderedDict()
         for term in terms:
-            part = inventory_index.get(normalize_part_name(term))
+            part = self._find_inventory_part(term, "", inventory_index)
             if part:
                 result.setdefault(part["id"], {
                     "id": part["id"],
@@ -267,15 +307,32 @@ class ProjectFinderStore:
     def _missing_parts(self, required_parts: list[dict[str, str]], inventory_index: dict[str, dict[str, Any]]) -> list[dict[str, str]]:
         missing = []
         for part in required_parts:
-            normalized = normalize_part_name(part["name"])
-            if normalized in inventory_index:
+            if self._find_inventory_part(part["name"], part.get("type") or "", inventory_index):
                 continue
             if part["type"] in {"resistor", "capacitor"} and part["type"] in inventory_index:
                 continue
-            if part["name"].lower() in inventory_index:
-                continue
             missing.append(part)
         return missing[:8]
+
+    def _find_inventory_part(
+        self,
+        name: str,
+        part_type: str,
+        inventory_index: dict[str, dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        for key in part_lookup_keys(name, part_type):
+            if key in inventory_index:
+                return inventory_index[key]
+        return None
+
+    def _is_project_like(self, text: str, required: list[dict[str, str]], matched: list[dict[str, Any]]) -> bool:
+        if re.search(
+            r"\b(project|experiment|build|breadboard|wire|connect|schematic|circuit|diagram|parts?|component|pin)\b",
+            text or "",
+            re.IGNORECASE,
+        ):
+            return True
+        return len(required) >= 2 and len(matched) > 0
 
     def _candidate_title(
         self,
@@ -299,10 +356,31 @@ class ProjectFinderStore:
     def _dedupe_candidates(self, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
         result = OrderedDict()
         for candidate in candidates:
-            existing = result.get(candidate["id"])
+            if not candidate.get("projectLike"):
+                continue
+            key = self._candidate_dedupe_key(candidate)
+            existing = result.get(key)
             if not existing or candidate["score"] > existing["score"]:
-                result[candidate["id"]] = candidate
+                result[key] = candidate
         return list(result.values())
+
+    def _candidate_dedupe_key(self, candidate: dict[str, Any]) -> str:
+        required = sorted(
+            normalize_part_name(part.get("name") or part.get("displayName") or "")
+            for part in candidate.get("requiredParts") or []
+        )
+        if required:
+            signature = "|".join(required)
+        else:
+            signature = normalize_part_name(candidate.get("title") or candidate.get("summary") or "")
+        return "|".join(
+            [
+                str(candidate.get("kind") or ""),
+                str(candidate.get("source") or ""),
+                normalize_part_name(candidate.get("title") or ""),
+                signature,
+            ]
+        )
 
     def _missing_part_summary(self, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
         summary: OrderedDict[str, dict[str, Any]] = OrderedDict()
