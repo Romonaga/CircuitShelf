@@ -321,6 +321,29 @@ process_text_file = document_processing_service.process_text_file
 process_image_file = document_processing_service.process_image_file
 process_file_by_type = document_processing_service.process_file_by_type
 load_documents_parallel = document_processing_service.load_documents_parallel
+
+def supported_training_extensions():
+    return {
+        DOC_EXT,
+        PDF_EXT,
+        MD_EXT,
+        ".txt",
+        *config.get("IMG_EXTENSIONS", []),
+    }
+
+
+def build_ingest_manifest():
+    return IngestManifest(
+        manifest_path="",
+        training_dir=TRAINING_DIR,
+        supported_extensions=supported_training_extensions(),
+        recursive=config.get("TRAINING_RECURSIVE", True),
+        excluded_dirs=config.get("TRAINING_EXCLUDE_DIRS", []),
+        hash_files=config.get("INGEST_HASH_FILES", False),
+    )
+
+
+
 incremental_ingest_service = IncrementalIngestService(
     config=config,
     trace_logger=trace_logger,
@@ -355,28 +378,6 @@ persist_incremental_document = incremental_ingest_service.persist_incremental_do
 mark_source_ready_for_review = incremental_ingest_service.mark_source_ready_for_review
 run_incremental_ingest = incremental_ingest_service.run_incremental_ingest
 reindex_review_source = incremental_ingest_service.reindex_review_source
-
-
-def supported_training_extensions():
-    return {
-        DOC_EXT,
-        PDF_EXT,
-        MD_EXT,
-        ".txt",
-        *config.get("IMG_EXTENSIONS", []),
-    }
-
-
-def build_ingest_manifest():
-    return IngestManifest(
-        manifest_path="",
-        training_dir=TRAINING_DIR,
-        supported_extensions=supported_training_extensions(),
-        recursive=config.get("TRAINING_RECURSIVE", True),
-        excluded_dirs=config.get("TRAINING_EXCLUDE_DIRS", []),
-        hash_files=config.get("INGEST_HASH_FILES", False),
-    )
-
 
 
 
