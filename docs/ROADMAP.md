@@ -35,7 +35,17 @@
   - Restore entity and user settings, including password policy controls and account profile fields.
   - Restore global corpus versus entity-private document scope before large-scale dogfooding.
   - Restore AI provider configuration, BYOK user keys, system/entity keys, usage auditing, pricing, and budgets.
+  - Extend AI pricing beyond the standard short-context rates: long-context, batch, flex, priority, and regional processing uplifts.
+  - Add live OpenAI model discovery/refresh so admins can select from models available to the configured key.
+  - Enforce AI budgets, not just report them, with clear payer scope rules for system, entity, and user keys.
+  - Restore richer AI usage reporting and export for every row the current user, entity admin, owner, or system admin is allowed to see.
+  - Decide and implement AI use during ingestion, including which payer scope is charged for corpus versus entity-private documents.
   - Split `circuitshelf.py` into modular backend domains: app factory, auth dependencies, API routers, services, stores, and workers.
+  - Continue moving frontend logic into focused components, hooks, and shared libs so `App.tsx` stays orchestration-only.
+  - Restore and harden Project Finder: deduplicate candidates, reject non-project fragments, and use inventory aliases/substitutions correctly.
+  - Polish inventory management: row edit, rename by stable part ID, alias editing, location persistence, and right-click delete.
+  - Build a stronger global corpus workflow: admin upload, review, promotion, audit, and clear global/entity-private visibility.
+  - Finish account/admin workflows: user creation, password reset, unlock, force-password-change gating, and role management.
   - Keep the Kotlin/backend conversion separate until the Python baseline is feature-stable again.
 
 - Real photo-based wire tracing and component recognition.
