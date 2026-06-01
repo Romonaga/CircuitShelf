@@ -44,6 +44,26 @@ class AIProviderStore:
             for row in rows
         ]
 
+    def pricing_variants(self, provider: str = "openai") -> list[dict[str, Any]]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("ai_model_pricing_variants_list.sql"), (provider,)).fetchall()
+        return [
+            {
+                "provider": row["provider_code"],
+                "modelName": row["model_name"],
+                "contextBand": row["context_band"],
+                "serviceTier": row["service_tier"],
+                "inputPerMillion": float(row["input_per_million"] or 0),
+                "cachedInputPerMillion": float(row["cached_input_per_million"] or 0),
+                "outputPerMillion": float(row["output_per_million"] or 0),
+                "currency": row["currency"],
+                "sourceNote": row["source_note"],
+                "isActive": bool(row["is_active"]),
+                "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
+            }
+            for row in rows
+        ]
+
     def pricing_for_model(
         self,
         model_name: str,

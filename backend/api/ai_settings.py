@@ -39,6 +39,7 @@ def create_router(deps: ApiDependencies) -> APIRouter:
         return {
             "settings": deps.ai_provider_store.get_user_settings(deps.user_id_for_user(user), provider),
             "pricing": deps.ai_provider_store.pricing_catalog(provider),
+            "pricingVariants": deps.ai_provider_store.pricing_variants(provider),
         }
 
     @router.get("/api/account/ai-provider/models")
@@ -76,6 +77,7 @@ def create_router(deps: ApiDependencies) -> APIRouter:
         return {
             "settings": deps.ai_provider_store.get_entity_settings(entity.entity_id, provider),
             "pricing": deps.ai_provider_store.pricing_catalog(provider),
+            "pricingVariants": deps.ai_provider_store.pricing_variants(provider),
         }
 
     @router.get("/api/entity/ai-provider/models")
@@ -114,6 +116,7 @@ def create_router(deps: ApiDependencies) -> APIRouter:
         return {
             "settings": deps.ai_provider_store.get_system_settings(provider),
             "pricing": deps.ai_provider_store.pricing_catalog(provider),
+            "pricingVariants": deps.ai_provider_store.pricing_variants(provider),
         }
 
     @router.get("/api/system/ai-provider/models")
