@@ -58,6 +58,7 @@ from backend.services.runtime_status_service import (
     effective_embedding_batch_size as runtime_effective_embedding_batch_size,
 )
 from backend.services.image_retrieval_service import ImageRetrievalService
+from backend.services.image_state_service import ImageStateService
 from backend.services.ollama_chat_client import OllamaChatClient
 from backend.services.document_intelligence_service import DocumentIntelligenceService
 from backend.services.document_management_service import DocumentManagementService
@@ -251,6 +252,33 @@ INGEST_WATCH_RESCHEDULE = threading.Event()
 INGEST_WATCH_THREAD = None
 ingest_progress = IngestProgressTracker(config=config)
 index_status = ingest_progress.status
+set_index_status = ingest_progress.set_status
+ingest_watch_interval_seconds = ingest_progress.watch_interval_seconds
+schedule_next_ingest_check = ingest_progress.schedule_next_check
+seconds_until_next_ingest_check = ingest_progress.seconds_until_next_check
+update_index_progress = ingest_progress.update_progress
+update_index_detail = ingest_progress.update_detail
+begin_document_worker = ingest_progress.begin_document_worker
+finish_document_worker = ingest_progress.finish_document_worker
+current_document_workers = ingest_progress.current_document_workers
+active_document_worker_count = ingest_progress.active_document_worker_count
+image_state_service = ImageStateService(
+    state=state,
+    vector_store=vector_store,
+    image_store=image_store,
+    chunker=chunker,
+    embedder=embedder,
+    config=config,
+    trace_logger=trace_logger,
+    embedding_model_name=EMBED_MODEL_NAME,
+    effective_embedding_batch_size=lambda: effective_embedding_batch_size(),
+    update_index_detail=update_index_detail,
+    update_index_progress=update_index_progress,
+)
+load_db_image_state = image_state_service.load_db_image_state
+refresh_active_state_from_db = image_state_service.refresh_active_state_from_db
+persist_db_image_state = image_state_service.persist_db_image_state
+backfill_missing_image_embeddings = image_state_service.backfill_missing_image_embeddings
 
 
 def supported_training_extensions():
@@ -493,143 +521,6 @@ def prune_training_files_from_state(rel_paths):
         f"🧹 Pruned {removed_chunks} chunks and removed OCR/image state for "
         f"{len(rel_paths)} changed/removed training files."
     )
-
-
-def load_db_image_state():
-    image_data, captions, page_text, mime_types = image_store.load_state_payload()
-    state.set_image_store(image_data)
-    state.set_image_captions(captions)
-    state.set_image_page_text(page_text)
-    state.set_image_mime_types(mime_types)
-    builder = IndexBuilder(state, chunker, embedder, config, trace_logger, batch_size_resolver=effective_embedding_batch_size)
-    return builder.build_image_index()
-
-
-def refresh_active_state_from_db():
-    chunks, sources, metadata, embeddings = vector_store.load_state_payload()
-    state.replace_catalog(
-        chunks=chunks,
-        sources=sources,
-        metadata=metadata,
-        embeddings=embeddings,
-        image_store={},
-        image_captions={},
-        image_page_text={},
-        image_mime_types={},
-        image_id_list=[],
-    )
-    return load_db_image_state()
-
-
-def persist_db_image_state(file_records, target_state=None, rel_paths=None, progress_file=None):
-    target_state = target_state or state
-    image_text = target_state.get_image_page_text()
-    image_ids = target_state.get_image_id_list()
-    image_payload = target_state.get_image_store()
-    total_images = len(image_payload)
-    if not progress_file:
-        update_index_detail(
-            savedImages=0,
-            totalImagesToSave=total_images,
-            skippedImages=0,
-            indexedImageTexts=len(image_ids),
-        )
-    if progress_file:
-        update_index_progress(
-            current_file=progress_file,
-            file_details={
-                "documentPhase": "Preparing image save",
-                "savedImages": 0,
-                "totalImagesToSave": total_images,
-                "skippedImages": 0,
-            },
-        )
-    image_embeddings = {}
-    if image_ids:
-        if not progress_file:
-            update_index_detail(imageEmbeddingTexts=0, imageEmbeddingTotal=len(image_ids))
-        if progress_file:
-            update_index_progress(
-                current_file=progress_file,
-                file_details={
-                    "documentPhase": "Embedding image text",
-                    "imageEmbeddingTexts": 0,
-                    "imageEmbeddingTotal": len(image_ids),
-                },
-            )
-        encoded = embedder.encode(
-            [image_text[key] for key in image_ids],
-            batch_size=effective_embedding_batch_size(),
-            convert_to_numpy=True,
-        ).astype("float32")
-        image_embeddings = {key: encoded[idx] for idx, key in enumerate(image_ids)}
-        if not progress_file:
-            update_index_detail(imageEmbeddingTexts=len(image_ids), imageEmbeddingTotal=len(image_ids))
-        if progress_file:
-            update_index_progress(
-                current_file=progress_file,
-                file_details={
-                    "imageEmbeddingTexts": len(image_ids),
-                    "imageEmbeddingTotal": len(image_ids),
-                },
-            )
-
-    def report_image_save_progress(saved_images, total_images, skipped_images=0, current_image=None):
-        if progress_file:
-            update_index_progress(
-                current_file=progress_file,
-                file_details={
-                    "documentPhase": "Saving images",
-                    "savedImages": saved_images,
-                    "totalImagesToSave": total_images,
-                    "skippedImages": skipped_images,
-                    "currentImage": current_image,
-                },
-            )
-        else:
-            update_index_detail(
-                savedImages=saved_images,
-                totalImagesToSave=total_images,
-                skippedImages=skipped_images,
-            )
-
-    payload = {
-        "file_records": file_records,
-        "image_store": image_payload,
-        "image_captions": target_state.get_image_captions(),
-        "image_page_text": target_state.get_image_page_text(),
-        "image_embeddings": image_embeddings,
-        "embedding_model": EMBED_MODEL_NAME,
-        "metadata": target_state.get_metadata(),
-        "progress_callback": report_image_save_progress,
-    }
-    if rel_paths is None:
-        image_store.replace_catalog(**payload)
-    else:
-        image_store.upsert_sources(**payload, rel_paths=set(rel_paths))
-    return {
-        "storedImages": len(target_state.get_image_store()),
-        "indexedImageTexts": len(image_ids),
-        "ocrImageTexts": len(image_text),
-    }
-
-
-def backfill_missing_image_embeddings(limit=512):
-    missing = image_store.load_missing_embedding_inputs(limit=limit)
-    if not missing:
-        return 0
-    trace_logger.info(f"🖼️ Backfilling {len(missing)} missing DB image embeddings.")
-    encoded = embedder.encode(
-        [row["embedding_text"] for row in missing],
-        batch_size=effective_embedding_batch_size(),
-        convert_to_numpy=True,
-    ).astype("float32")
-    image_store.update_embeddings(
-        {row["image_key"]: encoded[idx] for idx, row in enumerate(missing)},
-        EMBED_MODEL_NAME,
-    )
-    return len(missing)
-
 
 def ocr_image_bytes(image_bytes, image_id):
     """Run the single OCR acceptance path used by all image ingestion."""
