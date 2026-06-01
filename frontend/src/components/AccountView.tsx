@@ -10,11 +10,13 @@ import { SectionHeader } from "./SectionHeader";
 export function AccountView({
   username,
   theme,
-  setTheme
+  setTheme,
+  onPasswordChanged
 }: {
   username: string;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
+  onPasswordChanged?: () => Promise<void> | void;
 }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -38,6 +40,7 @@ export function AccountView({
       setNewPassword("");
       setConfirmPassword("");
       setMessage("Password updated.");
+      await onPasswordChanged?.();
     } catch (err) {
       setError(errorMessage(err, "Could not update password"));
     } finally {

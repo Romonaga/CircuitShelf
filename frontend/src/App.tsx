@@ -28,7 +28,7 @@ export default function App() {
     config?.statusPollIntervalSeconds,
     config?.activeStatusPollIntervalSeconds
   );
-  const { user, login, logout } = useSession(config);
+  const { user, login, logout, refreshSession } = useSession(config);
   const { theme, setTheme, toggleTheme } = useThemePreference(Boolean(user));
   const error = configError || statusError;
 
@@ -37,6 +37,14 @@ export default function App() {
       setActiveView("account");
     }
   }, [user?.forcePasswordChange]);
+
+  const setGuardedActiveView = (view: View) => {
+    if (user?.forcePasswordChange && view !== "account") {
+      setActiveView("account");
+      return;
+    }
+    setActiveView(view);
+  };
 
   if (!config) {
     return (
@@ -54,7 +62,7 @@ export default function App() {
   return (
     <AppShell
       activeView={activeView}
-      setActiveView={setActiveView}
+      setActiveView={setGuardedActiveView}
       siteName={config.siteName}
       user={user?.username || "local"}
       isAdmin={Boolean(user?.isAdmin)}
@@ -80,7 +88,7 @@ export default function App() {
         <BenchView config={config} isActive={activeView === "bench"} />
       </div>
       <div hidden={activeView !== "finder"}>
-        <ProjectFinderView config={config} isActive={activeView === "finder"} setActiveView={setActiveView} />
+        <ProjectFinderView config={config} isActive={activeView === "finder"} setActiveView={setGuardedActiveView} />
       </div>
       <div hidden={activeView !== "inventory"}>
         <InventoryView isActive={activeView === "inventory"} />
@@ -95,7 +103,7 @@ export default function App() {
           status={status}
           refreshSignal={`${status?.sources ?? 0}:${status?.chunks ?? 0}:${status?.imageIds ?? 0}`}
           onStatusChange={refreshStatus}
-          onOpenReview={() => setActiveView("review")}
+          onOpenReview={() => setGuardedActiveView("review")}
         />
       </div>
       {user?.canManageSystem ? (
@@ -106,7 +114,7 @@ export default function App() {
             status={status}
             refreshSignal={`${status?.sources ?? 0}:${status?.chunks ?? 0}:${status?.imageIds ?? 0}`}
             onStatusChange={refreshStatus}
-            onOpenReview={() => setActiveView("review")}
+            onOpenReview={() => setGuardedActiveView("review")}
             title="Corpus"
             description={`${status?.sources ?? 0} global indexed sources`}
             uploadHelp="Upload shared electronics books, datasheets, and notes for the global CircuitShelf corpus."
@@ -134,7 +142,7 @@ export default function App() {
           status={status}
           refresh={refreshStatus}
           isActive={activeView === "performance"}
-          onOpenReview={() => setActiveView("review")}
+          onOpenReview={() => setGuardedActiveView("review")}
         />
       </div>
       {(user?.entity?.canManage || user?.canManageSystem) ? (
@@ -143,7 +151,7 @@ export default function App() {
         </div>
       ) : null}
       <div hidden={activeView !== "account"}>
-        <AccountView username={user?.username || "local"} theme={theme} setTheme={setTheme} />
+        <AccountView username={user?.username || "local"} theme={theme} setTheme={setTheme} onPasswordChanged={refreshSession} />
       </div>
       {user?.canManageSystem ? (
         <div hidden={activeView !== "settings"}>

@@ -71,35 +71,42 @@ export function useSession(config: AppConfig | null) {
     setSession(storedSession);
   }, []);
 
+  const refreshSession = useCallback(async () => {
+    const currentSession = sessionRef.current;
+    if (!config?.authConfigured || !currentSession?.token) {
+      return;
+    }
+    const currentUser = await getMe();
+    const refreshedSession: SessionUser = {
+      ...currentSession,
+      userId: currentUser.userId,
+      username: currentUser.username,
+      isAdmin: Boolean(currentUser.isAdmin),
+      canManageSystem: Boolean(currentUser.canManageSystem),
+      forcePasswordChange: Boolean(currentUser.forcePasswordChange),
+      entity: currentUser.entity ?? null,
+      lastActivityAt: Date.now()
+    };
+    sessionRef.current = refreshedSession;
+    window.localStorage.setItem(sessionStorageKey, JSON.stringify(refreshedSession));
+    setSession(refreshedSession);
+  }, [config?.authConfigured]);
+
   useEffect(() => {
     if (!config?.authConfigured || !session?.token) {
       return;
     }
     let active = true;
-    getMe()
-      .then((currentUser) => {
-        if (!active) {
-          return;
-        }
-        const refreshedSession: SessionUser = {
-          ...session,
-          userId: currentUser.userId,
-          username: currentUser.username,
-          isAdmin: Boolean(currentUser.isAdmin),
-          canManageSystem: Boolean(currentUser.canManageSystem),
-          forcePasswordChange: Boolean(currentUser.forcePasswordChange),
-          entity: currentUser.entity ?? null,
-          lastActivityAt: Date.now()
-        };
-        sessionRef.current = refreshedSession;
-        window.localStorage.setItem(sessionStorageKey, JSON.stringify(refreshedSession));
-        setSession(refreshedSession);
-      })
-      .catch(() => undefined);
+    refreshSession().catch(() => {
+      if (active) {
+        return undefined;
+      }
+      return undefined;
+    });
     return () => {
       active = false;
     };
-  }, [config?.authConfigured, session?.token]);
+  }, [config?.authConfigured, refreshSession, session?.token]);
 
   useEffect(() => {
     if (!config?.authConfigured || !session) {
@@ -149,5 +156,5 @@ export function useSession(config: AppConfig | null) {
     return () => window.removeEventListener("circuitshelf-auth-expired", clearSession);
   }, [clearSession]);
 
-  return { user: session, login, logout };
+  return { user: session, login, logout, refreshSession };
 }
