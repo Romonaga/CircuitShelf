@@ -8,9 +8,7 @@ Created on Mon Apr 21 06:54:37 2025
 
 # ===  Imports, Logging, and Configuration ===
 
-import os
 import time
-import threading
 import bench_tools
 from contextlib import asynccontextmanager
 from sentence_transformers import SentenceTransformer
@@ -40,6 +38,7 @@ from backend.services.ingest_stats import (
 from backend.services.ingest_context_service import IngestContextService
 from backend.services.document_processing_service import DocumentProcessingService
 from backend.services.incremental_ingest_service import IncrementalIngestService
+from backend.services.index_lifecycle_service import IndexLifecycleService
 from backend.services.ingest_housekeeping import IngestHousekeepingService
 from backend.services.ingest_progress import IngestProgressTracker, utc_now, utc_now_iso
 from backend.services.runtime_status_service import (
@@ -225,10 +224,6 @@ image_retrieval_service = ImageRetrievalService(
 
 reranker_engine = Reranker(config, state, chunker, trace_logger)
 runtime_settings.register_callback("RERANK_PROFILES", lambda value: setattr(reranker_engine, "rerank_profiles", value))
-INDEX_JOB_LOCK = threading.Lock()
-INGEST_WATCH_STOP = threading.Event()
-INGEST_WATCH_RESCHEDULE = threading.Event()
-INGEST_WATCH_THREAD = None
 ingest_progress = IngestProgressTracker(config=config)
 index_status = ingest_progress.status
 set_index_status = ingest_progress.set_status
@@ -381,324 +376,41 @@ reindex_review_source = incremental_ingest_service.reindex_review_source
 
 
 
-def check_for_training_changes(reason="watch"):
-    if not INDEX_JOB_LOCK.acquire(blocking=False):
-        trace_logger.info(f"⏳ Index check skipped for {reason}; another index job is running.")
-        performance_store.record_work_run(
-            work_type="index_check",
-            label="Index check skipped",
-            trigger_reason=reason,
-            status="skipped",
-            details={"reason": "already_running"},
-        )
-        return set_index_status(lastResult="already_running")
-
-    started_at = utc_now()
-    work_status = "completed"
-    work_label = "Index check"
-    work_error = None
-    work_details = {}
-    set_index_status(
-        running=True,
-        stage="scanning",
-        currentFiles=[],
-        fileProgress={},
-        processedFiles=0,
-        totalFiles=0,
-        lastStartedAt=utc_now_iso(),
-        lastFinishedAt=None,
-        lastReason=reason,
-        lastError=None,
-        lastResult="running",
-        lastChanges=None,
-        details={},
-    )
-    start_time = time.time()
-    try:
-        manifest = build_ingest_manifest()
-        current_manifest = manifest.scan()
-        previous_manifest = vector_store.load_document_records()
-        changes = manifest.diff(previous_manifest, current_manifest)
-        set_index_status(lastChanges=file_changes_payload(changes))
-        if not changes.has_changes:
-            trace_logger.info(f"✅ Index check found no training changes for {reason}.")
-            work_label = "Index check: no changes"
-            work_status = "skipped"
-            work_details = file_changes_payload(changes)
-            return set_index_status(
-                running=False,
-                stage="idle",
-                currentFiles=[],
-                fileProgress={},
-                processedFiles=0,
-                totalFiles=0,
-                lastFinishedAt=utc_now_iso(),
-                lastResult="no_changes",
-                lastChanges=file_changes_payload(changes),
-                details={},
-            )
-
-        set_index_status(
-            stage="processing_documents",
-            processedFiles=0,
-            totalFiles=len(changes.changed_or_added),
-            currentFiles=[],
-            fileProgress={},
-        )
-        build_result, final_details = run_incremental_ingest(changes, current_manifest)
-        duration = time.time() - start_time
-        trace_logger.info(
-            f"✅ Incremental index check completed in {duration:.2f} sec. "
-            f"Chunks: {len(state.get_chunks())}, embeddings: {len(state.get_embeddings())}"
-        )
-        result = "updated"
-        if build_result:
-            result = f"review_ready {build_result.chunks} changed chunks"
-            work_label = "Document ingest"
-            work_details = final_details
-        elif changes.removed and not changes.changed_or_added:
-            result = f"ignored {len(changes.removed)} missing source files"
-            work_label = "Index check: ignored missing sources"
-            work_status = "skipped"
-            work_details = final_details
-        else:
-            work_details = final_details
-        return set_index_status(
-            running=False,
-            stage="idle",
-            currentFiles=[],
-            fileProgress={},
-            processedFiles=len(changes.changed_or_added),
-            totalFiles=len(changes.changed_or_added),
-            lastFinishedAt=utc_now_iso(),
-            lastResult=result,
-            lastChanges=file_changes_payload(changes),
-            details=final_details,
-        )
-    except Exception as exc:
-        trace_logger.error(f"❌ Incremental index check failed for {reason}: {exc}")
-        work_status = "failed"
-        work_label = "Index check failed"
-        work_error = str(exc)
-        return set_index_status(
-            running=False,
-            stage="failed",
-            currentFiles=[],
-            fileProgress={},
-            lastFinishedAt=utc_now_iso(),
-            lastResult="failed",
-            lastError=str(exc),
-            details={},
-        )
-    finally:
-        finished_at = utc_now()
-        index_snapshot = ingest_progress.snapshot()
-        detail_snapshot = dict(index_snapshot.get("details") or {})
-        last_changes = index_snapshot.get("lastChanges")
-        merged_details = {
-            **(work_details or {}),
-            **detail_snapshot,
-            "lastChanges": last_changes,
-        }
-        performance_store.record_work_run(
-            work_type="document_ingest" if work_label == "Document ingest" else "index_check",
-            label=work_label,
-            trigger_reason=reason,
-            status=work_status,
-            started_at=started_at,
-            finished_at=finished_at,
-            chunks=int(merged_details.get("chunks") or 0),
-            images=int(merged_details.get("storedImages") or merged_details.get("extractedImages") or 0),
-            dropped_chunks=int(merged_details.get("droppedChunks") or 0),
-            details=merged_details,
-            error_message=work_error,
-        )
-        run_index_housekeeping()
-        INDEX_JOB_LOCK.release()
-
-
-def start_index_check(reason="manual"):
-    if INDEX_JOB_LOCK.locked():
-        return {"started": False, "status": dict(index_status)}
-
-    if reason != "watch":
-        status = schedule_next_ingest_check()
-        INGEST_WATCH_RESCHEDULE.set()
-    else:
-        status = dict(index_status)
-
-    thread = threading.Thread(
-        target=check_for_training_changes,
-        kwargs={"reason": reason},
-        name=f"circuitshelf-index-{reason}",
-        daemon=True,
-    )
-    thread.start()
-    return {"started": True, "status": status}
-
-
-def ingest_watch_loop():
-    schedule_next_ingest_check()
-    trace_logger.info(f"👁️ Training watcher enabled. Checking every {ingest_watch_interval_seconds()} seconds.")
-
-    while not INGEST_WATCH_STOP.is_set():
-        remaining = seconds_until_next_ingest_check()
-        if INGEST_WATCH_STOP.wait(remaining):
-            break
-        if INGEST_WATCH_RESCHEDULE.is_set():
-            INGEST_WATCH_RESCHEDULE.clear()
-            schedule_next_ingest_check()
-            continue
-        schedule_next_ingest_check()
-        start_index_check("watch")
-
-
-def start_ingest_watcher():
-    global INGEST_WATCH_THREAD
-    if not config.get("INGEST_WATCH_ENABLED", True):
-        set_index_status(enabled=False)
-        return
-    if INGEST_WATCH_THREAD and INGEST_WATCH_THREAD.is_alive():
-        return
-    INGEST_WATCH_STOP.clear()
-    INGEST_WATCH_THREAD = threading.Thread(target=ingest_watch_loop, name="circuitshelf-ingest-watch", daemon=True)
-    INGEST_WATCH_THREAD.start()
-
-
-def stop_ingest_watcher():
-    INGEST_WATCH_STOP.set()
-
-
-def apply_ingest_watch_enabled(value):
-    if value:
-        set_index_status(enabled=True)
-        start_ingest_watcher()
-    else:
-        stop_ingest_watcher()
-        set_index_status(enabled=False, nextCheckAt=None)
-
-
-def apply_ingest_watch_interval(_value):
-    schedule_next_ingest_check()
-    INGEST_WATCH_RESCHEDULE.set()
-
+index_lifecycle_service = IndexLifecycleService(
+    config=config,
+    trace_logger=trace_logger,
+    state=state,
+    vector_store=vector_store,
+    image_store=image_store,
+    performance_store=performance_store,
+    training_dir=TRAINING_DIR,
+    build_ingest_manifest=build_ingest_manifest,
+    run_incremental_ingest=run_incremental_ingest,
+    file_changes_payload=file_changes_payload,
+    set_index_status=set_index_status,
+    schedule_next_ingest_check=schedule_next_ingest_check,
+    seconds_until_next_ingest_check=seconds_until_next_ingest_check,
+    ingest_watch_interval_seconds=ingest_watch_interval_seconds,
+    index_status=index_status,
+    ingest_progress=ingest_progress,
+    run_index_housekeeping=run_index_housekeeping,
+    load_db_image_state=load_db_image_state,
+    backfill_missing_image_embeddings=backfill_missing_image_embeddings,
+    system_log_build_info=SystemInit.log_build_info,
+    utc_now=utc_now,
+    utc_now_iso=utc_now_iso,
+)
+check_for_training_changes = index_lifecycle_service.check_for_training_changes
+start_index_check = index_lifecycle_service.start_index_check
+ingest_watch_loop = index_lifecycle_service.ingest_watch_loop
+start_ingest_watcher = index_lifecycle_service.start_ingest_watcher
+stop_ingest_watcher = index_lifecycle_service.stop_ingest_watcher
+apply_ingest_watch_enabled = index_lifecycle_service.apply_ingest_watch_enabled
+apply_ingest_watch_interval = index_lifecycle_service.apply_ingest_watch_interval
+get_or_build_index = index_lifecycle_service.get_or_build_index
 
 runtime_settings.register_callback("INGEST_WATCH_ENABLED", apply_ingest_watch_enabled)
 runtime_settings.register_callback("INGEST_WATCH_INTERVAL_SECONDS", apply_ingest_watch_interval)
-
-
-@trace_timer("get_or_build_index")
-def get_or_build_index():
-    if not os.path.exists(TRAINING_DIR):
-        trace_logger.error(f"❌ Training folder '{TRAINING_DIR}' not found! Cannot proceed.")
-        exit(1)
-
-    trace_logger.info("🔄 Starting index load or build...")
-    start_time = time.time()
-    manifest = build_ingest_manifest()
-    current_manifest = manifest.scan()
-
-    previous_manifest = vector_store.load_document_records()
-
-    if previous_manifest:
-        try:
-            chunks, sources, metadata, embeddings = vector_store.load_state_payload()
-            state.set_chunks(chunks)
-            state.set_sources(sources)
-            state.set_metadata(metadata)
-            state.set_embeddings(embeddings)
-            state.set_index(None)
-            image_count = load_db_image_state()
-
-            if not chunks or not embeddings:
-                if vector_store.counts()["documents"] == 0 and vector_store.pending_review_count() > 0:
-                    state.replace_catalog(
-                        chunks=[],
-                        sources=[],
-                        metadata=[],
-                        embeddings=[],
-                        image_store={},
-                        image_captions={},
-                        image_page_text={},
-                        image_mime_types={},
-                        image_id_list=[],
-                        index=None,
-                    )
-                    duration = time.time() - start_time
-                    trace_logger.info(
-                        "✅ DB has pending review documents but no approved catalog; "
-                        f"serving empty active state in {duration:.2f} sec"
-                    )
-                    return
-                raise ValueError("DB vector catalog is incomplete.")
-
-            changes = manifest.diff(previous_manifest, current_manifest)
-            if not changes.has_changes:
-                image_counts = image_store.counts()
-                if image_counts["referenced"] > image_counts["stored"]:
-                    trace_logger.warning(
-                        "⚠️ DB image catalog is incomplete; serving the existing text/vector catalog. "
-                        "Run an index check to repair missing image rows."
-                    )
-                if image_counts["stored"] > image_counts["embeddings"]:
-                    backfilled = backfill_missing_image_embeddings()
-                    if backfilled:
-                        image_count = load_db_image_state()
-                duration = time.time() - start_time
-                SystemInit.log_build_info(trace_logger, chunks, embeddings, state.get_image_id_list(), duration)
-                trace_logger.info(f"✅ DB catalog loaded in {duration:.2f} sec with {image_count} image entries")
-                return
-
-            trace_logger.info(
-                f"🔁 Training changes detected at startup. Added: {len(changes.added)}, "
-                f"modified: {len(changes.modified)}, removed: {len(changes.removed)}, "
-                f"unchanged: {len(changes.unchanged)}. Serving the DB catalog; "
-                "watcher or manual Check now will ingest changes."
-            )
-            set_index_status(
-                lastReason="startup",
-                lastResult="training_changes_pending",
-                lastChanges=file_changes_payload(changes),
-            )
-            duration = time.time() - start_time
-            SystemInit.log_build_info(trace_logger, chunks, embeddings, state.get_image_id_list(), duration)
-            trace_logger.info(f"✅ DB catalog loaded in {duration:.2f} sec with pending training changes")
-            return
-        except Exception as e:
-            trace_logger.warning(f"🧹 DB catalog load failed, rebuilding from source documents: {e}")
-
-    state.replace_catalog(
-        chunks=[],
-        sources=[],
-        metadata=[],
-        embeddings=[],
-        image_store={},
-        image_captions={},
-        image_page_text={},
-        image_mime_types={},
-        image_id_list=[],
-        index=None,
-    )
-    if current_manifest:
-        set_index_status(
-            lastReason="startup",
-            lastResult="source_documents_waiting",
-            lastChanges={
-                "added": len(current_manifest),
-                "modified": 0,
-                "removed": 0,
-                "unchanged": 0,
-                "addedFiles": list(current_manifest.keys())[:20],
-                "modifiedFiles": [],
-                "removedFiles": [],
-            },
-        )
-    duration = time.time() - start_time
-    trace_logger.info(
-        "✅ DB catalog is empty; serving empty state. "
-        f"{len(current_manifest)} source files are waiting for upload/manual indexing. "
-        f"Startup completed in {duration:.2f} sec"
-    )
 
 
 def image_asset_count_for_document(doc_source):
