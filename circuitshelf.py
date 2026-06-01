@@ -48,6 +48,7 @@ from backend.services.runtime_status_service import (
     build_runtime_batch_status,
     effective_embedding_batch_size as runtime_effective_embedding_batch_size,
 )
+from backend.services.image_retrieval_service import ImageRetrievalService
 from backend.services.openai_assist_service import OpenAIAssistService
 from backend.services.openai_model_service import OpenAIModelService
 from backend.services.document_intelligence_service import DocumentIntelligenceService
@@ -325,6 +326,11 @@ config.validate_rerank_profiles(RERANK_PROFILES)
 # === Initialize Globals ===
 
 embedder = SentenceTransformer(EMBED_MODEL_NAME)
+image_retrieval_service = ImageRetrievalService(
+    state=state,
+    embedder=embedder,
+    image_store=image_store,
+)
 
 reranker_engine = Reranker(config, state, chunker, trace_logger)
 runtime_settings.register_callback("RERANK_PROFILES", lambda value: setattr(reranker_engine, "rerank_profiles", value))
@@ -2142,25 +2148,6 @@ def get_or_build_index():
     )
 
 
-@trace_timer("search_top_images")
-def search_top_images(question, top_n=4):
-    action_keywords = ["click", "enter", "select", "choose", "screen", "dashboard", "button", "setting"]
-    query_emb = embedder.encode([question], convert_to_numpy=True).astype("float32")
-    results = []
-
-    for row in image_store.search_images(query_emb[0], top_k=top_n * 2):
-        img_id = row["image_key"]
-        score_boost = 0.0
-        ocr_text = str(row.get("ocr_text") or "").lower()
-        if any(kw in ocr_text for kw in action_keywords):
-            score_boost += 0.05
-        results.append((img_id, float(row["distance"]) - score_boost))
-
-    return sorted(results, key=lambda x: x[1])[:top_n]
-
-
-
-
 def image_asset_count_for_document(doc_source):
     return sum(
         1
@@ -2458,7 +2445,7 @@ def get_rag_response(
         )
 
     # === Format Output
-    image_md_blocks = build_image_markdown_blocks(retrieval_q, selected_chunks) if show_full_text else []
+    image_md_blocks = image_retrieval_service.build_image_markdown_blocks(retrieval_q, selected_chunks) if show_full_text else []
     final_answer = _assemble_final_markdown(revised_response, image_md_blocks)
 
     chat_history = append_chat_turn(
@@ -2514,102 +2501,6 @@ def get_rag_response(
     )
 
     return norm_q, final_answer, chat_history, source_payload, response_cache.stats(), confidence, get_average_query_time(), build_card, validation.api_payload() if validation else None
-
-@trace_timer("extract_doc_and_page")
-def extract_doc_and_page(img_id):
-    match = re.search(r"(.+?)_page(\d+)_(?:img\d+|render)$", img_id)
-    if match:
-        doc_name, page_str = match.groups()
-        return doc_name, int(page_str)
-    return img_id, -1
-
-@trace_timer("build_image_markdown_blocks")
-def build_image_markdown_blocks(question, selected_chunks=None):
-    linked_images = []
-    seen_images = set()
-    for chunk in selected_chunks or []:
-        image_id = chunk.get("source_image_id")
-        if image_id and image_id not in seen_images:
-            linked_images.append((image_id, -1.0))
-            seen_images.add(image_id)
-
-    matched_images = linked_images
-    for img_id, score in search_top_images(question, top_n=10):
-        if img_id in seen_images:
-            continue
-        matched_images.append((img_id, score))
-        seen_images.add(img_id)
-        if len(matched_images) >= 10:
-            break
-    
-    # Group images by (doc_name, page_number)
-    image_entries = []
-    for img_id, _ in matched_images:
-        doc_name, page = extract_doc_and_page(img_id)
-        image_entries.append((doc_name, page, img_id))
-
-    # Sort first by doc_name, then by page number
-    image_entries.sort(key=lambda x: (x[0], x[1]))
-
-    blocks = []
-    current_doc = None
-    image_blocks = []
-
-    for doc_name, page, img_id in image_entries:
-        if doc_name != current_doc:
-            if current_doc is not None:
-                blocks.append(f"""
-<details style="margin-bottom: 1em;">
-<summary>📄 {current_doc}</summary>
-{''.join(image_blocks)}
-</details>
-""")
-            current_doc = doc_name
-            image_blocks = []
-
-        img_data = state.image_store.get(img_id)
-        mime_type = state.image_mime_types.get(img_id, "image/png")
-        ocr_text = state.image_page_text.get(img_id, "")
-        if not img_data:
-            continue
-
-        clean_ocr = ocr_text.strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        if len(clean_ocr) > 1500:
-            clean_ocr = clean_ocr[:1500] + "..."
-        caption = state.image_captions.get(img_id, img_id)
-
-        image_blocks.append(f"""
-<div style="margin-left: 1em;">
-<details style="margin-bottom: 1em;">
-<summary>📷 {caption}</summary>
-
-<p><img src="data:{mime_type};base64,{img_data}" alt="{img_id}" style="max-width: 100%; height: auto;" /></p>
-
-<div style="margin-left: 1.0em;">
-<details>
-<summary>🔍 View OCR Text</summary> 
-<pre><code>{clean_ocr}</code></pre>
-</details>
-</div>
-
-</details>
-</div>
-""")
-
-    # Add final block
-    if current_doc is not None:
-        blocks.append(f"""
-<details style="margin-bottom: 1em;">
-<summary>📄 {current_doc}</summary>
-{''.join(image_blocks)}
-</details>
-""")
-
-    return blocks
-
-
-
-
 
 def _assemble_final_markdown(response, image_blocks):
     answer_md = f"🧠 Answer\n\n{response}"  
