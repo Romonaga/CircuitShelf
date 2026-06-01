@@ -21,7 +21,6 @@ import nltk
 import numpy as np
 import pandas as pd
 import threading
-import uvicorn
 import nltk
 import bench_tools
 from lxml import etree
@@ -36,14 +35,14 @@ from PIL import Image
 from nltk.tokenize import sent_tokenize
 from requests.exceptions import RequestException
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 
 
 #internal
 from backend.app_factory import create_circuitshelf_app, register_api_routes
 from backend.api.dependencies import ApiDependencies
+from backend.server import mount_react_app, start_app_server
 from backend.services.runtime_status_service import (
     build_resource_status,
     build_runtime_batch_status,
@@ -3205,34 +3204,6 @@ register_api_routes(
 )
 
 
-def mount_react_app():
-    dist_dir = os.path.abspath(REACT_DIST_DIR)
-    index_html = os.path.join(dist_dir, "index.html")
-    assets_dir = os.path.join(dist_dir, "assets")
-    index_headers = {"Cache-Control": "no-store"}
-    if not os.path.exists(index_html):
-        trace_logger.warning(f"React dist not found at {dist_dir}; API will run without static UI.")
-        return
-    if os.path.isdir(assets_dir):
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="react-assets")
-
-    @app.get("/")
-    async def react_index():
-        return FileResponse(index_html, headers=index_headers)
-
-    @app.get("/{full_path:path}")
-    async def react_spa(full_path: str):
-        if full_path.startswith("api/") or full_path.startswith("assets/"):
-            return {"error": "Not found"}
-        return FileResponse(index_html, headers=index_headers)
-
-def start_app_server(host, port):
-
-    uv_config = uvicorn.Config(app=app, host=host, port=port, log_level="info")
-    server = uvicorn.Server(uv_config)
-    server.run()
-
-
 if __name__ == "__main__":
 
     app_host = config.get("APP_HOST", config.get("API_HOST", "127.0.0.1"))
@@ -3244,9 +3215,9 @@ if __name__ == "__main__":
             cleanup_stale_tesseract_temp_files()
             get_or_build_index()
 
-            mount_react_app()
+            mount_react_app(app, react_dist_dir=REACT_DIST_DIR, logger=trace_logger)
             trace_logger.info(f"🌐 CircuitShelf available at http://{app_host}:{app_port}")
-            start_app_server(app_host, app_port)
+            start_app_server(app, host=app_host, port=app_port)
     except ProcessLockError as exc:
         trace_logger.error(str(exc))
         raise SystemExit(1) from exc
