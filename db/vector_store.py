@@ -328,10 +328,64 @@ class VectorStore:
             })
         return results
 
-    def list_review_documents(self) -> list[dict]:
+    def list_review_documents(self, *, scope: str = "all", entity_id: int | None = None) -> list[dict]:
+        scope = scope if scope in {"all", "global", "entity"} else "all"
         with self.database.connection() as conn:
-            rows = conn.execute(load_query("review_documents_list.sql")).fetchall()
+            rows = conn.execute(load_query("review_documents_list.sql"), (scope, scope, scope, entity_id)).fetchall()
         return [dict(row) for row in rows]
+
+    def get_document_scope(self, source_path: str) -> dict | None:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("document_scope_get.sql"), (source_path,)).fetchone()
+        return dict(row) if row else None
+
+    def document_scope_audit(self, source_path: str, *, limit: int = 25) -> list[dict]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("document_scope_audit_list.sql"), (source_path, max(1, min(int(limit), 100)))).fetchall()
+        return [dict(row) for row in rows]
+
+    def set_document_scope(
+        self,
+        source_path: str,
+        *,
+        is_global: bool,
+        entity_id: int | None,
+        changed_by_user_id: int | None,
+        reason: str = "",
+    ) -> dict | None:
+        previous = self.get_document_scope(source_path)
+        if not previous:
+            return None
+        next_entity_id = None if is_global else entity_id
+        if not is_global and next_entity_id is None:
+            raise ValueError("Private document scope requires an entity.")
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("document_scope_update.sql"),
+                (bool(is_global), next_entity_id, source_path),
+            ).fetchone()
+            conn.execute(
+                load_query("document_ingest_scope_upsert.sql"),
+                (
+                    source_path,
+                    next_entity_id,
+                    bool(is_global),
+                    changed_by_user_id,
+                ),
+            )
+            conn.execute(
+                load_query("document_scope_audit_insert.sql"),
+                (
+                    source_path,
+                    previous.get("is_global"),
+                    previous.get("entity_id"),
+                    bool(is_global),
+                    next_entity_id,
+                    changed_by_user_id,
+                    clean_db_text(reason or "scope change"),
+                ),
+            )
+        return dict(row) if row else None
 
     def list_document_stats(self, *, entity_id: int | None = None, scope: str = "visible") -> list[dict]:
         scope = "global" if scope == "global" else "visible"

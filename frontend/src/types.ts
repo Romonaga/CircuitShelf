@@ -846,6 +846,21 @@ export interface ReviewDocument {
   updatedAt?: string | null;
 }
 
+export interface ReviewScopeAudit {
+  id: number;
+  source: string;
+  previousIsGlobal?: boolean | null;
+  previousEntityId?: number | null;
+  previousEntityName?: string;
+  newIsGlobal: boolean;
+  newEntityId?: number | null;
+  newEntityName?: string;
+  changedByUserId?: number | null;
+  changedByUsername?: string;
+  reason: string;
+  createdAt?: string | null;
+}
+
 export interface ReviewChunk {
   index: number;
   section: string;

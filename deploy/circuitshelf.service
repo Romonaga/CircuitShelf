@@ -10,6 +10,7 @@ User=hellweek
 Group=hellweek
 WorkingDirectory=/FastDrive/CircuitShelf
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/circuitshelf/circuitshelf.env
 ExecStart=/FastDrive/CircuitShelf/.venv/bin/python /FastDrive/CircuitShelf/circuitshelf.py
 Restart=on-failure
 RestartSec=10

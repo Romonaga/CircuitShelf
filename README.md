@@ -124,6 +124,12 @@ The guided installer:
 - builds the React frontend
 - runs basic backend syntax checks
 
+### AI Provider Key Encryption
+
+OpenAI provider keys are encrypted in Postgres with `pgcrypto`. Set `AI_KEY_ENCRYPTION_SECRET` in the service environment, not in committed config. For the systemd service, use `/etc/circuitshelf/circuitshelf.env`.
+
+Key backup, restore, and encryption-secret rotation are documented in [docs/AI_KEY_OPERATIONS.md](docs/AI_KEY_OPERATIONS.md).
+
 ### Manual Setup
 
 1. Create and activate a virtual environment.

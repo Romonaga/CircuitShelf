@@ -126,6 +126,7 @@ export default function App() {
       {user?.isAdmin ? (
         <div hidden={activeView !== "review"}>
           <ReviewView
+            canManageSystem={Boolean(user?.canManageSystem)}
             isActive={activeView === "review"}
             refreshSignal={status?.pendingReview ?? 0}
             onStatusChange={refreshStatus}

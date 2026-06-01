@@ -106,7 +106,7 @@ def register_api_routes(
         start_index_check=start_index_check,
     ))
     app.include_router(review_api.create_router(
-        require_admin_user=require_admin_user,
+        deps=api_dependencies,
         vector_store=vector_store,
         image_store=image_store,
         refresh_active_state_from_db=refresh_active_state_from_db,

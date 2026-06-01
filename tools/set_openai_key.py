@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
-import secrets
+import os
 import sys
 from pathlib import Path
 
@@ -21,23 +21,20 @@ CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
 
 
 def load_config() -> dict:
+    if not CONFIG_PATH.exists():
+        return {}
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
-def save_config(config: dict) -> None:
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        yaml.safe_dump(config, f, sort_keys=False)
-
-
 def encryption_secret(config: dict) -> str:
-    secret = str(config.get("AI_KEY_ENCRYPTION_SECRET") or "")
+    secret = str(os.environ.get("AI_KEY_ENCRYPTION_SECRET") or "").strip()
     if secret:
         return secret
-    secret = secrets.token_urlsafe(48)
-    config["AI_KEY_ENCRYPTION_SECRET"] = secret
-    save_config(config)
-    return secret
+    secret = str(config.get("AI_KEY_ENCRYPTION_SECRET") or "").strip()
+    if secret:
+        return secret
+    raise RuntimeError("AI_KEY_ENCRYPTION_SECRET must be set in the environment before storing provider keys.")
 
 
 def read_key(prompt: bool) -> str:
@@ -76,9 +73,9 @@ def main() -> int:
         return 2
 
     config = load_config()
-    database_url = config.get("DATABASE_URL")
+    database_url = os.environ.get("DATABASE_URL") or config.get("DATABASE_URL")
     if not database_url:
-        print("DATABASE_URL is missing from config/config.yaml.", file=sys.stderr)
+        print("DATABASE_URL is missing from the environment or config/config.yaml.", file=sys.stderr)
         return 2
     secret = encryption_secret(config)
     preview = f"{api_key[:7]}...{api_key[-4:]}"

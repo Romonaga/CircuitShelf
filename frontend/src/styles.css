@@ -1956,6 +1956,80 @@ nav {
   background: var(--panel-soft);
 }
 
+.review-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.scope-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 850;
+}
+
+.scope-badge.global {
+  color: #062c2f;
+  border-color: rgba(20, 184, 166, 0.55);
+  background: linear-gradient(135deg, #99f6e4, #bfdbfe);
+}
+
+.scope-badge.private {
+  color: #301b04;
+  border-color: rgba(245, 158, 11, 0.48);
+  background: linear-gradient(135deg, #fde68a, #fed7aa);
+}
+
+.review-scope-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+  color: var(--muted);
+}
+
+.review-scope-audit {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.review-scope-audit summary {
+  cursor: pointer;
+  padding: 9px 12px;
+  font-weight: 850;
+}
+
+.review-scope-audit-list {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.review-scope-audit-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(100px, 0.7fr) minmax(160px, 0.8fr);
+  gap: 8px;
+  align-items: start;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.review-scope-audit-row small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+
 .review-loading,
 .document-loading {
   min-height: 120px;
@@ -3848,6 +3922,8 @@ nav {
 :root[data-theme="dark"] .document-image-card,
 :root[data-theme="dark"] .review-image-card,
 :root[data-theme="dark"] .review-image-details,
+:root[data-theme="dark"] .review-scope-audit,
+:root[data-theme="dark"] .review-scope-audit-row,
 :root[data-theme="dark"] .assembly-plan-row,
 :root[data-theme="dark"] .assembly-source-row,
 :root[data-theme="dark"] .assembly-note,

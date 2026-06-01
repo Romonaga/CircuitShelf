@@ -43,10 +43,10 @@
   - Done: Polish inventory management: row edit, rename by stable part ID, alias editing, location persistence, and right-click delete.
   - Done: Finish account/admin workflows: user creation, password reset, unlock, force-password-change gating, and role management.
   - Done: Add optional OpenAI ingestion review with audited usage. Corpus uses system billing; entity-private documents use entity billing with user-key fallback.
-  - Revisit AI key encryption-secret operations: backup/restore process, rotation, and moving secret management out of ad hoc local YAML.
+  - Done: Harden AI key encryption operations with environment-based secret handling, encrypted backup/restore tooling, and key-rotation support.
   - Done: Split `circuitshelf.py` into modular backend domains. App factory, route registration, auth dependencies, API routers, stores, server startup helpers, settings/environment bootstrap, source metadata, document intelligence, document management, prompt building, Ollama chat, image retrieval, image state persistence, retrieval helpers, RAG orchestration, ingest statistics, ingest progress, ingest housekeeping, ingest context/scope, document processing, incremental ingest orchestration, index lifecycle/watch startup, runtime status reporting, and runtime service-container wiring are separated.
-  - Continue moving frontend logic into focused components, hooks, and shared libs so `App.tsx` stays orchestration-only.
-  - Build a stronger global corpus workflow: corpus-specific review labels, promotion/demotion audit, and clear global/entity-private visibility in review.
+  - Done/ongoing: Continue moving frontend logic into focused components, hooks, and shared libs so `App.tsx` stays orchestration-only. Review now uses a dedicated queue hook and focused list/detail/scope components.
+  - Done: Build a stronger global corpus workflow with corpus/private labels in review, system-admin promotion/demotion controls, scope audit history, and clear global/entity-private visibility.
   - Keep the Kotlin/backend conversion separate until the Python baseline is feature-stable again.
 
 - Real photo-based wire tracing and component recognition.

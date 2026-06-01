@@ -40,4 +40,9 @@ LEFT JOIN chunk_stats c ON c.document_id = d.id
 LEFT JOIN image_stats i ON i.document_id = d.id
 LEFT JOIN entities e ON e.id = d.entity_id
 WHERE d.status IN ('needs_review', 'failed')
+  AND (
+      %s = 'all'
+      OR (%s = 'global' AND d.is_global = true)
+      OR (%s = 'entity' AND d.is_global = false AND d.entity_id = %s::bigint)
+  )
 ORDER BY d.updated_at DESC, d.source_path;
