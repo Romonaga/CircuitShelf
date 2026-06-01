@@ -44,7 +44,7 @@
   - Done: Finish account/admin workflows: user creation, password reset, unlock, force-password-change gating, and role management.
   - Done: Add optional OpenAI ingestion review with audited usage. Corpus uses system billing; entity-private documents use entity billing with user-key fallback.
   - Revisit AI key encryption-secret operations: backup/restore process, rotation, and moving secret management out of ad hoc local YAML.
-  - Split `circuitshelf.py` into modular backend domains: app factory, auth dependencies, API routers, services, stores, and workers.
+  - In progress: Split `circuitshelf.py` into modular backend domains. App factory, route registration, API routers, services, stores, and server startup helpers are separated; auth dependencies and ingest/RAG orchestration still need deeper extraction.
   - Continue moving frontend logic into focused components, hooks, and shared libs so `App.tsx` stays orchestration-only.
   - Build a stronger global corpus workflow: corpus-specific review labels, promotion/demotion audit, and clear global/entity-private visibility in review.
   - Keep the Kotlin/backend conversion separate until the Python baseline is feature-stable again.
