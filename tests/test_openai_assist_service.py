@@ -58,3 +58,72 @@ def test_answer_without_sources_blocks_when_budget_exceeded(monkeypatch):
     assert len(store.events) == 1
     assert store.events[0]["success"] is False
     assert "budget exceeded" in store.events[0]["error_message"]
+
+
+class IngestionAssistStore:
+    def __init__(self):
+        self.events = []
+        self.reviews = []
+        self.resolved = None
+
+    def resolve_openai_ingestion_assist(self, *, is_global, entity_id, user_id):
+        self.resolved = {"is_global": is_global, "entity_id": entity_id, "user_id": user_id}
+        return {
+            "apiKey": "sk-test",
+            "assistMode": "auto",
+            "modelName": "gpt-5-chat-latest",
+            "paidBy": "system" if is_global else "entity",
+            "providerKeyOwnerUserId": None,
+            "pricingScope": "system" if is_global else "entity",
+            "pricingEntityId": None if is_global else entity_id,
+            "pricingUserId": None,
+            "monthlyBudget": 0,
+            "warnPercent": 80,
+            "stopPercent": 100,
+        }
+
+    def budget_status_for_settings(self, _settings):
+        return {"blocked": False}
+
+    def estimate_cost(self, **_kwargs):
+        return 0.0123
+
+    def record_ai_assist_event(self, **kwargs):
+        self.events.append(kwargs)
+        return 1
+
+    def record_document_ingest_ai_review(self, **kwargs):
+        self.reviews.append(kwargs)
+        return 1
+
+
+def test_ingestion_review_uses_scoped_provider_and_records_cost(monkeypatch):
+    store = IngestionAssistStore()
+    service = OpenAIAssistService(store)
+
+    monkeypatch.setattr(
+        service,
+        "_create_response",
+        lambda **_kwargs: {
+            "output_text": '{"quality":"good","useful":true,"warnings":[],"suggestedReviewFocus":"pinouts"}',
+            "usage": {"input_tokens": 100, "output_tokens": 20, "input_tokens_details": {"cached_tokens": 5}},
+        },
+    )
+
+    result = service.review_ingestion(
+        source_path="555.pdf",
+        is_global=True,
+        entity_id=None,
+        user_id=7,
+        stats={"chunkCount": 10},
+        sample_text="555 timer pinout text",
+        enabled=True,
+    )
+
+    assert result is not None
+    assert result["paidBy"] == "system"
+    assert store.resolved == {"is_global": True, "entity_id": None, "user_id": 7}
+    assert store.events[0]["task_type"] == "ingestion_assist"
+    assert store.events[0]["estimated_cost"] == 0.0123
+    assert store.reviews[0]["source_path"] == "555.pdf"
+    assert store.reviews[0]["review_json"]["quality"] == "good"

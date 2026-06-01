@@ -142,6 +142,7 @@ settings_store.seed_setting("PDF_RENDER_MIN_DRAWINGS", 100, "Minimum vector draw
 settings_store.seed_setting("PDF_RENDER_ZOOM", 1.5, "Scale used when rendering visual PDF pages.")
 settings_store.seed_setting("PDF_RENDER_RASTER_PAGES", True, "Render raster-heavy scanned PDF pages as searchable images.")
 settings_store.seed_setting("PDF_RENDER_MIN_RASTER_COVERAGE", 0.8, "Minimum page image coverage before a PDF page is considered raster-heavy.")
+settings_store.seed_setting("INGEST_OPENAI_ASSIST_ENABLED", False, "Use OpenAI during ingestion to review extraction quality. Corpus uses the system key; entity documents use entity then user key fallback.")
 settings_store.seed_setting("RESPONSE_FINALIZER_ENABLED", True, "Run a second model pass to validate and clean up generated answers.")
 settings_store.seed_setting("RESPONSE_FINALIZER_MODE", "always", "When to run answer validation: off, always, issues, build, build_or_issues, low_confidence, or build_or_low_confidence.")
 settings_store.seed_setting("RESPONSE_FINALIZER_MIN_CONFIDENCE", 0.80, "Retrieval confidence threshold used by low-confidence finalizer modes.")
@@ -603,6 +604,54 @@ def summarize_document_ingest_stats(document_stats):
         "indexedImageTexts": sum(item.get("indexedImageTextCount", 0) for item in values),
         "ocrImageTexts": sum(item.get("ocrImageTextCount", 0) for item in values),
     }
+
+
+def source_ingest_scope(source):
+    scope = vector_store.ingest_scope_overrides([source]).get(source)
+    if not scope:
+        scope = vector_store.document_scopes_for_sources([source]).get(source)
+    is_global = bool(scope.get("is_global", True)) if scope else True
+    return {
+        "is_global": is_global,
+        "entity_id": None if is_global else scope.get("entity_id"),
+        "created_by_user_id": scope.get("created_by_user_id") if scope else None,
+    }
+
+
+def sample_ingested_text(target_state, rel_path, max_chars=6000):
+    samples = []
+    for chunk, source, meta in zip(target_state.get_chunks(), target_state.get_sources(), target_state.get_metadata()):
+        meta = meta or {}
+        if vector_store.rel_path_for_source(source, meta) != rel_path:
+            continue
+        text = str(chunk or "").strip()
+        if text:
+            samples.append(text)
+        if sum(len(item) for item in samples) >= max_chars:
+            break
+    return "\n\n".join(samples)[:max_chars]
+
+
+def maybe_review_ingestion_with_openai(source, ingested_state, document_stats):
+    if not config.get("INGEST_OPENAI_ASSIST_ENABLED", False):
+        return None
+    scope = source_ingest_scope(source)
+    stats = (document_stats or {}).get(source, {})
+    result = openai_assist_service.review_ingestion(
+        source_path=source,
+        is_global=bool(scope["is_global"]),
+        entity_id=scope.get("entity_id"),
+        user_id=scope.get("created_by_user_id"),
+        stats=stats,
+        sample_text=sample_ingested_text(ingested_state, source),
+        enabled=True,
+    )
+    if result:
+        trace_logger.info(
+            f"🤖 OpenAI ingestion review stored for {source} "
+            f"using {result.get('paidBy')} billing (${float(result.get('estimatedCost') or 0):.6f})."
+        )
+    return result
 
 
 def build_ingest_context():
@@ -1559,10 +1608,14 @@ def persist_incremental_document(extracted, current_manifest):
         progress_file=source,
     )
     mark_source_ready_for_review(source)
+    ai_review = maybe_review_ingestion_with_openai(source, ingested_state, document_stats)
     final_details = {
         **summarize_document_ingest_stats(document_stats),
         **image_result,
     }
+    if ai_review:
+        final_details["aiIngestionReviews"] = 1
+        final_details["aiIngestionReviewPaidBy"] = ai_review.get("paidBy")
     update_index_progress(
         stage="processing_documents",
         finished_file=source,
@@ -1768,6 +1821,7 @@ def reindex_review_source(source):
     image_result = persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=[source])
     update_index_progress(stage="readying_review", details={**summarize_document_ingest_stats(document_stats), **image_result})
     mark_source_ready_for_review(source)
+    maybe_review_ingestion_with_openai(source, ingested_state, document_stats)
     return build_result
 
 

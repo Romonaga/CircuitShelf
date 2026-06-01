@@ -4,6 +4,7 @@ import secrets
 from pathlib import Path
 from typing import Any
 from uuid import UUID
+import json
 
 import yaml
 
@@ -267,6 +268,33 @@ class AIProviderStore:
             return self._resolved_provider(row=system, paid_by="system", owner_user_id=None, default_model=default_model, entity_id=None, user_id=None)
         return None
 
+    def resolve_openai_ingestion_assist(
+        self,
+        *,
+        is_global: bool,
+        entity_id: int | None,
+        user_id: int | None,
+        default_model: str = "gpt-5-chat-latest",
+    ) -> dict[str, Any] | None:
+        system = self._secret_row("system", provider="openai")
+
+        def usable(row: dict[str, Any] | None) -> bool:
+            return bool(row and row.get("enabled") and row.get("apiKey") and row.get("assistMode") != "off")
+
+        if is_global:
+            return self._resolved_provider(row=system, paid_by="system", owner_user_id=None, default_model=default_model, entity_id=None, user_id=None) if usable(system) else None
+
+        entity = self._secret_row("entity", entity_id=entity_id, provider="openai") if entity_id else None
+        if usable(entity):
+            return self._resolved_provider(row=entity, paid_by="entity", owner_user_id=None, default_model=default_model, entity_id=entity_id, user_id=None)
+
+        user = self._secret_row("user", user_id=user_id, provider="openai") if user_id else None
+        user_policy = (user or {}).get("keyPolicy") or "user_when_available"
+        if usable(user) and user_policy in {"user_when_available", "user_only"}:
+            return self._resolved_provider(row=user, paid_by="user", owner_user_id=user_id, default_model=default_model, entity_id=entity_id, user_id=user_id)
+
+        return self._resolved_provider(row=system, paid_by="system", owner_user_id=None, default_model=default_model, entity_id=None, user_id=None) if usable(system) else None
+
     def api_key_for_scope(
         self,
         *,
@@ -323,6 +351,32 @@ class AIProviderStore:
                     provider_key_owner_user_id,
                     bool(success),
                     str(error_message or "")[:1000] if error_message else None,
+                ),
+            ).fetchone()
+        return int(row["id"]) if row else None
+
+    def record_document_ingest_ai_review(
+        self,
+        *,
+        source_path: str,
+        provider: str,
+        model_name: str,
+        paid_by: str,
+        review_text: str,
+        review_json: dict[str, Any] | None = None,
+        estimated_cost: float = 0.0,
+    ) -> int | None:
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("document_ingest_ai_review_insert.sql"),
+                (
+                    source_path,
+                    provider,
+                    model_name,
+                    paid_by,
+                    review_text,
+                    json.dumps(review_json or {}),
+                    float(estimated_cost or 0),
                 ),
             ).fetchone()
         return int(row["id"]) if row else None

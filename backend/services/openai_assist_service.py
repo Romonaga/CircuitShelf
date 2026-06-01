@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
@@ -240,6 +241,124 @@ class OpenAIAssistService:
                 self.logger.warning(f"OpenAI fallback answer failed: {message}")
             return None
 
+    def review_ingestion(
+        self,
+        *,
+        source_path: str,
+        is_global: bool,
+        entity_id: int | None,
+        user_id: int | None,
+        stats: dict[str, Any],
+        sample_text: str,
+        enabled: bool,
+    ) -> dict[str, Any] | None:
+        if not enabled:
+            return None
+        settings = self.ai_provider_store.resolve_openai_ingestion_assist(
+            is_global=is_global,
+            entity_id=entity_id,
+            user_id=user_id,
+        )
+        if not settings or not settings.get("apiKey") or settings.get("assistMode") == "off":
+            return None
+
+        prompt = (
+            "Review this CircuitShelf document ingestion result. Return compact JSON with keys: "
+            "quality, useful, warnings, suggestedReviewFocus. Do not infer facts not present in the sample.\n\n"
+            f"Source: {source_path}\n"
+            f"Scope: {'global corpus' if is_global else 'entity private'}\n"
+            f"Stats: {json.dumps(stats, sort_keys=True)}\n\n"
+            f"Sample extracted text:\n{sample_text[:6000]}"
+        )
+        event_base = {
+            "entity_id": None if is_global else entity_id,
+            "user_id": user_id,
+            "provider": "openai",
+            "task_type": "ingestion_assist",
+            "model_name": settings["modelName"],
+            "context_type": "document_ingest",
+            "context_id": None,
+            "round_number": 1,
+            "round_count": 1,
+            "paid_by": settings["paidBy"],
+            "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
+        }
+        budget_block = self._budget_block_message(settings)
+        if budget_block:
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=0,
+                cached_input_tokens=0,
+                output_tokens=0,
+                estimated_cost=0,
+                success=False,
+                error_message=budget_block,
+            )
+            return None
+
+        try:
+            data = self._create_response(
+                api_key=settings["apiKey"],
+                model=settings["modelName"],
+                instructions=(
+                    "You are CircuitShelf's ingestion QA assistant. Return only compact JSON. "
+                    "Focus on extraction quality, not circuit design advice."
+                ),
+                input_text=prompt,
+                max_output_tokens=700,
+            )
+            usage = extract_usage(data)
+            estimated_cost = self.ai_provider_store.estimate_cost(
+                provider="openai",
+                model_name=settings["modelName"],
+                input_tokens=usage["inputTokens"],
+                cached_input_tokens=usage["cachedInputTokens"],
+                output_tokens=usage["outputTokens"],
+                billing_scope=settings["pricingScope"],
+                entity_id=settings.get("pricingEntityId"),
+                user_id=settings.get("pricingUserId"),
+            )
+            text = extract_response_text(data)
+            parsed = parse_json_object(text)
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=usage["inputTokens"],
+                cached_input_tokens=usage["cachedInputTokens"],
+                output_tokens=usage["outputTokens"],
+                estimated_cost=estimated_cost,
+                success=True,
+            )
+            self.ai_provider_store.record_document_ingest_ai_review(
+                source_path=source_path,
+                provider="openai",
+                model_name=settings["modelName"],
+                paid_by=settings["paidBy"],
+                review_text=text,
+                review_json=parsed,
+                estimated_cost=estimated_cost,
+            )
+            return {
+                "provider": "openai",
+                "model": settings["modelName"],
+                "paidBy": settings["paidBy"],
+                "estimatedCost": estimated_cost,
+                "review": parsed,
+            }
+        except Exception as exc:
+            message = safe_error_message(exc)
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=0,
+                cached_input_tokens=0,
+                output_tokens=0,
+                estimated_cost=0,
+                success=False,
+                error_message=message,
+            )
+            if self.logger:
+                self.logger.warning(f"OpenAI ingestion assist failed for {source_path}: {message}")
+            return None
+
     def _create_response(
         self,
         *,
@@ -310,3 +429,11 @@ def safe_error_message(exc: Exception) -> str:
             pass
         return f"OpenAI HTTP {exc.response.status_code}"
     return str(exc)[:1000]
+
+
+def parse_json_object(text: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else {"raw": parsed}
+    except Exception:
+        return {"raw": text[:4000]}
