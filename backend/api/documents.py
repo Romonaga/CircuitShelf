@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import uuid
 from collections import OrderedDict
-from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, File, Query, Request, UploadFile
@@ -94,7 +93,6 @@ async def write_uploaded_documents(files: list[UploadFile], overwrite: bool, tra
 def create_router(
     deps: ApiDependencies,
     *,
-    require_admin_user: Callable[[Request], tuple[Any, Any]],
     training_dir: str,
     supported_training_extensions: Callable[[], set[str]],
     vector_store: Any,

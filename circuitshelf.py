@@ -3161,7 +3161,6 @@ app.include_router(assembly_plans_api.create_router(
 ))
 app.include_router(documents_api.create_router(
     api_dependencies,
-    require_admin_user=require_admin_user,
     training_dir=TRAINING_DIR,
     supported_training_extensions=supported_training_extensions,
     vector_store=vector_store,
