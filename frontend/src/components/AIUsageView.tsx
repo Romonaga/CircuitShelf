@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { downloadAIUsageCsv } from "../api";
+import { downloadBlob } from "../lib/download";
+import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
 import { money } from "../lib/money";
 import { useAIUsageReport } from "../hooks/useAIUsageReport";
@@ -16,8 +19,24 @@ export function AIUsageView({
   canManageSystem: boolean;
 }) {
   const [scope, setScope] = useState<"entity" | "system">(canManageSystem ? "system" : "entity");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const report = useAIUsageReport(isActive, scope);
   const summary = report.report?.summary;
+
+  async function exportCsv() {
+    setExporting(true);
+    setExportError("");
+    try {
+      const blob = await downloadAIUsageCsv(scope);
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadBlob(blob, `circuit-shelf-${scope}-ai-usage-${stamp}.csv`);
+    } catch (err) {
+      setExportError(errorMessage(err, "Could not export AI usage"));
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <section className="ai-usage-view">
@@ -32,11 +51,15 @@ export function AIUsageView({
                 <option value="entity">Entity</option>
               </select>
             ) : null}
+            <button className="ghost-button" onClick={() => void exportCsv()} disabled={exporting}>
+              {exporting ? "Exporting..." : "Export CSV"}
+            </button>
             <button className="ghost-button" onClick={() => void report.refresh()}>Refresh</button>
           </div>
         }
       />
       <ErrorMessage message={report.error} />
+      <ErrorMessage message={exportError} />
       <div className="status-grid performance-stats">
         <Stat label="Calls" value={formatInteger(summary?.calls)} />
         <Stat label="Successful" value={formatInteger(summary?.successfulCalls)} />

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { exportAssemblyPlan } from "../api";
+import { downloadBlob } from "../lib/download";
 import { errorMessage } from "../lib/errors";
 import type { AssemblyPlan } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
@@ -15,12 +16,7 @@ export function AssemblyExportPanel({ plan }: { plan: AssemblyPlan }) {
     try {
       const payload = await exportAssemblyPlan(plan.id, format);
       const blob = new Blob([payload.content], { type: payload.mimeType });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = payload.filename;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, payload.filename);
     } catch (err) {
       setError(errorMessage(err, "Could not export plan"));
     } finally {

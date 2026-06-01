@@ -201,6 +201,24 @@ export function getSystemAIUsage(days = 31): Promise<AIUsageReport> {
   return requestJson<AIUsageReport>(`/api/system/ai-usage?days=${encodeURIComponent(String(days))}`);
 }
 
+export async function downloadAIUsageCsv(scope: "entity" | "system", days = 31): Promise<Blob> {
+  const session = readSessionToken();
+  const path = scope === "system" ? "/api/system/ai-usage/export" : "/api/entity/ai-usage/export";
+  const response = await fetch(`${path}?days=${encodeURIComponent(String(days))}`, {
+    headers: {
+      ...(session ? { Authorization: `Bearer ${session}` } : {})
+    }
+  });
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent("circuitshelf-auth-expired"));
+  }
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new Error(raw || response.statusText || "Could not export AI usage");
+  }
+  return response.blob();
+}
+
 export function getUserPreference<T>(key: string): Promise<{ key: string; value: T }> {
   return requestJson<{ key: string; value: T }>(`/api/user/preferences/${encodeURIComponent(key)}`);
 }
