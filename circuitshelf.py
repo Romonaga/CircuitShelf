@@ -13,7 +13,6 @@ import re
 import time
 import base64
 import zipfile
-import tempfile
 import fitz  # PyMuPDF
 import numpy as np
 import pandas as pd
@@ -52,6 +51,7 @@ from backend.services.ingest_stats import (
     file_changes_payload,
     summarize_document_ingest_stats,
 )
+from backend.services.ingest_housekeeping import IngestHousekeepingService
 from backend.services.ingest_progress import IngestProgressTracker, utc_now, utc_now_iso
 from backend.services.runtime_status_service import (
     RuntimeStatusReporter,
@@ -279,6 +279,18 @@ load_db_image_state = image_state_service.load_db_image_state
 refresh_active_state_from_db = image_state_service.refresh_active_state_from_db
 persist_db_image_state = image_state_service.persist_db_image_state
 backfill_missing_image_embeddings = image_state_service.backfill_missing_image_embeddings
+ingest_housekeeping = IngestHousekeepingService(
+    config=config,
+    trace_logger=trace_logger,
+    cleanup_old_logs=cleanup_old_logs,
+    trace_log_file=TRACE_LOG_FILE,
+    active_trace_log_file=trace_log_helper.current_file,
+    log_retention_days=LOG_RETENTION_DAYS,
+    tesseract_temp_max_age_seconds=TESSERACT_TEMP_MAX_AGE_SECONDS,
+)
+cleanup_stale_tesseract_temp_files = ingest_housekeeping.cleanup_stale_tesseract_temp_files
+cleanup_expired_trace_logs = ingest_housekeeping.cleanup_expired_trace_logs
+run_index_housekeeping = ingest_housekeeping.run_index_housekeeping
 
 
 def supported_training_extensions():
@@ -300,75 +312,6 @@ def build_ingest_manifest():
         excluded_dirs=config.get("TRAINING_EXCLUDE_DIRS", []),
         hash_files=config.get("INGEST_HASH_FILES", False),
     )
-
-
-def cleanup_stale_tesseract_temp_files(max_age_seconds=TESSERACT_TEMP_MAX_AGE_SECONDS):
-    temp_dir = tempfile.gettempdir()
-    now = time.time()
-    removed = 0
-    failures = 0
-
-    try:
-        names = os.listdir(temp_dir)
-    except OSError as exc:
-        trace_logger.warning(f"Could not inspect temp directory for stale Tesseract files: {exc}")
-        return {"removed": 0, "failures": 1}
-
-    for name in names:
-        if not name.startswith("tess_"):
-            continue
-
-        path = os.path.join(temp_dir, name)
-        try:
-            if not os.path.isfile(path):
-                continue
-            age_seconds = now - os.path.getmtime(path)
-            if age_seconds < max_age_seconds:
-                continue
-            os.remove(path)
-            removed += 1
-        except OSError as exc:
-            failures += 1
-            trace_logger.debug(f"Could not remove stale Tesseract temp file {path}: {exc}")
-
-    if removed or failures:
-        trace_logger.info(
-            f"Cleaned stale Tesseract temp files. Removed: {removed}, failures: {failures}"
-        )
-    return {"removed": removed, "failures": failures}
-
-
-def cleanup_expired_trace_logs():
-    return cleanup_old_logs(
-        configured_log_file=TRACE_LOG_FILE,
-        active_log_file=trace_log_helper.current_file(),
-        retention_days=LOG_RETENTION_DAYS,
-        logger=trace_logger,
-    )
-
-
-def run_index_housekeeping():
-    try:
-        cleanup_stale_tesseract_temp_files()
-    except Exception as exc:
-        trace_logger.warning(f"Index housekeeping could not clean stale Tesseract temp files: {exc}")
-
-    try:
-        cleanup_expired_trace_logs()
-    except Exception as exc:
-        trace_logger.warning(f"Index housekeeping could not clean expired trace logs: {exc}")
-
-
-set_index_status = ingest_progress.set_status
-ingest_watch_interval_seconds = ingest_progress.watch_interval_seconds
-schedule_next_ingest_check = ingest_progress.schedule_next_check
-seconds_until_next_ingest_check = ingest_progress.seconds_until_next_check
-update_index_progress = ingest_progress.update_progress
-update_index_detail = ingest_progress.update_detail
-begin_document_worker = ingest_progress.begin_document_worker
-finish_document_worker = ingest_progress.finish_document_worker
-current_document_workers = ingest_progress.current_document_workers
-active_document_worker_count = ingest_progress.active_document_worker_count
 
 
 def source_ingest_scope(source):
