@@ -14,7 +14,22 @@ import { SectionHeader } from "./SectionHeader";
 import { Stat } from "./Stat";
 import { WorkDurationChart } from "./WorkDurationChart";
 
-type ChartChoice = "utilization" | "memory" | "process" | "gpuThermals" | "catalog" | "workers" | "batches" | "throughput" | "workDuration" | "all";
+type ChartChoice =
+  | "utilization"
+  | "memory"
+  | "processCpu"
+  | "processMemory"
+  | "processThreads"
+  | "gpuTemperature"
+  | "gpuPower"
+  | "gpuMemory"
+  | "gpuMemoryUsed"
+  | "catalog"
+  | "workers"
+  | "batches"
+  | "throughput"
+  | "workDuration"
+  | "all";
 
 export function PerformanceView({
   status,
@@ -57,10 +72,15 @@ export function PerformanceView({
             <select value={chartChoice} onChange={(event) => setChartChoice(event.target.value as ChartChoice)}>
               <option value="utilization">Utilization</option>
               <option value="memory">Memory</option>
-              <option value="process">Process memory</option>
-              <option value="gpuThermals">GPU thermals</option>
+              <option value="processCpu">Process CPU</option>
+              <option value="processMemory">Process memory</option>
+              <option value="processThreads">Process threads</option>
+              <option value="gpuTemperature">GPU temperature</option>
+              <option value="gpuPower">GPU power</option>
+              <option value="gpuMemory">GPU memory %</option>
+              <option value="gpuMemoryUsed">GPU memory MiB</option>
               <option value="catalog">Catalog growth</option>
-              <option value="workers">Workers and batches</option>
+              <option value="workers">Workers and CUDA batches</option>
               <option value="batches">Batch sizing</option>
               <option value="throughput">Ingestion throughput</option>
               <option value="workDuration">Work duration</option>
@@ -103,12 +123,13 @@ export function PerformanceView({
           {showChart("utilization") ? (
             <PerformanceChart
               title="Utilization over time"
-              subtitle="System CPU, CircuitShelf process CPU, and GPU utilization."
+              subtitle="Same-unit utilization signals on a fixed 0-100% scale."
+              fixedMin={0}
+              fixedMax={100}
               history={history}
               unit="%"
               series={[
                 { key: "cpu", label: "System CPU", color: chartColors.blue },
-                { key: "processCpu", label: "Process CPU", color: chartColors.green },
                 { key: "gpu", label: "GPU", color: chartColors.orange },
               ]}
             />
@@ -127,7 +148,20 @@ export function PerformanceView({
               ]}
             />
           ) : null}
-          {showChart("process") ? (
+          {showChart("processCpu") ? (
+            <PerformanceChart
+              title="CircuitShelf process CPU"
+              subtitle="Process CPU can exceed 100% because it spans multiple cores."
+              history={history}
+              fixedMin={0}
+              fixedMax={processCpuMax}
+              unit="%"
+              series={[
+                { key: "processCpu", label: "Process CPU", color: chartColors.green },
+              ]}
+            />
+          ) : null}
+          {showChart("processMemory") ? (
             <PerformanceChart
               title="CircuitShelf process memory"
               subtitle="Python process memory footprint in MiB."
@@ -138,14 +172,59 @@ export function PerformanceView({
               ]}
             />
           ) : null}
-          {showChart("gpuThermals") ? (
+          {showChart("processThreads") ? (
             <PerformanceChart
-              title="GPU temperature and power"
-              subtitle="Thermal and power draw trends while models, embeddings, and OCR helpers run."
+              title="CircuitShelf process threads"
+              subtitle="Thread count helps spot OCR, ingestion, and server-worker pressure."
               history={history}
               series={[
-                { key: "gpuTemp", label: "GPU temp C", color: chartColors.vermillion },
-                { key: "gpuPower", label: "GPU watts", color: chartColors.yellow },
+                { key: "processThreads", label: "Threads", color: chartColors.blue },
+              ]}
+            />
+          ) : null}
+          {showChart("gpuTemperature") ? (
+            <PerformanceChart
+              title="GPU temperature"
+              subtitle="Thermal trend while models, embeddings, and reranking run."
+              history={history}
+              unit=" C"
+              series={[
+                { key: "gpuTemp", label: "GPU temp", color: chartColors.vermillion },
+              ]}
+            />
+          ) : null}
+          {showChart("gpuPower") ? (
+            <PerformanceChart
+              title="GPU power"
+              subtitle="Power draw trend during model, embedding, and reranker work."
+              history={history}
+              unit=" W"
+              series={[
+                { key: "gpuPower", label: "GPU power", color: chartColors.yellow },
+              ]}
+            />
+          ) : null}
+          {showChart("gpuMemory") ? (
+            <PerformanceChart
+              title="GPU memory saturation"
+              subtitle="VRAM saturation on a fixed 0-100% scale."
+              history={history}
+              fixedMin={0}
+              fixedMax={100}
+              unit="%"
+              series={[
+                { key: "vram", label: "VRAM", color: chartColors.purple },
+              ]}
+            />
+          ) : null}
+          {showChart("gpuMemoryUsed") ? (
+            <PerformanceChart
+              title="GPU memory allocated"
+              subtitle="Absolute VRAM use in MiB for model residency and batch work."
+              history={history}
+              unit=" MiB"
+              series={[
+                { key: "gpuMemoryMiB", label: "VRAM used", color: chartColors.orange },
               ]}
             />
           ) : null}
@@ -164,10 +243,12 @@ export function PerformanceView({
           {showChart("workers") ? (
             <PerformanceChart
               title="Active document workers"
-              subtitle="How much document-level parallel work is currently in flight."
+              subtitle="Document workers plus the active embedding and reranker batch sizes."
               history={history}
               series={[
                 { key: "workers", label: "Active doc workers", color: chartColors.green },
+                { key: "embeddingBatch", label: "Embedding batch", color: chartColors.blue },
+                { key: "rerankerBatch", label: "Reranker batch", color: chartColors.purple },
               ]}
             />
           ) : null}

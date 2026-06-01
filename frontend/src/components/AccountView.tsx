@@ -1,19 +1,23 @@
 import { FormEvent, useState } from "react";
 import { getAccountAIProvider, getAccountAIProviderModels, updateAccountAIProvider, updateAccountPassword } from "../api";
 import type { ThemeMode } from "../hooks/useThemePreference";
+import type { AppConfig } from "../types";
 import { errorMessage } from "../lib/errors";
 import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";
 import { AccountProfileForm } from "./AccountProfileForm";
+import { AskRetrievalSettingsPanel } from "./AskRetrievalSettingsPanel";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 
 export function AccountView({
   username,
+  config,
   theme,
   setTheme,
   onPasswordChanged
 }: {
   username: string;
+  config: AppConfig;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
   onPasswordChanged?: () => Promise<void> | void;
@@ -63,6 +67,8 @@ export function AccountView({
       </header>
 
       <AccountProfileForm />
+
+      <AskRetrievalSettingsPanel config={config} />
 
       <form className="account-card" onSubmit={submitPassword}>
         <SectionHeader title="Change password" description="Keeps your local CircuitShelf login private." />

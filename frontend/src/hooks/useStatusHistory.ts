@@ -11,6 +11,8 @@ export interface StatusHistoryPoint {
   gpuTemp: number | null;
   gpuPower: number | null;
   processRamMiB: number | null;
+  processThreads: number | null;
+  gpuMemoryMiB: number | null;
   embeddingBatch: number;
   rerankerBatch: number;
   chunks: number;
@@ -31,6 +33,8 @@ export function pointFromPerformanceSample(sample: PerformanceSample): StatusHis
     gpuTemp: sample.gpuTemperatureC ?? null,
     gpuPower: sample.gpuPowerW ?? null,
     processRamMiB: sample.processMemoryBytes ? sample.processMemoryBytes / (1024 * 1024) : null,
+    processThreads: sample.processThreads ?? null,
+    gpuMemoryMiB: sample.gpuMemoryUsedMiB ?? null,
     embeddingBatch: sample.embeddingBatch ?? 0,
     rerankerBatch: sample.rerankerBatch ?? 0,
     chunks: sample.chunks ?? 0,
@@ -52,6 +56,8 @@ function pointFromStatus(status: StatusPayload): StatusHistoryPoint {
     gpuTemp: status.systemResources?.gpu?.available ? status.systemResources.gpu.temperatureC ?? null : null,
     gpuPower: status.systemResources?.gpu?.available ? status.systemResources.gpu.powerW ?? null : null,
     processRamMiB: status.systemResources?.process?.memoryBytes ? status.systemResources.process.memoryBytes / (1024 * 1024) : null,
+    processThreads: status.systemResources?.process?.threads ?? null,
+    gpuMemoryMiB: status.systemResources?.gpu?.available ? status.systemResources.gpu.memoryUsedMiB ?? null : null,
     embeddingBatch: status.runtimeBatches?.embedding?.active ?? 0,
     rerankerBatch: status.runtimeBatches?.reranker?.active ?? 0,
     chunks: status.chunks ?? 0,

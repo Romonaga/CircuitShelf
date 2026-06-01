@@ -146,6 +146,19 @@ export function unlockEntityMember(userId: number): Promise<{ ok: boolean }> {
   });
 }
 
+export function disableEntityMember(userId: number, reason: string): Promise<{ ok: boolean; members: EntityMember[] }> {
+  return requestJson<{ ok: boolean; members: EntityMember[] }>(`/api/entity/members/${encodeURIComponent(String(userId))}/disable`, {
+    method: "POST",
+    body: JSON.stringify({ reason })
+  });
+}
+
+export function enableEntityMember(userId: number): Promise<{ ok: boolean; members: EntityMember[] }> {
+  return requestJson<{ ok: boolean; members: EntityMember[] }>(`/api/entity/members/${encodeURIComponent(String(userId))}/enable`, {
+    method: "POST"
+  });
+}
+
 export function resetEntityMemberPassword(
   userId: number,
   payload: { temporaryPassword: string; forcePasswordChange: boolean }

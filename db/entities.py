@@ -84,6 +84,20 @@ class EntityStore:
             row = conn.execute(load_query("entity_member_unlock.sql"), (int(entity_id), int(user_id))).fetchone()
         return dict(row) if row else None
 
+    def disable_member(self, entity_id: int, user_id: int, reason: str = "") -> dict[str, Any] | None:
+        clean_reason = str(reason or "").strip() or "Disabled by entity administrator."
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("entity_member_disable.sql"),
+                (clean_reason, int(entity_id), int(user_id)),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def enable_member(self, entity_id: int, user_id: int) -> dict[str, Any] | None:
+        with self.database.connection() as conn:
+            row = conn.execute(load_query("entity_member_enable.sql"), (int(entity_id), int(user_id))).fetchone()
+        return dict(row) if row else None
+
     def force_member_password_change(self, entity_id: int, user_id: int, force: bool) -> dict[str, Any] | None:
         with self.database.connection() as conn:
             row = conn.execute(

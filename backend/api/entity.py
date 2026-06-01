@@ -39,6 +39,10 @@ class EntityMemberPasswordResetRequest(BaseModel):
     forcePasswordChange: bool = True
 
 
+class EntityMemberDisableRequest(BaseModel):
+    reason: str = ""
+
+
 def create_router(deps: ApiDependencies) -> APIRouter:
     router = APIRouter()
 
@@ -116,6 +120,31 @@ def create_router(deps: ApiDependencies) -> APIRouter:
         if not member:
             return JSONResponse({"error": "Entity member not found."}, status_code=404)
         return {"ok": True, "member": member}
+
+    @router.post("/api/entity/members/{user_id}/disable")
+    async def entity_member_disable(user_id: int, req: Request, payload: EntityMemberDisableRequest):
+        user, entity, error = deps.require_entity_admin(req)
+        if error:
+            return error
+        actor_id = deps.user_id_for_user(user)
+        if actor_id == int(user_id):
+            return JSONResponse({"error": "You cannot disable your own account."}, status_code=400)
+        if entity.owner_user_id == int(user_id):
+            return JSONResponse({"error": "The entity owner cannot be disabled from member management."}, status_code=400)
+        member = deps.entity_store.disable_member(entity.entity_id, int(user_id), payload.reason)
+        if not member:
+            return JSONResponse({"error": "Entity member not found."}, status_code=404)
+        return {"ok": True, "member": member, "members": deps.entity_store.members(entity.entity_id)}
+
+    @router.post("/api/entity/members/{user_id}/enable")
+    async def entity_member_enable(user_id: int, req: Request):
+        _, entity, error = deps.require_entity_admin(req)
+        if error:
+            return error
+        member = deps.entity_store.enable_member(entity.entity_id, int(user_id))
+        if not member:
+            return JSONResponse({"error": "Entity member not found."}, status_code=404)
+        return {"ok": True, "member": member, "members": deps.entity_store.members(entity.entity_id)}
 
     @router.post("/api/entity/members/{user_id}/force-password-change")
     async def entity_member_force_password_change(user_id: int, req: Request):

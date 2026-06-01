@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   createEntityMember,
+  disableEntityMember,
+  enableEntityMember,
   forceEntityMemberPasswordChange,
   getEntityAIProvider,
   getEntityAIProviderModels,
   getEntityMembers,
   getEntityPasswordPolicy,
   resetEntityMemberPassword,
-  unlockEntityMember,
   updateEntityMemberRole,
   updateEntityAIProvider,
   updateEntityPasswordPolicy
@@ -39,6 +40,7 @@ export function EntitySettingsView({
     forcePasswordChange: true
   });
   const [resetDrafts, setResetDrafts] = useState<Record<number, string>>({});
+  const [disableDrafts, setDisableDrafts] = useState<Record<number, string>>({});
 
   const loadMembers = useCallback(() => {
     if (!canManage) {
@@ -62,6 +64,34 @@ export function EntitySettingsView({
       loadMembers();
     } catch (err) {
       setError(errorMessage(err, "Could not update member"));
+    }
+  }
+
+  async function disableMember(member: EntityMember) {
+    setError("");
+    setMessage("");
+    try {
+      const response = await disableEntityMember(
+        member.userId,
+        disableDrafts[member.userId] || "Disabled by entity administrator."
+      );
+      setMembers(response.members);
+      setDisableDrafts((current) => ({ ...current, [member.userId]: "" }));
+      setMessage(`${member.username} disabled.`);
+    } catch (err) {
+      setError(errorMessage(err, "Could not disable member"));
+    }
+  }
+
+  async function enableMember(member: EntityMember) {
+    setError("");
+    setMessage("");
+    try {
+      const response = await enableEntityMember(member.userId);
+      setMembers(response.members);
+      setMessage(`${member.username} enabled.`);
+    } catch (err) {
+      setError(errorMessage(err, "Could not enable member"));
     }
   }
 
@@ -260,12 +290,9 @@ export function EntitySettingsView({
                           <button
                             type="button"
                             className="ghost-button"
-                            onClick={() => void runMemberAction(
-                              () => unlockEntityMember(member.userId),
-                              `${member.username} was unlocked.`
-                            )}
+                            onClick={() => void enableMember(member)}
                           >
-                            Unlock
+                            Enable
                           </button>
                         ) : null}
                         {!member.forcePasswordChange ? (
@@ -296,6 +323,22 @@ export function EntitySettingsView({
                             Reset
                           </button>
                         </div>
+                        {!member.disabledAt ? (
+                          <div className="member-reset-row">
+                            <input
+                              value={disableDrafts[member.userId] || ""}
+                              onChange={(event) => setDisableDrafts((current) => ({ ...current, [member.userId]: event.target.value }))}
+                              placeholder="disable reason"
+                            />
+                            <button
+                              type="button"
+                              className="danger-button"
+                              onClick={() => void disableMember(member)}
+                            >
+                              Disable
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

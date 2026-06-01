@@ -83,7 +83,7 @@ export default function App() {
         />
       ) : null}
       <div hidden={activeView !== "ask"}>
-        <AskView config={config} />
+        <AskView config={config} isActive={activeView === "ask"} />
       </div>
       <div hidden={activeView !== "bench"}>
         <BenchView config={config} isActive={activeView === "bench"} />
@@ -156,7 +156,7 @@ export default function App() {
         />
       </div>
       <div hidden={activeView !== "account"}>
-        <AccountView username={user?.username || "local"} theme={theme} setTheme={setTheme} onPasswordChanged={refreshSession} />
+        <AccountView username={user?.username || "local"} config={config} theme={theme} setTheme={setTheme} onPasswordChanged={refreshSession} />
       </div>
       {user?.canManageSystem ? (
         <div hidden={activeView !== "settings"}>

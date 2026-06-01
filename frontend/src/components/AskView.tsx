@@ -1,9 +1,10 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { deleteConversation, getConversation, getConversations, getUserPreference, runQuery, updateUserPreference } from "../api";
+import { deleteConversation, getConversation, getConversations, getUserPreference, runQuery } from "../api";
 import type { AppConfig, ChatTurn, ConversationSummary, QueryOptions, QueryResponse } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatNumber } from "../lib/format";
 import { formatElapsed } from "../lib/time";
+import { ASK_RETRIEVAL_PREFERENCE_KEY, resolveAskPreferences, type AskRetrievalPreference } from "../lib/askPreferences";
 import { useElapsedSeconds } from "../hooks/useElapsedSeconds";
 import { AnswerRenderer } from "./AnswerRenderer";
 import { BuildCard } from "./BuildCard";
@@ -14,9 +15,7 @@ import { SectionHeader } from "./SectionHeader";
 import { SourceList } from "./SourceList";
 import { ResponseValidationPanel } from "./ResponseValidationPanel";
 
-const ASK_RETRIEVAL_PREFERENCE_KEY = "ask.retrieval";
-
-export function AskView({ config }: { config: AppConfig }) {
+export function AskView({ config, isActive }: { config: AppConfig; isActive: boolean }) {
   const [question, setQuestion] = useState("");
   const [model, setModel] = useState(config.defaultModel);
   const [options, setOptions] = useState<QueryOptions>(config.defaults);
@@ -26,7 +25,6 @@ export function AskView({ config }: { config: AppConfig }) {
   const [conversationsBusy, setConversationsBusy] = useState(false);
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [busy, setBusy] = useState(false);
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [error, setError] = useState("");
 
   const elapsedSeconds = useElapsedSeconds(busy);
@@ -52,39 +50,26 @@ export function AskView({ config }: { config: AppConfig }) {
   useEffect(() => {
     let cancelled = false;
     async function loadPreferences() {
+      if (!isActive) {
+        return;
+      }
       try {
-        const response = await getUserPreference<Partial<QueryOptions>>(ASK_RETRIEVAL_PREFERENCE_KEY);
+        const response = await getUserPreference<AskRetrievalPreference>(ASK_RETRIEVAL_PREFERENCE_KEY);
         if (cancelled) {
           return;
         }
-        setOptions((current) => ({
-          ...current,
-          showFullText: typeof response.value?.showFullText === "boolean" ? response.value.showFullText : current.showFullText,
-          bypassCache: typeof response.value?.bypassCache === "boolean" ? response.value.bypassCache : current.bypassCache
-        }));
+        const resolved = resolveAskPreferences(config, response.value);
+        setModel(resolved.model);
+        setOptions(resolved.options);
       } catch {
         // Preferences are not required for asking; defaults remain usable.
-      } finally {
-        if (!cancelled) {
-          setPreferencesLoaded(true);
-        }
       }
     }
     void loadPreferences();
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    if (!preferencesLoaded) {
-      return;
-    }
-    void updateUserPreference(ASK_RETRIEVAL_PREFERENCE_KEY, {
-      showFullText: options.showFullText,
-      bypassCache: options.bypassCache
-    }).catch(() => undefined);
-  }, [options.bypassCache, options.showFullText, preferencesLoaded]);
+  }, [config, isActive]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -196,76 +181,6 @@ export function AskView({ config }: { config: AppConfig }) {
         </div>
         <ErrorMessage message={error} />
       </form>
-
-      <aside className="controls-panel">
-        <h3>Retrieval</h3>
-        <label>
-          Model
-          <select value={model} onChange={(event) => setModel(event.target.value)}>
-            {config.models.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Strategy
-          <select value={options.strategy} onChange={(event) => setOptions({ ...options, strategy: event.target.value })}>
-            {config.retrievalStrategies.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Top K
-          <input
-            type="number"
-            min="1"
-            max="80"
-            value={options.topK}
-            onChange={(event) => setOptions({ ...options, topK: Number(event.target.value) })}
-          />
-        </label>
-        <label>
-          Distance threshold
-          <input
-            type="number"
-            step="0.1"
-            min="0.1"
-            value={options.distanceThreshold}
-            onChange={(event) => setOptions({ ...options, distanceThreshold: Number(event.target.value) })}
-          />
-        </label>
-        <label>
-          Context tokens
-          <input
-            type="number"
-            min="100"
-            step="100"
-            value={options.maxTokens}
-            onChange={(event) => setOptions({ ...options, maxTokens: Number(event.target.value) })}
-          />
-        </label>
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={options.showFullText}
-            onChange={(event) => setOptions({ ...options, showFullText: event.target.checked })}
-          />
-          Show full source text
-        </label>
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={options.bypassCache}
-            onChange={(event) => setOptions({ ...options, bypassCache: event.target.checked })}
-          />
-          Bypass cache
-        </label>
-      </aside>
 
       <section className="answer-panel">
         <SectionHeader
