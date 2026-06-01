@@ -25,7 +25,7 @@ import nltk
 import bench_tools
 from lxml import etree
 from datetime import datetime, timezone
-from collections import deque, OrderedDict
+from collections import deque
 from contextlib import asynccontextmanager
 from docx import Document
 from sentence_transformers import SentenceTransformer, CrossEncoder
@@ -51,6 +51,7 @@ from backend.services.runtime_status_service import (
 from backend.services.openai_assist_service import OpenAIAssistService
 from backend.services.openai_model_service import OpenAIModelService
 from backend.services.document_intelligence_service import DocumentIntelligenceService
+from backend.services.retrieval_service import QueryPreprocessor, RuntimeChunkMapper
 from backend.services.source_metadata import (
     build_source_payload,
     display_source_name,
@@ -2159,33 +2160,6 @@ def search_top_images(question, top_n=4):
 
 
 
-# === Query Normalization and Expansion ===
-def normalize_question(q):
-    
-    wrkStr = sanitize_input(q)
-    return re.sub(r"\s+", " ", wrkStr.strip().lower())
-
-
-
-
-def expand_query(q):
-
-    synonym_pairs = config.get("QUERY_SYNONYMS", [])
-    synonyms = set()
-    q_lower = str(q).lower()
-
-    for pair in synonym_pairs:
-        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
-            trace_logger.warning(f"⚠️ Invalid QUERY_SYNONYMS entry skipped: {pair!r}")
-            continue
-        orig, repl = (str(pair[0]).lower(), str(pair[1]).lower())
-        if orig in q_lower:
-            synonyms.add(q_lower.replace(orig, repl))
-
-    synonyms.add(q_lower)
-    return list(OrderedDict.fromkeys(synonyms))
-
-
 def image_asset_count_for_document(doc_source):
     return sum(
         1
@@ -2207,42 +2181,16 @@ document_intelligence_service = DocumentIntelligenceService(
 )
 
 
-def deduplicate_hits_by_index(hits):
-    best_by_index = {}
-    for idx, distance in hits:
-        if idx not in best_by_index or distance < best_by_index[idx]:
-            best_by_index[idx] = distance
-    return sorted(best_by_index.items(), key=lambda item: item[1])
-
-
-def build_db_chunk_index():
-    mapping = {}
-    per_source_counts = {}
-    metadata = state.get_metadata()
-    sources = state.get_sources()
-    for idx, source in enumerate(sources):
-        meta = metadata[idx] if idx < len(metadata) else {}
-        rel_path = meta.get("db_source_path") or vector_store.rel_path_for_source(source, meta)
-        chunk_index = meta.get("db_chunk_index")
-        if chunk_index is None:
-            chunk_index = per_source_counts.get(rel_path, 0)
-        per_source_counts[rel_path] = int(chunk_index) + 1
-        mapping[(rel_path, int(chunk_index))] = idx
-    return mapping
-
-
-def vector_results_to_hits(results):
-    index_by_key = build_db_chunk_index()
-    hits = []
-    for result in results:
-        rel_path = vector_store.rel_path_for_source(result.get("source", ""), {})
-        key = (rel_path, int(result.get("chunk_index", 0)))
-        idx = index_by_key.get(key)
-        if idx is None:
-            trace_logger.warning(f"⚠️ Retrieved DB chunk not found in runtime state: {key}")
-            continue
-        hits.append((idx, float(result.get("distance", 0.0))))
-    return hits
+query_preprocessor = QueryPreprocessor(
+    config=config,
+    trace_logger=trace_logger,
+    banned_phrases=BANNED_PHRASES,
+)
+runtime_chunk_mapper = RuntimeChunkMapper(
+    state=state,
+    vector_store=vector_store,
+    trace_logger=trace_logger,
+)
 
 
 #def clean_response(text):
@@ -2363,13 +2311,6 @@ def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=
 
 
 
-def sanitize_input(user_input: str) -> str:
-    
-    for phrase in BANNED_PHRASES:
-        user_input = re.sub(phrase, "[REDACTED]", user_input, flags=re.IGNORECASE)
-    return user_input
-
-
 @trace_timer("get_rag_response")
 def get_rag_response(
     question,
@@ -2389,9 +2330,9 @@ def get_rag_response(
 ):
     start_time = time.time()
     model_name = model_name or (LLM_MODEL_OPTIONS[0] if LLM_MODEL_OPTIONS else LLM_MODEL_NAME)
-    norm_q = normalize_question(question)
-    retrieval_q = normalize_question(build_contextual_retrieval_query(norm_q, chat_history))
-    synonyms = expand_query(retrieval_q)
+    norm_q = query_preprocessor.normalize(question)
+    retrieval_q = query_preprocessor.normalize(build_contextual_retrieval_query(norm_q, chat_history))
+    synonyms = query_preprocessor.expand(retrieval_q)
     cache_enabled = should_cache_response(chat_history, bypass_cache)
     response_cache = get_response_cache()
     cache_key = build_response_cache_key(
@@ -2448,7 +2389,7 @@ def get_rag_response(
     for syn in synonyms:
         emb = embedder.encode([syn], convert_to_numpy=True).astype("float32")
         vector_results = vector_store.search_chunks(emb[0], top_k=top_k, entity_id=entity_id)
-        for i, dist in vector_results_to_hits(vector_results):
+        for i, dist in runtime_chunk_mapper.vector_results_to_hits(vector_results):
             adjusted = dist * (1 + 0.1 * (1 - len(state.chunks[i]) / 500))
             if adjusted < dist_thresh:
                 all_hits.append((i, adjusted))
@@ -2476,7 +2417,7 @@ def get_rag_response(
         )
         return norm_q, response, chat_history, [], response_cache.stats(), "0.00", get_average_query_time(), None, validation_payload
 
-    dedup_hits = deduplicate_hits_by_index(all_hits)
+    dedup_hits = runtime_chunk_mapper.deduplicate_hits_by_index(all_hits)
     rerank_duration = None
 
     if strategy == "Vector only":
