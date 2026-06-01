@@ -18,6 +18,9 @@ SELECT d.source_path,
        d.size_bytes,
        d.mtime_ns,
        d.status,
+       d.entity_id,
+       d.is_global,
+       e.name AS entity_name,
        d.raw_chunk_count,
        d.dropped_chunk_count,
        d.extracted_image_count,
@@ -35,5 +38,6 @@ SELECT d.source_path,
 FROM documents d
 LEFT JOIN chunk_stats c ON c.document_id = d.id
 LEFT JOIN image_stats i ON i.document_id = d.id
+LEFT JOIN entities e ON e.id = d.entity_id
 WHERE d.status IN ('needs_review', 'failed')
 ORDER BY d.updated_at DESC, d.source_path;

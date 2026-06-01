@@ -825,6 +825,10 @@ export interface ReviewDocument {
   source: string;
   displayName: string;
   status: string;
+  entityId?: number | null;
+  isGlobal?: boolean;
+  entityName?: string;
+  scopeLabel?: string;
   sizeBytes: number;
   fileExtension: string;
   chunkCount: number;

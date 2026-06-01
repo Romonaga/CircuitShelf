@@ -44,7 +44,7 @@ export function ReviewView({
     if (!needle) {
       return documents;
     }
-    return documents.filter((doc) => `${doc.displayName} ${doc.source} ${doc.status}`.toLowerCase().includes(needle));
+    return documents.filter((doc) => `${doc.displayName} ${doc.source} ${doc.status} ${doc.scopeLabel ?? ""}`.toLowerCase().includes(needle));
   }, [documents, filter]);
 
   const selectedDocument = documents.find((doc) => doc.source === selected) || null;
@@ -201,7 +201,7 @@ export function ReviewView({
             >
               <span>{document.displayName}</span>
               <small>
-                {document.status} | {formatInteger(document.chunkCount)} chunks | {formatInteger(document.imageCount)} images
+                {document.scopeLabel || (document.isGlobal ? "Global corpus" : "Entity private")} | {document.status} | {formatInteger(document.chunkCount)} chunks | {formatInteger(document.imageCount)} images
               </small>
             </button>
           ))}
@@ -213,7 +213,7 @@ export function ReviewView({
           title={selectedDocument?.displayName || "No document selected"}
           description={
             selectedDocument
-              ? `Quality ${selectedDocument.avgQuality.toFixed(2)} | ${formatInteger(selectedDocument.lowQualityCount)} low-quality chunks`
+              ? `${selectedDocument.scopeLabel || (selectedDocument.isGlobal ? "Global corpus" : "Entity private")} | Quality ${selectedDocument.avgQuality.toFixed(2)} | ${formatInteger(selectedDocument.lowQualityCount)} low-quality chunks`
               : "Review new or changed documents before retrieval."
           }
           actions={
