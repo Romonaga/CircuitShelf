@@ -1,14 +1,14 @@
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getDocument, getDocuments, removeIndexedDocument, triggerIndexCheck, uploadDocuments } from "../api";
+import { getDocument, getDocuments, removeIndexedDocument, triggerIndexCheck } from "../api";
 import type { DocumentDetail, DocumentSummary, StatusPayload } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
-import { uploadResultMessage } from "../lib/uploadMessages";
 import { ErrorMessage } from "./ErrorMessage";
 import { DocumentContextMenu, type DocumentContextMenuState } from "./DocumentContextMenu";
 import { IngestStatusPanel } from "./IngestStatusPanel";
 import { DocumentPageInspector } from "./DocumentPageInspector";
 import { DocumentStatsPanel } from "./DocumentStatsPanel";
+import { DocumentUploadPanel } from "./DocumentUploadPanel";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { SectionHeader } from "./SectionHeader";
 
@@ -48,10 +48,6 @@ export function DocumentsView({
   const [detailBusy, setDetailBusy] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [contextMenu, setContextMenu] = useState<DocumentContextMenuState | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-  const [uploadInputKey, setUploadInputKey] = useState(0);
-  const [overwrite, setOverwrite] = useState(false);
   const selectedRef = useRef("");
 
   useEffect(() => {
@@ -92,26 +88,6 @@ export function DocumentsView({
       void loadDocuments();
     }
   }, [isActive, loadDocuments, refreshSignal]);
-
-  async function submitUpload() {
-    if (!uploadFiles.length) {
-      return;
-    }
-    setUploading(true);
-    setError("");
-    setMessage("");
-    try {
-      const response = await uploadDocuments(uploadFiles, overwrite, scope === "global" ? "global" : "entity");
-      setMessage(uploadResultMessage(response));
-      setUploadFiles([]);
-      setUploadInputKey((key) => key + 1);
-      onStatusChange();
-    } catch (err) {
-      setError(errorMessage(err, "Upload failed"));
-    } finally {
-      setUploading(false);
-    }
-  }
 
   async function runIndexCheck() {
     setBusy(true);
@@ -207,35 +183,20 @@ export function DocumentsView({
           description={busy ? "Loading..." : (description ?? `${formatInteger(documents.length)} indexed sources`)}
           actions={
             isAdmin ? (
-              <button className="ghost-button" onClick={runIndexCheck} disabled={busy || uploading}>
+              <button className="ghost-button" onClick={runIndexCheck} disabled={busy}>
                 Check now
               </button>
             ) : null
           }
         />
         {isAdmin ? (
-          <div className="upload-panel">
-            {uploadHelp ? <p className="upload-help">{uploadHelp}</p> : null}
-            <input
-              key={uploadInputKey}
-              type="file"
-              multiple
-              onChange={(event) => setUploadFiles(Array.from(event.target.files ?? []))}
-              disabled={uploading}
-            />
-            {uploadFiles.length ? (
-              <p className="upload-selection">
-                {formatInteger(uploadFiles.length)} selected: {uploadFiles.map((file) => file.name).join(", ")}
-              </p>
-            ) : null}
-            <label className="checkbox-label">
-              <input type="checkbox" checked={overwrite} onChange={(event) => setOverwrite(event.target.checked)} />
-              Replace existing
-            </label>
-            <button className="primary-button" onClick={submitUpload} disabled={!uploadFiles.length || uploading}>
-              {uploading ? "Uploading..." : uploadFiles.length > 1 ? `Upload ${formatInteger(uploadFiles.length)} files` : "Upload"}
-            </button>
-          </div>
+          <DocumentUploadPanel
+            scope={scope === "global" ? "global" : "entity"}
+            help={uploadHelp}
+            onUploaded={setMessage}
+            onError={setError}
+            onStatusChange={onStatusChange}
+          />
         ) : null}
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter documents" />
         {message ? <p className="success-message">{message}</p> : null}

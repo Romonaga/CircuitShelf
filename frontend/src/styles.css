@@ -2930,6 +2930,22 @@ nav {
   background: var(--panel-soft);
 }
 
+.upload-picker-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hidden-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 .ingest-status-panel {
   display: grid;
   gap: 12px;
@@ -3208,6 +3224,10 @@ nav {
   font-size: 0.82rem;
   line-height: 1.35;
   text-overflow: ellipsis;
+}
+
+.upload-selection.muted {
+  color: var(--muted);
 }
 
 .checkbox-label {
