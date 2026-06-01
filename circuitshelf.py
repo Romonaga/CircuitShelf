@@ -26,7 +26,7 @@ import nltk
 import bench_tools
 from lxml import etree
 from datetime import datetime, timezone
-from fastapi import FastAPI, Request
+from fastapi import Request
 from collections import deque, OrderedDict
 from contextlib import asynccontextmanager
 from docx import Document
@@ -42,20 +42,8 @@ from fastapi.staticfiles import StaticFiles
 
 
 #internal
+from backend.app_factory import create_circuitshelf_app, register_api_routes
 from backend.api.dependencies import ApiDependencies
-from backend.api import account as account_api
-from backend.api import ai_settings as ai_settings_api
-from backend.api import app_config as app_config_api
-from backend.api import assembly_plans as assembly_plans_api
-from backend.api import conversations as conversations_api
-from backend.api import documents as documents_api
-from backend.api import entity as entity_api
-from backend.api import inventory as inventory_api
-from backend.api import performance as performance_api
-from backend.api import query as query_api
-from backend.api import review as review_api
-from backend.api import settings as settings_api
-from backend.api import status as status_api
 from backend.services.runtime_status_service import (
     build_resource_status,
     build_runtime_batch_status,
@@ -2750,7 +2738,7 @@ async def lifespan(_app):
         stop_ingest_watcher()
 
 
-app = FastAPI(lifespan=lifespan)
+app = create_circuitshelf_app(lifespan=lifespan)
 
 
 def sanitize_for_json(value):
@@ -3163,45 +3151,32 @@ def current_trace_log_file():
     return TRACE_LOG_FILE
 
 
-app.include_router(account_api.create_router(api_dependencies, USER_PREFERENCE_KEYS))
-app.include_router(entity_api.create_router(api_dependencies))
-app.include_router(ai_settings_api.create_router(api_dependencies))
-app.include_router(app_config_api.create_router(
+register_api_routes(
+    app,
+    api_dependencies=api_dependencies,
+    user_preference_keys=USER_PREFERENCE_KEYS,
     config=config,
     models=LLM_MODEL_OPTIONS,
     default_model=LLM_MODEL_NAME,
     auth_configured=lambda: database.configured and user_store.has_active_users(),
     session_timeout_seconds=session_timeout_seconds,
     build_readiness_status=build_readiness_status,
-))
-app.include_router(conversations_api.create_router(
-    api_dependencies,
+    build_runtime_status=build_runtime_status,
     conversation_store=conversation_store,
     conversation_title_from_question=conversation_title_from_question,
-))
-app.include_router(inventory_api.create_router(
-    api_dependencies,
     lab_inventory_store=lab_inventory_store,
     project_finder_store=project_finder_store,
     parse_inventory_import=parse_inventory_import,
-))
-app.include_router(settings_api.create_router(
     require_admin_user=require_admin_user,
     settings_store=settings_store,
     runtime_settings=runtime_settings,
     trace_logger=trace_logger,
     start_index_check=start_index_check,
-))
-app.include_router(review_api.create_router(
-    require_admin_user=require_admin_user,
     vector_store=vector_store,
     image_store=image_store,
     refresh_active_state_from_db=refresh_active_state_from_db,
     reindex_review_source=reindex_review_source,
     remove_document_from_store=remove_document_from_store,
-))
-app.include_router(assembly_plans_api.create_router(
-    api_dependencies,
     assembly_plan_store=assembly_plan_store,
     bench_tools=bench_tools,
     get_rag_response=get_rag_response,
@@ -3210,18 +3185,10 @@ app.include_router(assembly_plans_api.create_router(
     build_recovery_prompt=build_recovery_prompt,
     parse_recovered_build_card=parse_recovered_build_card,
     recovery_system_prompt=RECOVERY_SYSTEM_PROMPT,
-    default_model=LLM_MODEL_NAME,
     username_for_user=username_for_user,
-))
-app.include_router(documents_api.create_router(
-    api_dependencies,
     training_dir=TRAINING_DIR,
     supported_training_extensions=supported_training_extensions,
-    vector_store=vector_store,
-    image_store=image_store,
     state=state,
-    trace_logger=trace_logger,
-    start_index_check=start_index_check,
     image_asset_belongs_to_document=image_asset_belongs_to_document,
     extract_page_number=extract_page_number,
     document_source_from_metadata=document_source_from_metadata,
@@ -3229,30 +3196,13 @@ app.include_router(documents_api.create_router(
     extract_pinout_map=extract_pinout_map,
     get_or_build_datasheet_intelligence=get_or_build_datasheet_intelligence,
     display_source_name=display_source_name,
-))
-app.include_router(query_api.create_router(
-    api_dependencies,
-    conversation_store=conversation_store,
-    get_rag_response=get_rag_response,
-    normalize_sources_for_api=normalize_sources_for_api,
-    conversation_title_from_question=conversation_title_from_question,
-    username_for_user=username_for_user,
-    default_model=LLM_MODEL_NAME,
-    trace_logger=trace_logger,
-))
-app.include_router(status_api.create_router(
-    require_admin_user=require_admin_user,
-    build_runtime_status=build_runtime_status,
     sanitize_for_json=sanitize_for_json,
     get_last_trace=state.get_last_trace,
     flush_trace_log=flush_trace_log,
     current_trace_log_file=current_trace_log_file,
     tail_text_file=tail_text_file,
-))
-app.include_router(performance_api.create_router(
-    api_dependencies,
     performance_store=performance_store,
-))
+)
 
 
 def mount_react_app():
