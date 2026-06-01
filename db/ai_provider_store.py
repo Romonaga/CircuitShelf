@@ -178,6 +178,48 @@ class AIProviderStore:
         ) / 1_000_000
         return round(float(cost), 8)
 
+    def monthly_spend_for_scope(
+        self,
+        *,
+        billing_scope: str,
+        entity_id: int | None = None,
+        user_id: int | None = None,
+    ) -> float:
+        scope = str(billing_scope or "system")
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("ai_assist_monthly_spend.sql"),
+                (
+                    scope,
+                    scope,
+                    scope,
+                    entity_id,
+                    scope,
+                    user_id,
+                ),
+            ).fetchone()
+        return float((row or {}).get("estimated_cost") or 0)
+
+    def budget_status_for_settings(self, settings: dict[str, Any]) -> dict[str, Any]:
+        monthly_budget = float(settings.get("monthlyBudget") or 0)
+        stop_percent = int(settings.get("stopPercent") or 100)
+        warn_percent = int(settings.get("warnPercent") or 80)
+        spend = self.monthly_spend_for_scope(
+            billing_scope=settings.get("pricingScope") or settings.get("paidBy") or "system",
+            entity_id=settings.get("pricingEntityId"),
+            user_id=settings.get("pricingUserId"),
+        )
+        stop_at = monthly_budget * max(1, stop_percent) / 100 if monthly_budget > 0 else 0
+        warn_at = monthly_budget * max(1, warn_percent) / 100 if monthly_budget > 0 else 0
+        return {
+            "monthlyBudget": monthly_budget,
+            "monthSpend": round(spend, 8),
+            "warnAt": round(warn_at, 8),
+            "stopAt": round(stop_at, 8),
+            "warned": bool(monthly_budget > 0 and spend >= warn_at),
+            "blocked": bool(monthly_budget > 0 and spend >= stop_at),
+        }
+
     def resolve_openai_assist(
         self,
         *,
@@ -494,6 +536,9 @@ class AIProviderStore:
             "pricingScope": paid_by,
             "pricingEntityId": entity_id if paid_by == "entity" else None,
             "pricingUserId": user_id if paid_by == "user" else None,
+            "monthlyBudget": float(row.get("monthlyBudget") or 0),
+            "warnPercent": int(row.get("warnPercent") or 80),
+            "stopPercent": int(row.get("stopPercent") or 100),
             "scope": row.get("scope"),
         }
 

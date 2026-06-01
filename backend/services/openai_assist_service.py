@@ -79,6 +79,18 @@ class OpenAIAssistService:
             "paid_by": settings["paidBy"],
             "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
         }
+        budget_block = self._budget_block_message(settings)
+        if budget_block:
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=0,
+                cached_input_tokens=0,
+                output_tokens=0,
+                estimated_cost=0,
+                success=False,
+                error_message=budget_block,
+            )
+            return None
         try:
             data = self._create_response(
                 api_key=settings["apiKey"],
@@ -162,6 +174,18 @@ class OpenAIAssistService:
             "paid_by": settings["paidBy"],
             "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
         }
+        budget_block = self._budget_block_message(settings)
+        if budget_block:
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=0,
+                cached_input_tokens=0,
+                output_tokens=0,
+                estimated_cost=0,
+                success=False,
+                error_message=budget_block,
+            )
+            return None
         started_at = time.time()
         try:
             data = self._create_response(
@@ -242,6 +266,16 @@ class OpenAIAssistService:
         )
         response.raise_for_status()
         return response.json()
+
+    def _budget_block_message(self, settings: dict[str, Any]) -> str:
+        status = self.ai_provider_store.budget_status_for_settings(settings)
+        if not status.get("blocked"):
+            return ""
+        return (
+            f"OpenAI assist budget exceeded for {settings.get('paidBy') or 'unknown'} payer: "
+            f"${status.get('monthSpend', 0):.4f} spent this month, "
+            f"stop threshold ${status.get('stopAt', 0):.4f}."
+        )
 
 
 def extract_response_text(data: dict[str, Any]) -> str:
