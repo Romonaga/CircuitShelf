@@ -1,5 +1,13 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { getSettings, getSystemAIProvider, getSystemPasswordPolicy, updateSetting, updateSystemAIProvider, updateSystemPasswordPolicy } from "../api";
+import {
+  getSettings,
+  getSystemAIProvider,
+  getSystemAIProviderModels,
+  getSystemPasswordPolicy,
+  updateSetting,
+  updateSystemAIProvider,
+  updateSystemPasswordPolicy
+} from "../api";
 import type { AppSetting, SettingValue } from "../types";
 import { errorMessage } from "../lib/errors";
 import { ErrorMessage } from "./ErrorMessage";
@@ -194,6 +202,7 @@ export function SettingsView() {
           title="System OpenAI key"
           description="System-paid AI assist configuration for global corpus and operator workflows."
           loadSettings={getSystemAIProvider}
+          loadModels={getSystemAIProviderModels}
           saveSettings={updateSystemAIProvider}
           canManage
           showKeyPolicy={false}

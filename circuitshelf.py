@@ -62,6 +62,7 @@ from backend.services.runtime_status_service import (
     effective_embedding_batch_size as runtime_effective_embedding_batch_size,
 )
 from backend.services.openai_assist_service import OpenAIAssistService
+from backend.services.openai_model_service import OpenAIModelService
 from state_manager import StateManager
 from chunking_util import ChunkingUtils
 from tokenize_util import TokenUtils
@@ -161,6 +162,7 @@ password_policy_store = PasswordPolicyStore(database, trace_logger)
 account_profile_store = AccountProfileStore(database, trace_logger)
 ai_provider_store = AIProviderStore(database, "config/config.yaml", trace_logger)
 openai_assist_service = OpenAIAssistService(ai_provider_store, trace_logger)
+openai_model_service = OpenAIModelService(ai_provider_store, trace_logger)
 user_preferences_store = UserPreferencesStore(database, trace_logger)
 query_log_store = QueryLogStore(database, trace_logger)
 performance_store = PerformanceStore(database, trace_logger, sample_interval_seconds=5)
@@ -3070,6 +3072,7 @@ api_dependencies = ApiDependencies(
     entity_store=entity_store,
     password_policy_store=password_policy_store,
     ai_provider_store=ai_provider_store,
+    openai_model_service=openai_model_service,
     performance_store=performance_store,
 )
 def remove_document_from_store(source: str, *, delete_file: bool = True) -> tuple[dict, int]:

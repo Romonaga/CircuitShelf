@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import type { AIModelPricing, AIProviderSettings, AIProviderSettingsPayload } from "../types";
+import type { AIAvailableModel, AIModelPricing, AIProviderSettings, AIProviderSettingsPayload } from "../types";
 import { errorMessage } from "../lib/errors";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
@@ -24,6 +24,7 @@ export function AIProviderSettingsPanel({
   title,
   description,
   loadSettings,
+  loadModels,
   saveSettings,
   canManage,
   showKeyPolicy = true,
@@ -32,6 +33,7 @@ export function AIProviderSettingsPanel({
   title: string;
   description: string;
   loadSettings: () => Promise<{ settings: AIProviderSettings; pricing: AIModelPricing[] }>;
+  loadModels?: () => Promise<{ models: AIAvailableModel[] }>;
   saveSettings: (payload: AIProviderSettingsPayload) => Promise<{ settings: AIProviderSettings }>;
   canManage: boolean;
   showKeyPolicy?: boolean;
@@ -39,9 +41,11 @@ export function AIProviderSettingsPanel({
 }) {
   const [settings, setSettings] = useState<AIProviderSettings>(defaultSettings);
   const [pricing, setPricing] = useState<AIModelPricing[]>([]);
+  const [availableModels, setAvailableModels] = useState<AIAvailableModel[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [clearApiKey, setClearApiKey] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [refreshingModels, setRefreshingModels] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -83,6 +87,57 @@ export function AIProviderSettingsPanel({
     () => pricing.find((item) => item.modelName === settings.defaultModel),
     [pricing, settings.defaultModel]
   );
+
+  const modelOptions = useMemo(() => {
+    const byId = new Map<string, { id: string; source: "catalog" | "account"; priced: boolean; ownedBy: string; created: number }>();
+    pricing.forEach((item) => {
+      byId.set(item.modelName, {
+        id: item.modelName,
+        source: "catalog",
+        priced: true,
+        ownedBy: "",
+        created: 0
+      });
+    });
+    availableModels.forEach((item) => {
+      const existing = byId.get(item.id);
+      byId.set(item.id, {
+        id: item.id,
+        source: existing?.source || "account",
+        priced: Boolean(existing?.priced),
+        ownedBy: item.ownedBy,
+        created: item.created
+      });
+    });
+    if (settings.defaultModel && !byId.has(settings.defaultModel)) {
+      byId.set(settings.defaultModel, {
+        id: settings.defaultModel,
+        source: "account",
+        priced: false,
+        ownedBy: "",
+        created: 0
+      });
+    }
+    return Array.from(byId.values()).sort((left, right) => left.id.localeCompare(right.id));
+  }, [availableModels, pricing, settings.defaultModel]);
+
+  async function refreshAvailableModels() {
+    if (!loadModels || !canManage) {
+      return;
+    }
+    setRefreshingModels(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await loadModels();
+      setAvailableModels(response.models);
+      setMessage(`${response.models.length} OpenAI models available for this key.`);
+    } catch (err) {
+      setError(errorMessage(err, "Could not refresh OpenAI models"));
+    } finally {
+      setRefreshingModels(false);
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -166,9 +221,9 @@ export function AIProviderSettingsPanel({
             onChange={(event) => setSettings({ ...settings, defaultModel: event.target.value })}
           >
             <option value="">Select a model</option>
-            {pricing.map((item) => (
-              <option key={item.modelName} value={item.modelName}>
-                {item.modelName}
+            {modelOptions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.id}{item.priced ? "" : " (unpriced)"}
               </option>
             ))}
           </select>
@@ -201,6 +256,22 @@ export function AIProviderSettingsPanel({
           Clear stored key
         </label>
       </div>
+
+      {loadModels ? (
+        <div className="model-refresh-panel">
+          <div>
+            <strong>Available models</strong>
+            <span>
+              {availableModels.length
+                ? `${availableModels.length} models loaded from OpenAI for this key.`
+                : "Use the stored key to query the models this account can access."}
+            </span>
+          </div>
+          <button className="ghost-button" type="button" disabled={!canManage || refreshingModels || !settings.hasApiKey} onClick={refreshAvailableModels}>
+            {refreshingModels ? "Refreshing..." : "Refresh from OpenAI"}
+          </button>
+        </div>
+      ) : null}
 
       {showBudget ? (
         <div className="ai-provider-grid compact">

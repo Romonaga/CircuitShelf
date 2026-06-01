@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   forceEntityMemberPasswordChange,
   getEntityAIProvider,
+  getEntityAIProviderModels,
   getEntityMembers,
   getEntityPasswordPolicy,
   unlockEntityMember,
@@ -83,6 +84,7 @@ export function EntitySettingsView({
           title="Entity OpenAI key"
           description="Entity-paid AI assist configuration for shared workflows inside this workspace."
           loadSettings={getEntityAIProvider}
+          loadModels={getEntityAIProviderModels}
           saveSettings={updateEntityAIProvider}
           canManage={canManage}
           showBudget

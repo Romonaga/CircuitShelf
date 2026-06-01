@@ -30,6 +30,7 @@ import type {
   EntityContext,
   EntityMember,
   PasswordPolicy,
+  AIAvailableModel,
   AIModelPricing,
   AIProviderSettings,
   AIProviderSettingsPayload,
@@ -151,6 +152,10 @@ export function getAccountAIProvider(): Promise<{ settings: AIProviderSettings; 
   return requestJson<{ settings: AIProviderSettings; pricing: AIModelPricing[] }>("/api/account/ai-provider");
 }
 
+export function getAccountAIProviderModels(): Promise<{ models: AIAvailableModel[] }> {
+  return requestJson<{ models: AIAvailableModel[] }>("/api/account/ai-provider/models");
+}
+
 export function updateAccountAIProvider(payload: AIProviderSettingsPayload): Promise<{ settings: AIProviderSettings }> {
   return requestJson<{ settings: AIProviderSettings }>("/api/account/ai-provider", {
     method: "PUT",
@@ -162,6 +167,10 @@ export function getEntityAIProvider(): Promise<{ settings: AIProviderSettings; p
   return requestJson<{ settings: AIProviderSettings; pricing: AIModelPricing[] }>("/api/entity/ai-provider");
 }
 
+export function getEntityAIProviderModels(): Promise<{ models: AIAvailableModel[] }> {
+  return requestJson<{ models: AIAvailableModel[] }>("/api/entity/ai-provider/models");
+}
+
 export function updateEntityAIProvider(payload: AIProviderSettingsPayload): Promise<{ settings: AIProviderSettings }> {
   return requestJson<{ settings: AIProviderSettings }>("/api/entity/ai-provider", {
     method: "PUT",
@@ -171,6 +180,10 @@ export function updateEntityAIProvider(payload: AIProviderSettingsPayload): Prom
 
 export function getSystemAIProvider(): Promise<{ settings: AIProviderSettings; pricing: AIModelPricing[] }> {
   return requestJson<{ settings: AIProviderSettings; pricing: AIModelPricing[] }>("/api/system/ai-provider");
+}
+
+export function getSystemAIProviderModels(): Promise<{ models: AIAvailableModel[] }> {
+  return requestJson<{ models: AIAvailableModel[] }>("/api/system/ai-provider/models");
 }
 
 export function updateSystemAIProvider(payload: AIProviderSettingsPayload): Promise<{ settings: AIProviderSettings }> {

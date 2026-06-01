@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from backend.api.dependencies import ApiDependencies
@@ -39,6 +40,21 @@ def create_router(deps: ApiDependencies) -> APIRouter:
             "pricing": deps.ai_provider_store.pricing_catalog(provider),
         }
 
+    @router.get("/api/account/ai-provider/models")
+    async def account_ai_provider_models(req: Request, provider: str = "openai"):
+        user, error = deps.require_authenticated_user(req)
+        if error:
+            return error
+        try:
+            models = deps.openai_model_service.list_models_for_scope(
+                scope="user",
+                provider=provider,
+                user_id=deps.user_id_for_user(user),
+            )
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return {"models": models}
+
     @router.put("/api/account/ai-provider")
     async def account_ai_provider_update(req: Request, payload: AIProviderSettingsRequest, provider: str = "openai"):
         user, error = deps.require_authenticated_user(req)
@@ -60,6 +76,21 @@ def create_router(deps: ApiDependencies) -> APIRouter:
             "settings": deps.ai_provider_store.get_entity_settings(entity.entity_id, provider),
             "pricing": deps.ai_provider_store.pricing_catalog(provider),
         }
+
+    @router.get("/api/entity/ai-provider/models")
+    async def entity_ai_provider_models(req: Request, provider: str = "openai"):
+        _, entity, error = deps.require_entity_admin(req)
+        if error:
+            return error
+        try:
+            models = deps.openai_model_service.list_models_for_scope(
+                scope="entity",
+                provider=provider,
+                entity_id=entity.entity_id,
+            )
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return {"models": models}
 
     @router.put("/api/entity/ai-provider")
     async def entity_ai_provider_update(req: Request, payload: AIProviderSettingsRequest, provider: str = "openai"):
@@ -83,6 +114,17 @@ def create_router(deps: ApiDependencies) -> APIRouter:
             "settings": deps.ai_provider_store.get_system_settings(provider),
             "pricing": deps.ai_provider_store.pricing_catalog(provider),
         }
+
+    @router.get("/api/system/ai-provider/models")
+    async def system_ai_provider_models(req: Request, provider: str = "openai"):
+        _, error = deps.require_system_admin_user(req)
+        if error:
+            return error
+        try:
+            models = deps.openai_model_service.list_models_for_scope(scope="system", provider=provider)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return {"models": models}
 
     @router.put("/api/system/ai-provider")
     async def system_ai_provider_update(req: Request, payload: AIProviderSettingsRequest, provider: str = "openai"):

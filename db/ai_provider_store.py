@@ -205,6 +205,19 @@ class AIProviderStore:
             return self._resolved_provider(row=system, paid_by="system", owner_user_id=None, default_model=default_model, entity_id=None, user_id=None)
         return None
 
+    def api_key_for_scope(
+        self,
+        *,
+        scope: str,
+        provider: str = "openai",
+        entity_id: int | None = None,
+        user_id: int | None = None,
+    ) -> str:
+        row = self._secret_row(scope, provider=provider, entity_id=entity_id, user_id=user_id)
+        if not row or not row.get("enabled"):
+            return ""
+        return str(row.get("apiKey") or "")
+
     def record_ai_assist_event(
         self,
         *,

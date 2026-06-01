@@ -1324,6 +1324,29 @@ nav {
   font-size: 0.86rem;
 }
 
+.model-refresh-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.model-refresh-panel strong,
+.model-refresh-panel span {
+  display: block;
+}
+
+.model-refresh-panel span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 .pricing-strip {
   display: flex;
   flex-wrap: wrap;

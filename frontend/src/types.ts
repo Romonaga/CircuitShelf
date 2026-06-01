@@ -93,6 +93,12 @@ export interface AIModelPricing {
   updatedAt?: string | null;
 }
 
+export interface AIAvailableModel {
+  id: string;
+  ownedBy: string;
+  created: number;
+}
+
 export interface AIModelPricingOverride {
   provider?: string;
   modelName: string;

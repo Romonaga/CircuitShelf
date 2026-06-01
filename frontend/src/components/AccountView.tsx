@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { getAccountAIProvider, updateAccountAIProvider, updateAccountPassword } from "../api";
+import { getAccountAIProvider, getAccountAIProviderModels, updateAccountAIProvider, updateAccountPassword } from "../api";
 import type { ThemeMode } from "../hooks/useThemePreference";
 import { errorMessage } from "../lib/errors";
 import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";
@@ -86,6 +86,7 @@ export function AccountView({
         title="Personal OpenAI key"
         description="Optional bring-your-own-key settings. Personal usage is tracked separately from entity-paid work."
         loadSettings={getAccountAIProvider}
+        loadModels={getAccountAIProviderModels}
         saveSettings={updateAccountAIProvider}
         canManage
         showBudget
