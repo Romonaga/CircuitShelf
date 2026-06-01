@@ -25,7 +25,6 @@ import nltk
 import bench_tools
 from lxml import etree
 from datetime import datetime, timezone
-from collections import deque
 from contextlib import asynccontextmanager
 from docx import Document
 from sentence_transformers import SentenceTransformer, CrossEncoder
@@ -60,6 +59,7 @@ from backend.services.openai_model_service import OpenAIModelService
 from backend.services.document_intelligence_service import DocumentIntelligenceService
 from backend.services.document_management_service import DocumentManagementService
 from backend.services.prompt_service import PromptService
+from backend.services.rag_service import RagService
 from backend.services.retrieval_service import QueryPreprocessor, RuntimeChunkMapper
 from backend.services.source_metadata import (
     build_source_payload,
@@ -81,16 +81,15 @@ from inventory_import import parse_inventory_import
 from pinout_extractor import extract_pinout_map
 from circuit_build_cards import (
     RECOVERY_SYSTEM_PROMPT,
-    build_circuit_build_card,
     build_recovery_prompt,
     parse_recovered_build_card,
 )
-from response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT, finalize_response
+from response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT
 from ingest_manifest import IngestManifest
 from ingest_workers import detected_cpu_count, document_worker_count, ocr_worker_count, reserved_core_count, usable_core_count
 from log_tail import tail_text_file
 from log_retention import cleanup_old_logs
-from conversation_manager import append_chat_turn, build_chat_messages, build_contextual_retrieval_query
+from conversation_manager import build_chat_messages
 from db.connection import Database, database_url_from_config
 from db.assembly_plan_store import AssemblyPlanStore
 from db.conversation_store import ConversationStore
@@ -110,11 +109,6 @@ from db.user_preferences import UserPreferencesStore
 from db.users import UserStore
 from db.vector_store import VectorStore
 from process_lock import ProcessLockError, acquire_process_lock
-from response_cache import (
-    ResponseCacheEntry,
-    ResponseCacheKey,
-    should_cache_response,
-)
 from settings_runtime import RuntimeSettingsManager
 
 #Inits the logger as well as the configuraqtion system
@@ -341,7 +335,6 @@ image_retrieval_service = ImageRetrievalService(
 
 reranker_engine = Reranker(config, state, chunker, trace_logger)
 runtime_settings.register_callback("RERANK_PROFILES", lambda value: setattr(reranker_engine, "rerank_profiles", value))
-query_timings = deque(maxlen=100)
 INDEX_JOB_LOCK = threading.Lock()
 INDEX_PROGRESS_LOCK = threading.Lock()
 ACTIVE_DOCUMENT_WORKERS_LOCK = threading.Lock()
@@ -2142,16 +2135,6 @@ prompt_service = PromptService(
 )
 
 
-#def clean_response(text):
-#    return re.sub(r"<[^>]+>", "", text).strip()
-
-def get_average_query_time():
-    if not query_timings:
-        return "N/A"
-    avg_time = sum(query_timings) / len(query_timings)
-    return f"{avg_time:.2f} sec over {len(query_timings)} queries"
-
-
 @trace_timer("query_ollama_chat with retry")
 def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=None, delay=None, system_prompt=None):
     retries = int(QUERY_RETRIES if retries is None else retries)
@@ -2216,251 +2199,33 @@ def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=
                 return "[LLM error]"
 
 
-
-
-@trace_timer("get_rag_response")
-def get_rag_response(
-    question,
-    chat_history,
-    show_full_text=True,
-    top_k=15,
-    dist_thresh=4.0,
-    max_tokens=1800,
-    bypass_cache=True,
-    strategy="Vector + CrossEncoder",
-    model_name=None,
-    user_id=None,
-    username=None,
-    entity_id=None,
-    ai_context_type="",
-    ai_context_id=None,
-):
-    start_time = time.time()
-    model_name = model_name or (LLM_MODEL_OPTIONS[0] if LLM_MODEL_OPTIONS else LLM_MODEL_NAME)
-    norm_q = query_preprocessor.normalize(question)
-    retrieval_q = query_preprocessor.normalize(build_contextual_retrieval_query(norm_q, chat_history))
-    synonyms = query_preprocessor.expand(retrieval_q)
-    cache_enabled = should_cache_response(chat_history, bypass_cache)
-    response_cache = get_response_cache()
-    cache_key = build_response_cache_key(
-        entity_id=entity_id,
-        model_name=model_name,
-        strategy=strategy,
-        norm_q=norm_q,
-        retrieval_q=retrieval_q,
-        top_k=top_k,
-        dist_thresh=dist_thresh,
-        max_tokens=max_tokens,
-        show_full_text=show_full_text,
-    )
-
-    if cache_enabled:
-        cached = response_cache.get_response(cache_key)
-        if cached:
-            trace_logger.info(f"✅ Response cache HIT: {cache_key.digest()}")
-            query_timings.append(time.time() - start_time)
-            chat_history = [list(turn) for turn in cached.chat_history]
-            confidence = cached.confidence
-            query_log_store.log_query(
-                model_name=model_name,
-                retrieval_strategy=strategy,
-                question=norm_q,
-                retrieval_query=retrieval_q,
-                elapsed_ms=int((time.time() - start_time) * 1000),
-                cache_hit=True,
-                confidence_score=confidence,
-                selected_chunks=[],
-                user_id=user_id,
-                username=username,
-            )
-            build_card = build_circuit_build_card(
-                norm_q,
-                cached.sources,
-                document_intelligence_service.for_question_and_sources(retrieval_q, cached.sources),
-                context_question=retrieval_q,
-            )
-            return norm_q, cached.answer, chat_history, cached.sources, response_cache.stats(), confidence, get_average_query_time(), build_card, None
-    else:
-        if bypass_cache:
-            trace_logger.debug("Response cache bypassed by request option.")
-        elif chat_history:
-            trace_logger.debug("Response cache skipped for conversational request.")
-
-    trace_logger.info(f"🔍 Response cache MISS: {cache_key.digest()} | Executing query")
-
-    if not cache_enabled:
-        response_cache.misses += 1
-
-    all_hits = []
-    vector_start = time.time()
-    for syn in synonyms:
-        emb = embedder.encode([syn], convert_to_numpy=True).astype("float32")
-        vector_results = vector_store.search_chunks(emb[0], top_k=top_k, entity_id=entity_id)
-        for i, dist in runtime_chunk_mapper.vector_results_to_hits(vector_results):
-            adjusted = dist * (1 + 0.1 * (1 - len(state.chunks[i]) / 500))
-            if adjusted < dist_thresh:
-                all_hits.append((i, adjusted))
-    vector_duration = time.time() - vector_start
-
-    if not all_hits:
-        response = f"No relevant documents found for: {norm_q}"
-        trace_logger.warning(f"⚠️ No results for query: {norm_q}")
-        validation_payload = None
-        openai_fallback = openai_assist_service.answer_without_sources(
-            question=norm_q,
-            entity_id=entity_id,
-            user_id=user_id,
-            context_type=ai_context_type,
-            context_id=ai_context_id,
-        )
-        if openai_fallback:
-            response, validation_payload = openai_fallback
-        chat_history = append_chat_turn(
-            chat_history,
-            norm_q,
-            response,
-            max_turns=MAX_CHAT_HISTORY_TURNS,
-            max_chars=MAX_CHAT_HISTORY_CHARS,
-        )
-        return norm_q, response, chat_history, [], response_cache.stats(), "0.00", get_average_query_time(), None, validation_payload
-
-    dedup_hits = runtime_chunk_mapper.deduplicate_hits_by_index(all_hits)
-    rerank_duration = None
-
-    if strategy == "Vector only":
-        selected = sorted(dedup_hits, key=lambda x: x[1])[:top_k]
-        selected_chunks = reranker_engine.build_chunk_payload(selected)
-        confidence = chunker.compute_vector_confidence(selected, dist_thresh)
-        profile = "N/A"
-    else:
-        rerank_start = time.time()
-        reranked_chunks, confidence, profile = reranker_engine.rerank_chunks(dedup_hits, retrieval_q)
-        rerank_duration = time.time() - rerank_start
-        selected_chunks = reranked_chunks
-        if not selected_chunks:
-            trace_logger.warning("⚠️ Reranker returned no chunks; falling back to top vector hits.")
-            selected = sorted(dedup_hits, key=lambda x: x[1])[:top_k]
-            selected_chunks = reranker_engine.build_chunk_payload(selected)
-            confidence = chunker.compute_vector_confidence(selected, dist_thresh)
-            profile = f"{profile} (vector fallback)"
-
-    selected_chunks = prompt_service.trim_chunks_to_token_budget(selected_chunks, max_tokens)
-
-    # === Build Final Prompt
-    context = "\n\n".join([c["text"] for c in selected_chunks])
-    prompt = prompt_service.build_prompt(context, norm_q, chunker.is_math_heavy_question(norm_q))
-
-    source_payload = build_source_payload(selected_chunks)
-
-    # === LLM Call
-    response = query_ollama_chat_with_retry(prompt, model_name, chat_history=chat_history)
-
-    build_card = build_circuit_build_card(
-        norm_q,
-        source_payload,
-        document_intelligence_service.for_question_and_sources(retrieval_q, source_payload),
-        context_question=retrieval_q,
-    )
-    openai_finalized = openai_assist_service.finalize_response(
-        question=norm_q,
-        answer=response,
-        source_payload=source_payload,
-        build_card=build_card,
-        local_model_name=model_name,
-        confidence=confidence,
-        enabled=RESPONSE_FINALIZER_ENABLED,
-        mode=RESPONSE_FINALIZER_MODE,
-        min_confidence=RESPONSE_FINALIZER_MIN_CONFIDENCE,
-        max_context_chars=RESPONSE_FINALIZER_MAX_CONTEXT_CHARS,
-        entity_id=entity_id,
-        user_id=user_id,
-        context_type=ai_context_type,
-        context_id=ai_context_id,
-    )
-    if openai_finalized:
-        revised_response, validation = openai_finalized
-    else:
-        revised_response, validation = finalize_response(
-            question=norm_q,
-            answer=response,
-            source_payload=source_payload,
-            build_card=build_card,
-            model_name=model_name,
-            confidence=confidence,
-            enabled=RESPONSE_FINALIZER_ENABLED,
-            mode=RESPONSE_FINALIZER_MODE,
-            min_confidence=RESPONSE_FINALIZER_MIN_CONFIDENCE,
-            max_context_chars=RESPONSE_FINALIZER_MAX_CONTEXT_CHARS,
-            llm_call=lambda finalizer_prompt: query_ollama_chat_with_retry(
-                finalizer_prompt,
-                model_name,
-                [],
-                system_prompt=RESPONSE_FINALIZER_SYSTEM_PROMPT,
-            ),
-        )
-
-    # === Format Output
-    image_md_blocks = image_retrieval_service.build_image_markdown_blocks(retrieval_q, selected_chunks) if show_full_text else []
-    final_answer = _assemble_final_markdown(revised_response, image_md_blocks)
-
-    chat_history = append_chat_turn(
-        chat_history,
-        norm_q,
-        revised_response,
-        max_turns=MAX_CHAT_HISTORY_TURNS,
-        max_chars=MAX_CHAT_HISTORY_CHARS,
-    )
-    if cache_enabled:
-        response_cache.put_response(
-            cache_key,
-            ResponseCacheEntry(
-                answer=final_answer,
-                chat_history=[list(turn) for turn in chat_history],
-                sources=source_payload,
-                confidence=confidence,
-                metadata={
-                    "model": model_name,
-                    "strategy": strategy,
-                    "retrieval_query": retrieval_q,
-                },
-            ),
-        )
-    query_timings.append(time.time() - start_time)
-
-    state.update_last_trace({
-        "question": norm_q,
-        "retrieval_query": retrieval_q,
-        "strategy": strategy,
-        "model": model_name,
-        "confidence": confidence,
-        "weighting_profile": profile,
-        "vector_duration": f"{vector_duration:.2f}s",
-        "rerank_duration": "N/A" if rerank_duration is None else f"{rerank_duration:.2f}s",
-        "finalizer": validation.api_payload() if validation else None,
-        "total_duration": f"{time.time() - start_time:.2f}s",
-        "top_chunks": selected_chunks,
-    })
-
-    elapsed_ms = int((time.time() - start_time) * 1000)
-    query_log_store.log_query(
-        model_name=model_name,
-        retrieval_strategy=strategy,
-        question=norm_q,
-        retrieval_query=retrieval_q,
-        elapsed_ms=elapsed_ms,
-        cache_hit=False,
-        confidence_score=confidence,
-        selected_chunks=selected_chunks,
-        user_id=user_id,
-        username=username,
-    )
-
-    return norm_q, final_answer, chat_history, source_payload, response_cache.stats(), confidence, get_average_query_time(), build_card, validation.api_payload() if validation else None
-
-def _assemble_final_markdown(response, image_blocks):
-    answer_md = f"🧠 Answer\n\n{response}"  
-    image_md = "🖼️ Related Images\n\n" + "\n\n".join(image_blocks) if image_blocks else ""  
-    return f"{answer_md}\n\n---\n\n{image_md}" if image_md else answer_md
+rag_service = RagService(
+    state=state,
+    trace_logger=trace_logger,
+    embedder=embedder,
+    vector_store=vector_store,
+    chunker=chunker,
+    reranker_engine=reranker_engine,
+    prompt_service=prompt_service,
+    query_preprocessor=query_preprocessor,
+    runtime_chunk_mapper=runtime_chunk_mapper,
+    response_cache=db_response_cache,
+    query_log_store=query_log_store,
+    openai_assist_service=openai_assist_service,
+    document_intelligence_service=document_intelligence_service,
+    image_retrieval_service=image_retrieval_service,
+    build_source_payload=build_source_payload,
+    query_llm=query_ollama_chat_with_retry,
+    llm_model_options=LLM_MODEL_OPTIONS,
+    default_llm_model=LLM_MODEL_NAME,
+    max_chat_history_turns=MAX_CHAT_HISTORY_TURNS,
+    max_chat_history_chars=MAX_CHAT_HISTORY_CHARS,
+    response_finalizer_system_prompt=RESPONSE_FINALIZER_SYSTEM_PROMPT,
+    response_finalizer_enabled=RESPONSE_FINALIZER_ENABLED,
+    response_finalizer_mode=RESPONSE_FINALIZER_MODE,
+    response_finalizer_min_confidence=RESPONSE_FINALIZER_MIN_CONFIDENCE,
+    response_finalizer_max_context_chars=RESPONSE_FINALIZER_MAX_CONTEXT_CHARS,
+)
 
 
 runtime_status_reporter = RuntimeStatusReporter(
@@ -2508,42 +2273,8 @@ def sanitize_for_json(value):
     return value
 
 
-def get_response_cache():
-    return db_response_cache
-
-
 def effective_embedding_batch_size():
     return runtime_effective_embedding_batch_size(config)
-
-
-def current_index_fingerprint(entity_id=None):
-    return vector_store.catalog_fingerprint(entity_id=entity_id)
-
-
-def build_response_cache_key(
-    *,
-    entity_id=None,
-    model_name,
-    strategy,
-    norm_q,
-    retrieval_q,
-    top_k,
-    dist_thresh,
-    max_tokens,
-    show_full_text,
-):
-    return ResponseCacheKey(
-        entity_id=int(entity_id) if entity_id is not None else None,
-        index_fingerprint=current_index_fingerprint(entity_id),
-        model=model_name or "",
-        strategy=strategy,
-        question=norm_q,
-        retrieval_query=retrieval_q,
-        top_k=int(top_k),
-        distance_threshold=round(float(dist_thresh), 6),
-        max_tokens=int(max_tokens),
-        show_full_text=bool(show_full_text),
-    )
 
 
 def session_timeout_seconds() -> int:
@@ -2637,7 +2368,7 @@ register_api_routes(
     remove_document_from_store=document_management_service.remove_document_from_store,
     assembly_plan_store=assembly_plan_store,
     bench_tools=bench_tools,
-    get_rag_response=get_rag_response,
+    get_rag_response=rag_service.get_rag_response,
     query_ollama_chat_with_retry=query_ollama_chat_with_retry,
     normalize_sources_for_api=normalize_sources_for_api,
     build_recovery_prompt=build_recovery_prompt,
