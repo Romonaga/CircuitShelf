@@ -229,10 +229,22 @@ def create_router(
         req: Request,
         file: UploadFile = File(...),
         overwrite: bool = Query(False),
+        scope: str = Query("entity"),
     ):
-        _, error = require_admin_user(req)
-        if error:
-            return error
+        entity_id = None
+        created_by_user_id = None
+        is_global = scope == "global"
+        if is_global:
+            user, error = deps.require_system_admin_user(req)
+            if error:
+                return error
+            created_by_user_id = deps.user_id_for_user(user)
+        else:
+            user, entity, error = deps.require_entity_admin(req)
+            if error:
+                return error
+            entity_id = entity.entity_id
+            created_by_user_id = deps.user_id_for_user(user)
 
         try:
             upload_result = await write_uploaded_documents([file], overwrite, training_dir, supported_training_extensions())
@@ -244,6 +256,13 @@ def create_router(
 
         uploaded_files = upload_result["uploaded"]
         skipped_files = upload_result["skipped"]
+        for item in uploaded_files:
+            vector_store.set_ingest_scope(
+                item["filename"],
+                entity_id=entity_id,
+                is_global=is_global,
+                created_by_user_id=created_by_user_id,
+            )
         filename = uploaded_files[0]["filename"] if uploaded_files else ""
         index_job = start_index_check(f"upload:{filename}") if uploaded_files else {"started": False}
         return {
@@ -262,10 +281,22 @@ def create_router(
         req: Request,
         files: list[UploadFile] = File(...),
         overwrite: bool = Query(False),
+        scope: str = Query("entity"),
     ):
-        _, error = require_admin_user(req)
-        if error:
-            return error
+        entity_id = None
+        created_by_user_id = None
+        is_global = scope == "global"
+        if is_global:
+            user, error = deps.require_system_admin_user(req)
+            if error:
+                return error
+            created_by_user_id = deps.user_id_for_user(user)
+        else:
+            user, entity, error = deps.require_entity_admin(req)
+            if error:
+                return error
+            entity_id = entity.entity_id
+            created_by_user_id = deps.user_id_for_user(user)
 
         try:
             upload_result = await write_uploaded_documents(files, overwrite, training_dir, supported_training_extensions())
@@ -277,6 +308,13 @@ def create_router(
 
         uploaded_files = upload_result["uploaded"]
         skipped_files = upload_result["skipped"]
+        for item in uploaded_files:
+            vector_store.set_ingest_scope(
+                item["filename"],
+                entity_id=entity_id,
+                is_global=is_global,
+                created_by_user_id=created_by_user_id,
+            )
         reason = f"upload-batch:{len(uploaded_files)}"
         index_job = start_index_check(reason) if uploaded_files else {"started": False}
         return {

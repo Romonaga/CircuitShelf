@@ -431,11 +431,11 @@ export function getDocuments(scope = "visible"): Promise<{ documents: DocumentSu
   return requestJson<{ documents: DocumentSummary[] }>(`/api/documents?scope=${encodeURIComponent(scope)}`);
 }
 
-export function uploadDocuments(files: File[], overwrite: boolean): Promise<UploadDocumentsResponse> {
+export function uploadDocuments(files: File[], overwrite: boolean, scope = "entity"): Promise<UploadDocumentsResponse> {
   const body = new FormData();
   files.forEach((file) => body.append("files", file));
   return requestJson<UploadDocumentsResponse>(
-    `/api/documents/upload-batch?overwrite=${overwrite ? "true" : "false"}`,
+    `/api/documents/upload-batch?overwrite=${overwrite ? "true" : "false"}&scope=${encodeURIComponent(scope)}`,
     {
       method: "POST",
       body,

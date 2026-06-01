@@ -101,7 +101,7 @@ export function DocumentsView({
     setError("");
     setMessage("");
     try {
-      const response = await uploadDocuments(uploadFiles, overwrite);
+      const response = await uploadDocuments(uploadFiles, overwrite, scope === "global" ? "global" : "entity");
       setMessage(uploadResultMessage(response));
       setUploadFiles([]);
       setUploadInputKey((key) => key + 1);

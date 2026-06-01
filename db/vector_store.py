@@ -109,6 +109,40 @@ class VectorStore:
         with self.database.connection() as conn:
             conn.execute(load_query("vector_document_delete_by_sources.sql"), (rel_paths,))
 
+    def set_ingest_scope(
+        self,
+        source_path: str,
+        *,
+        entity_id: int | None,
+        is_global: bool,
+        created_by_user_id: int | None = None,
+    ) -> dict:
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("document_ingest_scope_upsert.sql"),
+                (
+                    clean_db_text(source_path),
+                    None if entity_id is None else int(entity_id),
+                    bool(is_global),
+                    None if created_by_user_id is None else int(created_by_user_id),
+                ),
+            ).fetchone()
+        return dict(row)
+
+    def ingest_scope_overrides(self, source_paths: list[str]) -> dict[str, dict[str, Any]]:
+        if not source_paths:
+            return {}
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("document_ingest_scope_get_many.sql"), (source_paths,)).fetchall()
+        return {row["source_path"]: dict(row) for row in rows}
+
+    def document_scopes_for_sources(self, source_paths: list[str]) -> dict[str, dict[str, Any]]:
+        if not source_paths:
+            return {}
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("vector_document_scope_get_many.sql"), (source_paths,)).fetchall()
+        return {row["source_path"]: dict(row) for row in rows}
+
     def replace_catalog(
         self,
         *,
@@ -125,7 +159,7 @@ class VectorStore:
 
         with self.database.connection() as conn:
             conn.execute(load_query("vector_catalog_clear.sql"))
-            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings, status, document_stats or {})
+            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings, status, document_stats or {}, None)
 
     def replace_sources(
         self,
@@ -138,14 +172,20 @@ class VectorStore:
         embeddings: np.ndarray,
         status: str = "needs_review",
         document_stats: dict[str, dict[str, int]] | None = None,
+        scope_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         if len(chunks) != len(sources) or len(chunks) != len(metadata) or len(chunks) != len(embeddings):
             raise ValueError("Chunk, source, metadata, and embedding counts must match before DB persistence.")
 
         with self.database.connection() as conn:
+            persisted_scopes = self.document_scopes_for_sources(delete_rel_paths)
+            effective_scopes = {
+                **persisted_scopes,
+                **(scope_overrides or self.ingest_scope_overrides(list(file_records.keys()))),
+            }
             if delete_rel_paths:
                 conn.execute(load_query("vector_document_delete_by_sources.sql"), (delete_rel_paths,))
-            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings, status, document_stats or {})
+            self._insert_catalog_rows(conn, file_records, chunks, sources, metadata, embeddings, status, document_stats or {}, effective_scopes)
 
     def _insert_catalog_rows(
         self,
@@ -157,6 +197,7 @@ class VectorStore:
         embeddings: np.ndarray,
         status: str,
         document_stats: dict[str, dict[str, int]],
+        scope_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         document_ids: dict[str, str] = {}
         page_ids: dict[tuple[str, int], str] = {}
@@ -168,6 +209,9 @@ class VectorStore:
             document_id = document_ids.get(rel_path)
             if not document_id:
                 stats = document_stats.get(rel_path, {})
+                scope = (scope_overrides or {}).get(rel_path, {})
+                is_global = bool(scope.get("is_global", True))
+                entity_id = None if is_global else scope.get("entity_id")
                 document_id = conn.execute(
                     load_query("vector_document_upsert.sql"),
                     (
@@ -184,6 +228,9 @@ class VectorStore:
                         int(stats.get("extractedImageCount", 0) or 0),
                         int(stats.get("indexedImageTextCount", 0) or 0),
                         int(stats.get("ocrImageTextCount", 0) or 0),
+                        None if entity_id is None else int(entity_id),
+                        is_global,
+                        None if scope.get("created_by_user_id") is None else int(scope["created_by_user_id"]),
                     ),
                 ).fetchone()["id"]
                 document_ids[rel_path] = document_id

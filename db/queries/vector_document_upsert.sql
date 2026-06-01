@@ -12,10 +12,13 @@ INSERT INTO documents (
     extracted_image_count,
     indexed_image_text_count,
     ocr_image_text_count,
+    entity_id,
+    is_global,
+    created_by_user_id,
     last_ingested_at,
     last_error
 )
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), NULL)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), NULL)
 ON CONFLICT (source_path) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     file_extension = EXCLUDED.file_extension,
@@ -29,6 +32,9 @@ ON CONFLICT (source_path) DO UPDATE SET
     extracted_image_count = EXCLUDED.extracted_image_count,
     indexed_image_text_count = EXCLUDED.indexed_image_text_count,
     ocr_image_text_count = EXCLUDED.ocr_image_text_count,
+    entity_id = EXCLUDED.entity_id,
+    is_global = EXCLUDED.is_global,
+    created_by_user_id = coalesce(EXCLUDED.created_by_user_id, documents.created_by_user_id),
     last_ingested_at = now(),
     last_error = NULL,
     updated_at = now()
