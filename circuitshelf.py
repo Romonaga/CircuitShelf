@@ -50,6 +50,7 @@ from backend.services.runtime_status_service import (
 )
 from backend.services.openai_assist_service import OpenAIAssistService
 from backend.services.openai_model_service import OpenAIModelService
+from backend.services.document_intelligence_service import DocumentIntelligenceService
 from state_manager import StateManager
 from chunking_util import ChunkingUtils
 from tokenize_util import TokenUtils
@@ -60,7 +61,6 @@ from pdf_visuals import link_chunks_to_rendered_pages, render_pdf_visual_pages
 from index_builder import IndexBuildResult, IndexBuilder
 from inventory_import import parse_inventory_import
 from pinout_extractor import extract_pinout_map
-from datasheet_intelligence import build_datasheet_intelligence
 from circuit_build_cards import (
     RECOVERY_SYSTEM_PROMPT,
     build_circuit_build_card,
@@ -2224,6 +2224,19 @@ def image_asset_count_for_document(doc_source):
     )
 
 
+document_intelligence_service = DocumentIntelligenceService(
+    state=state,
+    vector_store=vector_store,
+    intelligence_store=intelligence_store,
+    trace_logger=trace_logger,
+    training_dir=TRAINING_DIR,
+    display_source_name=display_source_name,
+    document_source_from_metadata=document_source_from_metadata,
+    image_asset_belongs_to_document=image_asset_belongs_to_document,
+    extract_page_number=extract_page_number,
+)
+
+
 def deduplicate_hits_by_index(hits):
     best_by_index = {}
     for idx, distance in hits:
@@ -2445,7 +2458,7 @@ def get_rag_response(
             build_card = build_circuit_build_card(
                 norm_q,
                 cached.sources,
-                intelligence_for_question_and_sources(retrieval_q, cached.sources),
+                document_intelligence_service.for_question_and_sources(retrieval_q, cached.sources),
                 context_question=retrieval_q,
             )
             return norm_q, cached.answer, chat_history, cached.sources, response_cache.stats(), confidence, get_average_query_time(), build_card, None
@@ -2527,7 +2540,7 @@ def get_rag_response(
     build_card = build_circuit_build_card(
         norm_q,
         source_payload,
-        intelligence_for_question_and_sources(retrieval_q, source_payload),
+        document_intelligence_service.for_question_and_sources(retrieval_q, source_payload),
         context_question=retrieval_q,
     )
     openai_finalized = openai_assist_service.finalize_response(
@@ -2807,111 +2820,6 @@ def build_source_payload(selected_chunks):
     return list(grouped.values())
 
 
-def document_intelligence_rel_path(source):
-    return vector_store.rel_path_for_source(source or "", {})
-
-
-def build_datasheet_intelligence_for_document(doc_name):
-    doc_chunks = []
-    doc_metadata = []
-    chunks = state.get_chunks()
-    metadata = state.get_metadata()
-    sources = state.get_sources()
-
-    for idx, source in enumerate(sources):
-        meta = metadata[idx] if idx < len(metadata) else {}
-        doc_source = document_source_from_metadata(source, meta)
-        if doc_source != doc_name:
-            continue
-        doc_chunks.append(chunks[idx] if idx < len(chunks) else "")
-        doc_metadata.append({**meta, "source": doc_name, "parent_source": doc_name})
-
-    image_text = state.get_image_page_text()
-    for image_id, text in image_text.items():
-        if text and image_asset_belongs_to_document(image_id, doc_name):
-            doc_chunks.append(text)
-            doc_metadata.append({
-                "source": doc_name,
-                "parent_source": doc_name,
-                "page": extract_page_number(image_id),
-                "source_image_id": image_id,
-            })
-
-    return build_datasheet_intelligence(
-        doc_chunks,
-        doc_metadata,
-        doc_name,
-        display_source_name(doc_name),
-    )
-
-
-def stored_intelligence_is_usable(stored):
-    if not stored:
-        return False
-    component_name = str(stored.get("componentName") or "").strip().upper()
-    if component_name in {"", "LOGIC", "INPUT", "OUTPUT", "COMMON", "ABSOLUTE", "MAXIMUM"}:
-        return False
-    return bool(stored.get("facts") or stored.get("pinout", {}).get("pins"))
-
-
-def get_or_build_datasheet_intelligence(doc_name):
-    rel_path = document_intelligence_rel_path(doc_name)
-    stored = intelligence_store.get_for_source(rel_path)
-    if stored_intelligence_is_usable(stored):
-        if not stored.get("pinout", {}).get("pins"):
-            refreshed = build_datasheet_intelligence_for_document(doc_name)
-            if refreshed.get("pinout", {}).get("pins"):
-                intelligence_store.upsert(rel_path, refreshed)
-                return refreshed
-        return stored
-
-    intelligence = build_datasheet_intelligence_for_document(doc_name)
-    stored = intelligence_store.replace_for_source(rel_path, intelligence)
-    if stored:
-        return stored
-    return intelligence
-
-
-def intelligence_for_sources(source_payload):
-    result = {}
-    for source in source_payload or []:
-        source_name = source.get("source")
-        if not source_name or source_name in result:
-            continue
-        try:
-            result[source_name] = get_or_build_datasheet_intelligence(source_name)
-        except Exception as exc:
-            trace_logger.warning(f"Datasheet intelligence unavailable for {source_name}: {exc}")
-    return result
-
-
-def question_component_terms(question):
-    terms = []
-    for match in re.finditer(r"\b[A-Za-z]*\d[A-Za-z0-9-]{1,24}\b", question or ""):
-        term = match.group(0).strip("-")
-        if len(term) >= 3:
-            terms.append(term)
-    return list(OrderedDict.fromkeys(terms))
-
-
-def intelligence_for_question_and_sources(question, source_payload):
-    result = {}
-    for term in question_component_terms(question):
-        for rel_path in vector_store.find_document_sources_by_term(term, limit=3):
-            source_name = os.path.join(TRAINING_DIR, rel_path)
-            if source_name in result:
-                result[source_name]["questionMatch"] = True
-                continue
-            try:
-                intelligence = get_or_build_datasheet_intelligence(source_name)
-                intelligence["questionMatch"] = True
-                result[source_name] = intelligence
-            except Exception as exc:
-                trace_logger.warning(f"Datasheet intelligence lookup failed for term {term}: {exc}")
-    result.update({key: value for key, value in intelligence_for_sources(source_payload).items() if key not in result})
-    return result
-
-
 def get_response_cache():
     return db_response_cache
 
@@ -3122,7 +3030,7 @@ register_api_routes(
     document_source_from_metadata=document_source_from_metadata,
     source_image_id_from_metadata=source_image_id_from_metadata,
     extract_pinout_map=extract_pinout_map,
-    get_or_build_datasheet_intelligence=get_or_build_datasheet_intelligence,
+    get_or_build_datasheet_intelligence=document_intelligence_service.get_or_build,
     display_source_name=display_source_name,
     sanitize_for_json=sanitize_for_json,
     get_last_trace=state.get_last_trace,
