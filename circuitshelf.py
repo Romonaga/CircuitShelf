@@ -40,6 +40,11 @@ from backend.app_factory import create_circuitshelf_app, register_api_routes
 from backend.api.dependencies import ApiDependencies
 from backend.auth_dependencies import AuthDependencyService
 from backend.server import mount_react_app, start_app_server
+from backend.services.app_runtime_helpers import (
+    TraceLogHelper,
+    conversation_title_from_question,
+    sanitize_for_json,
+)
 from backend.services.ingest_stats import (
     collect_document_ingest_stats as collect_ingest_stats,
     count_state_chunks_by_document as count_ingest_chunks_by_document,
@@ -268,6 +273,7 @@ BUILD_INDEX_LOG_FILE = config.get("BUILD_INDEX_LOG_FILE")
 TRACE_LOG_FILE = config.get("TRACE_LOG_FILE", "logs/trace.log")
 LOG_RETENTION_DAYS = config.get("LOG_RETENTION_DAYS", 14)
 TESSERACT_TEMP_MAX_AGE_SECONDS = 3600
+trace_log_helper = TraceLogHelper(trace_logger=trace_logger, default_log_file=TRACE_LOG_FILE)
 
 
 # === LLM model and training values ===
@@ -419,7 +425,7 @@ def cleanup_stale_tesseract_temp_files(max_age_seconds=TESSERACT_TEMP_MAX_AGE_SE
 def cleanup_expired_trace_logs():
     return cleanup_old_logs(
         configured_log_file=TRACE_LOG_FILE,
-        active_log_file=current_trace_log_file(),
+        active_log_file=trace_log_helper.current_file(),
         retention_days=LOG_RETENTION_DAYS,
         logger=trace_logger,
     )
@@ -2219,33 +2225,12 @@ async def lifespan(_app):
 app = create_circuitshelf_app(lifespan=lifespan)
 
 
-def sanitize_for_json(value):
-    if isinstance(value, dict):
-        return {str(key): sanitize_for_json(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [sanitize_for_json(item) for item in value]
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, np.ndarray):
-        return sanitize_for_json(value.tolist())
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    return value
-
-
 def effective_embedding_batch_size():
     return runtime_effective_embedding_batch_size(config)
 
 
 def session_timeout_seconds() -> int:
     return max(60, int(config.get("SESSION_TIMEOUT_SECONDS", config.get("SESSION_TTL_SECONDS", 28800))))
-
-
-def conversation_title_from_question(question: str) -> str:
-    title = " ".join(str(question or "").split())
-    if not title:
-        return "New conversation"
-    return title[:80]
 
 
 USER_PREFERENCE_KEYS = {"ask.retrieval", "ui.theme"}
@@ -2284,20 +2269,6 @@ document_management_service = DocumentManagementService(
     trace_logger=trace_logger,
     prune_training_files_from_state=prune_training_files_from_state,
 )
-
-
-def flush_trace_log():
-    for handler in trace_logger.handlers:
-        if hasattr(handler, 'flush'):
-            handler.flush()
-
-
-def current_trace_log_file():
-    for handler in trace_logger.handlers:
-        base_filename = getattr(handler, "baseFilename", None)
-        if base_filename:
-            return base_filename
-    return TRACE_LOG_FILE
 
 
 register_api_routes(
@@ -2347,8 +2318,8 @@ register_api_routes(
     display_source_name=display_source_name,
     sanitize_for_json=sanitize_for_json,
     get_last_trace=state.get_last_trace,
-    flush_trace_log=flush_trace_log,
-    current_trace_log_file=current_trace_log_file,
+    flush_trace_log=trace_log_helper.flush,
+    current_trace_log_file=trace_log_helper.current_file,
     tail_text_file=tail_text_file,
     performance_store=performance_store,
 )
