@@ -10,7 +10,6 @@ Created on Mon Apr 21 06:54:37 2025
 
 import os
 import re
-import requests
 import time
 import base64
 import zipfile
@@ -31,7 +30,6 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 from io import BytesIO
 from PIL import Image
 from nltk.tokenize import sent_tokenize
-from requests.exceptions import RequestException
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi.responses import JSONResponse
 
@@ -56,6 +54,7 @@ from backend.services.runtime_status_service import (
 from backend.services.image_retrieval_service import ImageRetrievalService
 from backend.services.openai_assist_service import OpenAIAssistService
 from backend.services.openai_model_service import OpenAIModelService
+from backend.services.ollama_chat_client import OllamaChatClient
 from backend.services.document_intelligence_service import DocumentIntelligenceService
 from backend.services.document_management_service import DocumentManagementService
 from backend.services.prompt_service import PromptService
@@ -89,7 +88,6 @@ from ingest_manifest import IngestManifest
 from ingest_workers import detected_cpu_count, document_worker_count, ocr_worker_count, reserved_core_count, usable_core_count
 from log_tail import tail_text_file
 from log_retention import cleanup_old_logs
-from conversation_manager import build_chat_messages
 from db.connection import Database, database_url_from_config
 from db.assembly_plan_store import AssemblyPlanStore
 from db.conversation_store import ConversationStore
@@ -2133,70 +2131,32 @@ prompt_service = PromptService(
     trace_logger=trace_logger,
     token_length=TokenUtils.tokenize_len,
 )
+ollama_chat_client = OllamaChatClient(
+    config=config,
+    trace_logger=trace_logger,
+    api_url=OLLAMA_API_URL,
+    default_system_prompt=RAG_CHAT_SYSTEM_PROMPT,
+    default_temperature=LLM_TEMPERATURE,
+    default_num_predict=LLM_NUM_PREDICT,
+    default_num_ctx=LLM_NUM_CTX,
+    post_timeout=POST_TIMEOUT,
+    query_retries=QUERY_RETRIES,
+    query_retry_delay=QUERY_RETRY_DELAY,
+    max_chat_history_turns=MAX_CHAT_HISTORY_TURNS,
+    max_chat_history_chars=MAX_CHAT_HISTORY_CHARS,
+)
 
 
 @trace_timer("query_ollama_chat with retry")
 def query_ollama_chat_with_retry(prompt, model_name, chat_history=None, retries=None, delay=None, system_prompt=None):
-    retries = int(QUERY_RETRIES if retries is None else retries)
-    delay = float(QUERY_RETRY_DELAY if delay is None else delay)
-
-    LLM_API_KEY = config.get("LLM_API_KEY", "")
-    url = f"{OLLAMA_API_URL}/chat"
-
-    headers = {
-        "Content-Type": "application/json"
-    }
-    if LLM_API_KEY:
-        headers["Authorization"] = f"Bearer {LLM_API_KEY}"
-
-    options = {
-        "temperature": float(LLM_TEMPERATURE),
-        "num_predict": int(LLM_NUM_PREDICT),
-    }
-    if LLM_NUM_CTX:
-        options["num_ctx"] = int(LLM_NUM_CTX)
-
-    payload = {
-        "model": model_name or "default",
-        "stream": False,
-        "messages": build_chat_messages(
-            system_prompt or RAG_CHAT_SYSTEM_PROMPT,
-            prompt,
-            chat_history,
-            max_turns=MAX_CHAT_HISTORY_TURNS,
-            max_chars=MAX_CHAT_HISTORY_CHARS,
-        ),
-        "options": options,
-    }
-
-    for attempt in range(retries):
-        try:
-            response = requests.post(url, headers=headers, json=payload, timeout=POST_TIMEOUT)
-            response.raise_for_status()
-
-            json_data = response.json() #CLEAN THIS UP LATER
-            result = json_data.get("message", {}).get("content", "").strip()
-            done_reason = json_data.get("done_reason", "")
-            if done_reason in {"length", "max_tokens"}:
-                trace_logger.warning(
-                    "⚠️ Ollama response stopped at generation limit. "
-                    f"Increase LLM_NUM_PREDICT above {LLM_NUM_PREDICT} if this answer needs more room."
-                )
-                result = (
-                    f"{result}\n\n"
-                    "> Response stopped at the model generation limit. "
-                    "Increase the answer token limit and ask again if this is incomplete."
-                )
-
-            trace_logger.debug(f"✅ LLM call success: {result[:80]}...")
-            return result
-
-        except RequestException as ex:
-            trace_logger.warning(f"⚠️ LLM call failed (attempt {attempt+1}/{retries}) | {ex}")
-            if attempt < retries - 1:
-                time.sleep(delay)
-            else:
-                return "[LLM error]"
+    return ollama_chat_client.chat_with_retry(
+        prompt,
+        model_name,
+        chat_history=chat_history,
+        retries=retries,
+        delay=delay,
+        system_prompt=system_prompt,
+    )
 
 
 rag_service = RagService(
