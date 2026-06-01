@@ -25,7 +25,6 @@ import nltk
 import bench_tools
 from lxml import etree
 from datetime import datetime, timezone
-from fastapi import Request
 from collections import deque, OrderedDict
 from contextlib import asynccontextmanager
 from docx import Document
@@ -42,6 +41,7 @@ from fastapi.responses import JSONResponse
 #internal
 from backend.app_factory import create_circuitshelf_app, register_api_routes
 from backend.api.dependencies import ApiDependencies
+from backend.auth_dependencies import AuthDependencyService
 from backend.server import mount_react_app, start_app_server
 from backend.services.runtime_status_service import (
     build_resource_status,
@@ -3005,40 +3005,8 @@ def build_readiness_status():
     }
 
 
-def verify_user(username, password):
-    return user_store.verify_user(username, password)
-
-
-def bearer_token_from_request(req: Request) -> str:
-    header = req.headers.get("authorization", "")
-    prefix = "Bearer "
-    if header.startswith(prefix):
-        return header[len(prefix):].strip()
-    return ""
-
-
 def session_timeout_seconds() -> int:
     return max(60, int(config.get("SESSION_TIMEOUT_SECONDS", config.get("SESSION_TTL_SECONDS", 28800))))
-
-
-def username_for_user(user) -> str | None:
-    return getattr(user, "username", None) if user else None
-
-
-def user_id_for_user(user) -> int | None:
-    return getattr(user, "user_id", None) if user else None
-
-
-def user_payload(user) -> dict:
-    entity = entity_store.current_for_user(user_id_for_user(user)) if user else None
-    return {
-        "userId": user_id_for_user(user),
-        "username": username_for_user(user),
-        "isAdmin": bool(getattr(user, "is_admin", False)),
-        "canManageSystem": bool(getattr(user, "can_manage_system", False)),
-        "forcePasswordChange": bool(getattr(user, "force_password_change", False)),
-        "entity": entity.to_api() if entity else None,
-    }
 
 
 def conversation_title_from_question(question: str) -> str:
@@ -3051,62 +3019,23 @@ def conversation_title_from_question(question: str) -> str:
 USER_PREFERENCE_KEYS = {"ask.retrieval", "ui.theme"}
 
 
-def require_admin_user(req: Request):
-    user = user_store.get_session(bearer_token_from_request(req), ttl_seconds=session_timeout_seconds())
-    if not user:
-        return None, JSONResponse({"error": "Authentication required."}, status_code=401)
-    if not user.is_admin:
-        return None, JSONResponse({"error": "Admin access required."}, status_code=403)
-    return user, None
-
-
-def require_system_admin_user(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return None, error
-    if not getattr(user, "can_manage_system", False):
-        return None, JSONResponse({"error": "System admin access required."}, status_code=403)
-    return user, None
-
-
-def require_entity_member(req: Request):
-    user, error = require_authenticated_user(req)
-    if error:
-        return None, None, error
-    entity = entity_store.current_for_user(user_id_for_user(user))
-    if not entity:
-        return user, None, JSONResponse({"error": "No active entity membership found."}, status_code=403)
-    return user, entity, None
-
-
-def require_entity_admin(req: Request):
-    user, entity, error = require_entity_member(req)
-    if error:
-        return None, None, error
-    if not entity.can_manage:
-        return user, entity, JSONResponse({"error": "Entity admin access required."}, status_code=403)
-    return user, entity, None
-
-
-def require_authenticated_user(req: Request):
-    if not database.configured or not user_store.has_active_users():
-        return None, None
-    user = user_store.get_session(bearer_token_from_request(req), ttl_seconds=session_timeout_seconds())
-    if not user:
-        return None, JSONResponse({"error": "Authentication required."}, status_code=401)
-    return user, None
-
+auth_dependencies = AuthDependencyService(
+    database=database,
+    user_store=user_store,
+    entity_store=entity_store,
+    session_timeout_seconds=session_timeout_seconds,
+)
 
 api_dependencies = ApiDependencies(
-    require_authenticated_user=require_authenticated_user,
-    require_entity_member=require_entity_member,
-    require_entity_admin=require_entity_admin,
-    require_system_admin_user=require_system_admin_user,
-    bearer_token_from_request=bearer_token_from_request,
+    require_authenticated_user=auth_dependencies.require_authenticated_user,
+    require_entity_member=auth_dependencies.require_entity_member,
+    require_entity_admin=auth_dependencies.require_entity_admin,
+    require_system_admin_user=auth_dependencies.require_system_admin_user,
+    bearer_token_from_request=auth_dependencies.bearer_token_from_request,
     session_timeout_seconds=session_timeout_seconds,
-    user_payload=user_payload,
-    user_id_for_user=user_id_for_user,
-    verify_user=verify_user,
+    user_payload=auth_dependencies.user_payload,
+    user_id_for_user=auth_dependencies.user_id_for_user,
+    verify_user=auth_dependencies.verify_user,
     user_store=user_store,
     user_preferences_store=user_preferences_store,
     account_profile_store=account_profile_store,
@@ -3166,7 +3095,7 @@ register_api_routes(
     lab_inventory_store=lab_inventory_store,
     project_finder_store=project_finder_store,
     parse_inventory_import=parse_inventory_import,
-    require_admin_user=require_admin_user,
+    require_admin_user=auth_dependencies.require_admin_user,
     settings_store=settings_store,
     runtime_settings=runtime_settings,
     trace_logger=trace_logger,
@@ -3184,7 +3113,7 @@ register_api_routes(
     build_recovery_prompt=build_recovery_prompt,
     parse_recovered_build_card=parse_recovered_build_card,
     recovery_system_prompt=RECOVERY_SYSTEM_PROMPT,
-    username_for_user=username_for_user,
+    username_for_user=auth_dependencies.username_for_user,
     training_dir=TRAINING_DIR,
     supported_training_extensions=supported_training_extensions,
     state=state,
