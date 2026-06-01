@@ -205,3 +205,93 @@ def build_runtime_batch_status(
             "auto": rerank_auto,
         },
     }
+
+
+class RuntimeStatusReporter:
+    def __init__(
+        self,
+        *,
+        config: Any,
+        state,
+        vector_store,
+        image_store,
+        response_cache,
+        performance_store,
+        database,
+        embedding_model_name: str | None,
+        reranker_model_name: str | None,
+        llm_model_name: str | None,
+        detected_cpu_count_fn,
+        reserved_core_count_fn,
+        usable_core_count_fn,
+        active_document_worker_count_fn,
+        index_status: dict,
+    ):
+        self.config = config
+        self.state = state
+        self.vector_store = vector_store
+        self.image_store = image_store
+        self.response_cache = response_cache
+        self.performance_store = performance_store
+        self.database = database
+        self.embedding_model_name = embedding_model_name
+        self.reranker_model_name = reranker_model_name
+        self.llm_model_name = llm_model_name
+        self.detected_cpu_count_fn = detected_cpu_count_fn
+        self.reserved_core_count_fn = reserved_core_count_fn
+        self.usable_core_count_fn = usable_core_count_fn
+        self.active_document_worker_count_fn = active_document_worker_count_fn
+        self.index_status = index_status
+
+    def build_runtime_status(self) -> dict[str, Any]:
+        vector_counts = self.vector_store.counts()
+        image_counts = self.image_store.counts()
+        image_ids = self.state.get_image_id_list()
+        cpu_count = self.detected_cpu_count_fn()
+        system_resources = build_resource_status(cpu_count)
+        payload = {
+            "chunks": vector_counts.get("chunks", 0),
+            "sources": vector_counts.get("documents", 0),
+            "embeddings": vector_counts.get("embeddings", 0),
+            "vectorChunks": vector_counts.get("chunks", 0),
+            "vectorEmbeddings": vector_counts.get("embeddings", 0),
+            "imageIds": len(image_ids),
+            "imageEmbeddings": image_counts.get("embeddings", 0),
+            "pendingReview": self.vector_store.pending_review_count(),
+            "cacheStats": self.response_cache.stats(),
+            "ingestWorkerBudget": {
+                "cpuCores": cpu_count,
+                "reservedCores": self.reserved_core_count_fn(cpu_count),
+                "usableCores": self.usable_core_count_fn(cpu_count),
+                "activeDocumentWorkers": self.active_document_worker_count_fn() if self.index_status.get("running") else 0,
+            },
+            "runtimeBatches": build_runtime_batch_status(
+                config=self.config,
+                embedding_model=self.embedding_model_name,
+                reranker_model=self.reranker_model_name,
+                gpu_status=system_resources.get("gpu", {}),
+            ),
+            "systemResources": system_resources,
+            "ingest": dict(self.index_status),
+        }
+        self.performance_store.record_resource_sample(payload)
+        return payload
+
+    def build_readiness_status(self) -> tuple[bool, dict[str, Any]]:
+        runtime = self.build_runtime_status()
+        checks = {
+            "modelConfigured": bool(self.llm_model_name),
+            "embeddingModelConfigured": bool(self.embedding_model_name),
+            "textChunksLoaded": runtime["chunks"] > 0,
+            "textIndexLoaded": runtime["vectorEmbeddings"] > 0,
+            "embeddingsLoaded": runtime["embeddings"] > 0,
+            "databaseConfigured": self.database.configured,
+            "databaseReachable": self.database.health_check(),
+        }
+        ready = all(checks.values())
+        return ready, {
+            "status": "ready" if ready else "not_ready",
+            "service": "CircuitShelf",
+            "checks": checks,
+            "runtime": runtime,
+        }

@@ -44,8 +44,7 @@ from backend.api.dependencies import ApiDependencies
 from backend.auth_dependencies import AuthDependencyService
 from backend.server import mount_react_app, start_app_server
 from backend.services.runtime_status_service import (
-    build_resource_status,
-    build_runtime_batch_status,
+    RuntimeStatusReporter,
     effective_embedding_batch_size as runtime_effective_embedding_batch_size,
 )
 from backend.services.image_retrieval_service import ImageRetrievalService
@@ -2508,6 +2507,25 @@ def _assemble_final_markdown(response, image_blocks):
     return f"{answer_md}\n\n---\n\n{image_md}" if image_md else answer_md
 
 
+runtime_status_reporter = RuntimeStatusReporter(
+    config=config,
+    state=state,
+    vector_store=vector_store,
+    image_store=image_store,
+    response_cache=db_response_cache,
+    performance_store=performance_store,
+    database=database,
+    embedding_model_name=EMBED_MODEL_NAME,
+    reranker_model_name=CROSS_ENCODER_MODEL,
+    llm_model_name=LLM_MODEL_NAME,
+    detected_cpu_count_fn=detected_cpu_count,
+    reserved_core_count_fn=reserved_core_count,
+    usable_core_count_fn=usable_core_count,
+    active_document_worker_count_fn=active_document_worker_count,
+    index_status=index_status,
+)
+
+
 @asynccontextmanager
 async def lifespan(_app):
     start_ingest_watcher()
@@ -2570,61 +2588,6 @@ def build_response_cache_key(
         max_tokens=int(max_tokens),
         show_full_text=bool(show_full_text),
     )
-
-
-def build_runtime_status():
-    vector_counts = vector_store.counts()
-    image_counts = image_store.counts()
-    image_ids = state.get_image_id_list()
-    cpu_count = detected_cpu_count()
-    system_resources = build_resource_status(cpu_count)
-    payload = {
-        "chunks": vector_counts.get("chunks", 0),
-        "sources": vector_counts.get("documents", 0),
-        "embeddings": vector_counts.get("embeddings", 0),
-        "vectorChunks": vector_counts.get("chunks", 0),
-        "vectorEmbeddings": vector_counts.get("embeddings", 0),
-        "imageIds": len(image_ids),
-        "imageEmbeddings": image_counts.get("embeddings", 0),
-        "pendingReview": vector_store.pending_review_count(),
-        "cacheStats": get_response_cache().stats(),
-        "ingestWorkerBudget": {
-            "cpuCores": cpu_count,
-            "reservedCores": reserved_core_count(cpu_count),
-            "usableCores": usable_core_count(cpu_count),
-            "activeDocumentWorkers": active_document_worker_count() if index_status.get("running") else 0,
-        },
-        "runtimeBatches": build_runtime_batch_status(
-            config=config,
-            embedding_model=EMBED_MODEL_NAME,
-            reranker_model=CROSS_ENCODER_MODEL,
-            gpu_status=system_resources.get("gpu", {}),
-        ),
-        "systemResources": system_resources,
-        "ingest": dict(index_status),
-    }
-    performance_store.record_resource_sample(payload)
-    return payload
-
-
-def build_readiness_status():
-    runtime = build_runtime_status()
-    checks = {
-        "modelConfigured": bool(LLM_MODEL_NAME),
-        "embeddingModelConfigured": bool(EMBED_MODEL_NAME),
-        "textChunksLoaded": runtime["chunks"] > 0,
-        "textIndexLoaded": runtime["vectorEmbeddings"] > 0,
-        "embeddingsLoaded": runtime["embeddings"] > 0,
-        "databaseConfigured": database.configured,
-        "databaseReachable": database.health_check(),
-    }
-    ready = all(checks.values())
-    return ready, {
-        "status": "ready" if ready else "not_ready",
-        "service": "CircuitShelf",
-        "checks": checks,
-        "runtime": runtime,
-    }
 
 
 def session_timeout_seconds() -> int:
@@ -2710,8 +2673,8 @@ register_api_routes(
     default_model=LLM_MODEL_NAME,
     auth_configured=lambda: database.configured and user_store.has_active_users(),
     session_timeout_seconds=session_timeout_seconds,
-    build_readiness_status=build_readiness_status,
-    build_runtime_status=build_runtime_status,
+    build_readiness_status=runtime_status_reporter.build_readiness_status,
+    build_runtime_status=runtime_status_reporter.build_runtime_status,
     conversation_store=conversation_store,
     conversation_title_from_question=conversation_title_from_question,
     lab_inventory_store=lab_inventory_store,
