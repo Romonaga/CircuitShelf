@@ -1,0 +1,29 @@
+[Unit]
+Description=CircuitShelf ingestion worker
+Wants=network-online.target ollama.service
+Requires=postgresql@16-main.service
+After=network-online.target postgresql@16-main.service ollama.service circuitshelf.service
+
+[Service]
+Type=simple
+User=hellweek
+Group=hellweek
+WorkingDirectory=/FastDrive/CircuitShelf
+Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=4
+Environment=OPENBLAS_NUM_THREADS=4
+Environment=MKL_NUM_THREADS=4
+Environment=NUMEXPR_NUM_THREADS=4
+Environment=TOKENIZERS_PARALLELISM=false
+EnvironmentFile=-/etc/circuitshelf/circuitshelf.env
+ExecStart=/FastDrive/CircuitShelf/.venv/bin/python /FastDrive/CircuitShelf/circuitshelf_ingest_worker.py
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=120
+KillSignal=SIGTERM
+AllowedCPUs=8-31
+CPUQuota=2400%
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

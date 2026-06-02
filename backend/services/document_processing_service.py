@@ -12,6 +12,10 @@ from docx import Document
 from lxml import etree
 from PIL import Image
 
+from ocr_utils import should_skip_image_dimensions
+
+PDF_NATIVE_LOCK = threading.Lock()
+
 
 class DocumentProcessingService:
     def __init__(
@@ -106,7 +110,7 @@ class DocumentProcessingService:
     def ocr_pdf_image_job(self, job):
         order, page_num, img_index, image_bytes, img_name = job
         ocr_result = self.ocr_image_bytes(image_bytes, img_name)
-        web_image_bytes = self.image_bytes_to_png_bytes(image_bytes, img_name) if ocr_result["accepted"] else None
+        web_image_bytes = self.image_bytes_to_png_bytes(image_bytes, img_name)
         return {
             "order": order,
             "page_num": page_num,
@@ -149,7 +153,23 @@ class DocumentProcessingService:
             return True
         return page_number - last_reported >= min_interval
 
-    def add_pdf_rendered_pages(self, path, target_state, progress_callback=None):
+    @staticmethod
+    def rendered_page_source_text(rendered_page):
+        text = (rendered_page.searchable_text or "").strip()
+        caption = (rendered_page.caption or "").strip()
+        if caption and text.startswith(caption):
+            return text[len(caption):].strip()
+        return text
+
+    def add_pdf_rendered_pages(
+        self,
+        path,
+        target_state,
+        progress_callback=None,
+        extra_chunks=None,
+        extra_sources=None,
+        extra_meta=None,
+    ):
         if not self.config.get("PDF_RENDER_VECTOR_PAGES", True):
             return 0
 
@@ -159,17 +179,22 @@ class DocumentProcessingService:
                 documentPhase="Selecting visual PDF pages",
             )
         try:
-            rendered_pages = self.render_pdf_visual_pages(
-                path,
-                max_pages=int(self.config.get("PDF_RENDER_MAX_PAGES_PER_DOC", 8) or 0),
-                min_drawings=int(self.config.get("PDF_RENDER_MIN_DRAWINGS", 100) or 100),
-                zoom=float(self.config.get("PDF_RENDER_ZOOM", 1.5) or 1.5),
-                render_raster_pages=bool(self.config.get("PDF_RENDER_RASTER_PAGES", True)),
-                min_raster_coverage=float(self.config.get("PDF_RENDER_MIN_RASTER_COVERAGE", 0.8) or 0.8),
-            )
+            with PDF_NATIVE_LOCK:
+                rendered_pages = self.render_pdf_visual_pages(
+                    path,
+                    max_pages=int(self.config.get("PDF_RENDER_MAX_PAGES_PER_DOC", 8) or 0),
+                    min_drawings=int(self.config.get("PDF_RENDER_MIN_DRAWINGS", 100) or 100),
+                    zoom=float(self.config.get("PDF_RENDER_ZOOM", 1.5) or 1.5),
+                    render_raster_pages=bool(self.config.get("PDF_RENDER_RASTER_PAGES", True)),
+                    min_raster_coverage=float(self.config.get("PDF_RENDER_MIN_RASTER_COVERAGE", 0.8) or 0.8),
+                )
         except Exception as exc:
             self.trace_logger.warning(f"⚠️ Could not render visual PDF pages for {path}: {exc}")
             return 0
+
+        render_ocr_enabled = bool(self.config.get("PDF_RENDER_OCR_PAGES", True))
+        min_text_chars = int(self.config.get("OCR_INDEX_TEXT_MIN_CHARS", 80) or 80)
+        ocr_chunk_lists_available = extra_chunks is not None and extra_sources is not None and extra_meta is not None
 
         for rendered_page in rendered_pages:
             if progress_callback:
@@ -183,47 +208,138 @@ class DocumentProcessingService:
                 base64.b64encode(rendered_page.image_bytes).decode("utf-8"),
             )
             target_state.add_image_caption(rendered_page.image_key, rendered_page.caption)
-            target_state.add_image_page_text(rendered_page.image_key, rendered_page.searchable_text)
+
+            searchable_text = (rendered_page.searchable_text or "").strip()
+            source_text = self.rendered_page_source_text(rendered_page)
+            if render_ocr_enabled and len(source_text) < min_text_chars:
+                ocr_result = self.ocr_image_bytes(rendered_page.image_bytes, rendered_page.image_key)
+                if ocr_result["accepted"]:
+                    ocr_text = ocr_result["text"]
+                    searchable_text = "\n".join(part for part in [searchable_text, ocr_text] if part).strip()
+                    score = ocr_result["score"]
+                    confidence = ocr_result["confidence"]
+                    self.trace_logger.info(
+                        f"🧠 Rendered page OCR accepted for {rendered_page.image_key}: "
+                        f"{len(ocr_text)} chars | score: {score:.2f}{self.format_confidence(confidence)}"
+                    )
+                    if (
+                        ocr_chunk_lists_available
+                        and self.config.get("INDEX_IMAGE_OCR_AS_TEXT", False)
+                        and len(ocr_text) >= min_text_chars
+                    ):
+                        extra_chunks.append(ocr_text)
+                        extra_sources.append(path)
+                        ocr_meta = self.chunker.make_chunk_meta(ocr_text, path, "Rendered Page OCR", "ocr")
+                        ocr_meta.update({
+                            "page": rendered_page.page_number,
+                            "parent_source": path,
+                            "source_image_id": rendered_page.image_key,
+                            "ocr_score": score,
+                            "ocr_confidence": confidence,
+                        })
+                        extra_meta.append(ocr_meta)
+                else:
+                    log_fn = self.trace_logger.debug if ocr_result["skipped"] else self.trace_logger.warning
+                    log_fn(
+                        f"⚠️ Stored rendered page {rendered_page.image_key} without extra OCR text — "
+                        f"OCR score: {ocr_result['score']:.2f}, reason: {ocr_result['reason']}"
+                    )
+
+            if searchable_text:
+                target_state.add_image_page_text(rendered_page.image_key, searchable_text)
 
         if rendered_pages:
             self.trace_logger.info(f"🖼️ Rendered {len(rendered_pages)} vector-heavy PDF pages for {os.path.basename(path)}")
         return len(rendered_pages)
 
+    def pdf_embedded_image_ocr_config(self):
+        config = dict(getattr(self.config, "config", self.config))
+        config["OCR_MIN_IMAGE_WIDTH"] = max(
+            int(config.get("OCR_MIN_IMAGE_WIDTH", 20) or 20),
+            int(config.get("PDF_EMBEDDED_IMAGE_OCR_MIN_WIDTH", 80) or 80),
+        )
+        config["OCR_MIN_IMAGE_HEIGHT"] = max(
+            int(config.get("OCR_MIN_IMAGE_HEIGHT", 20) or 20),
+            int(config.get("PDF_EMBEDDED_IMAGE_OCR_MIN_HEIGHT", 80) or 80),
+        )
+        config["OCR_MIN_IMAGE_AREA"] = max(
+            int(config.get("OCR_MIN_IMAGE_AREA", 900) or 900),
+            int(config.get("PDF_EMBEDDED_IMAGE_OCR_MIN_AREA", 6400) or 6400),
+        )
+        return config
+
+    def should_queue_pdf_image_dimensions(self, width, height):
+        if width <= 0 or height <= 0:
+            return True, ""
+        skip, reason = should_skip_image_dimensions(width, height, self.pdf_embedded_image_ocr_config())
+        return not skip, reason
+
     def load_pdf_text(self, path, target_state=None, progress_callback=None):
         target_state = target_state or self.state
         self.trace_logger.info(f"📅 Loading PDF: {path}")
-        pdf = fitz.open(path)
         page_texts = []
         extra_chunks, extra_sources, extra_meta = [], [], []
         image_jobs = []
+        seen_image_xrefs = set()
+        skipped_image_candidates = 0
+        duplicate_image_candidates = 0
 
-        total_pages = len(pdf)
-        last_reported_page = 0
-        for page_num in range(total_pages):
-            page_number = page_num + 1
-            if progress_callback and self.should_report_page_progress(page_number, total_pages, last_reported_page):
-                last_reported_page = page_number
-                progress_callback(
-                    currentDocument=os.path.basename(path),
-                    documentPhase="Scanning PDF pages",
-                    pdfPage=page_number,
-                    pdfPages=total_pages,
-                    imageCandidates=len(image_jobs),
-                )
-            page = pdf[page_num]
-            page_text = page.get_text().strip()
-            page_texts.append(page_text)
+        with PDF_NATIVE_LOCK:
+            pdf = fitz.open(path)
+            try:
+                total_pages = len(pdf)
+                last_reported_page = 0
+                for page_num in range(total_pages):
+                    page_number = page_num + 1
+                    if progress_callback and self.should_report_page_progress(page_number, total_pages, last_reported_page):
+                        last_reported_page = page_number
+                        progress_callback(
+                            currentDocument=os.path.basename(path),
+                            documentPhase="Scanning PDF pages",
+                            pdfPage=page_number,
+                            pdfPages=total_pages,
+                            imageCandidates=len(image_jobs),
+                            skippedImageCandidates=skipped_image_candidates,
+                            duplicateImageCandidates=duplicate_image_candidates,
+                        )
+                    page = pdf[page_num]
+                    page_text = page.get_text().strip()
+                    page_texts.append(page_text)
 
-            for img_index, img in enumerate(page.get_images(full=True)):
-                try:
-                    xref = img[0]
-                    base_image = pdf.extract_image(xref)
-                    image_bytes = base_image["image"]
-                    img_name = f"{os.path.basename(path)}_page{page_number}_img{img_index+1}"
-                    image_jobs.append((len(image_jobs), page_num, img_index, image_bytes, img_name))
-                except Exception as exc:
-                    self.trace_logger.warning(f"❌ Failed to process image on page {page_number}: {exc}")
-                    continue
+                    for img_index, img in enumerate(page.get_images(full=True)):
+                        try:
+                            xref = img[0]
+                            if xref in seen_image_xrefs:
+                                duplicate_image_candidates += 1
+                                continue
+                            seen_image_xrefs.add(xref)
+                            image_width = int(img[2] or 0) if len(img) > 3 else 0
+                            image_height = int(img[3] or 0) if len(img) > 3 else 0
+                            should_queue, reason = self.should_queue_pdf_image_dimensions(image_width, image_height)
+                            if not should_queue:
+                                skipped_image_candidates += 1
+                                self.trace_logger.debug(
+                                    f"⚠️ Skipping embedded PDF image on page {page_number} before extraction: {reason}"
+                                )
+                                continue
+                            base_image = pdf.extract_image(xref)
+                            base_width = int(base_image.get("width") or image_width)
+                            base_height = int(base_image.get("height") or image_height)
+                            should_queue, reason = self.should_queue_pdf_image_dimensions(base_width, base_height)
+                            if not should_queue:
+                                skipped_image_candidates += 1
+                                self.trace_logger.debug(
+                                    f"⚠️ Skipping embedded PDF image on page {page_number} before OCR: {reason}"
+                                )
+                                continue
+                            image_bytes = base_image["image"]
+                            img_name = f"{os.path.basename(path)}_page{page_number}_img{img_index+1}"
+                            image_jobs.append((len(image_jobs), page_num, img_index, image_bytes, img_name))
+                        except Exception as exc:
+                            self.trace_logger.warning(f"❌ Failed to process image on page {page_number}: {exc}")
+                            continue
+            finally:
+                pdf.close()
 
         if progress_callback:
             progress_callback(
@@ -232,30 +348,40 @@ class DocumentProcessingService:
                 pdfPage=total_pages,
                 pdfPages=total_pages,
                 imageCandidates=len(image_jobs),
+                skippedImageCandidates=skipped_image_candidates,
+                duplicateImageCandidates=duplicate_image_candidates,
+            )
+        if skipped_image_candidates or duplicate_image_candidates:
+            self.trace_logger.info(
+                f"🧹 PDF image prefilter for {os.path.basename(path)}: "
+                f"{len(image_jobs)} queued, {skipped_image_candidates} tiny/invalid skipped, "
+                f"{duplicate_image_candidates} duplicate xrefs skipped."
             )
         for result in self.run_pdf_image_ocr_jobs(image_jobs):
             page_num = result["page_num"]
             img_name = result["img_name"]
             ocr_result = result["ocr_result"]
+            web_image_bytes = result["web_image_bytes"]
+
+            target_state.add_image_store(img_name, base64.b64encode(web_image_bytes).decode("utf-8"))
+            target_state.add_image_caption(img_name, f"Image from {os.path.basename(path)}, page {page_num+1}")
+
             if not ocr_result["accepted"]:
                 log_fn = self.trace_logger.debug if ocr_result["skipped"] else self.trace_logger.warning
                 score = ocr_result["score"]
                 reason = ocr_result["reason"]
-                log_fn(f"⚠️ Dropped {img_name} — OCR score: {score:.2f}, reason: {reason}")
+                log_fn(f"⚠️ Stored {img_name} without searchable OCR text — OCR score: {score:.2f}, reason: {reason}")
                 continue
 
             ocr_text = ocr_result["text"]
             score = ocr_result["score"]
             confidence = ocr_result["confidence"]
-            web_image_bytes = result["web_image_bytes"]
 
             self.trace_logger.info(
                 f"🧠 OCR accepted for {img_name}: {len(ocr_text)} chars | "
                 f"score: {score:.2f}{self.format_confidence(confidence)}"
             )
 
-            target_state.add_image_store(img_name, base64.b64encode(web_image_bytes).decode("utf-8"))
-            target_state.add_image_caption(img_name, f"Image from {os.path.basename(path)}, page {page_num+1}")
             target_state.add_image_page_text(img_name, ocr_text)
             if self.config.get("INDEX_IMAGE_OCR_AS_TEXT", False) and len(ocr_text) >= self.config.get("OCR_INDEX_TEXT_MIN_CHARS", 80):
                 extra_chunks.append(ocr_text)
@@ -270,7 +396,14 @@ class DocumentProcessingService:
                 })
                 extra_meta.append(ocr_meta)
 
-        self.add_pdf_rendered_pages(path, target_state, progress_callback=progress_callback)
+        self.add_pdf_rendered_pages(
+            path,
+            target_state,
+            progress_callback=progress_callback,
+            extra_chunks=extra_chunks,
+            extra_sources=extra_sources,
+            extra_meta=extra_meta,
+        )
         return page_texts, extra_chunks, extra_sources, extra_meta
 
     def extract_images_from_docx_textboxes(self, path):

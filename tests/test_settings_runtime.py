@@ -1,5 +1,6 @@
 import unittest
 
+from backend.services.runtime_status_service import effective_embedding_batch_size, effective_rerank_batch_size
 from settings_runtime import RuntimeSettingsManager, setting_restart_required
 
 
@@ -60,6 +61,30 @@ class RuntimeSettingsManagerTests(unittest.TestCase):
         self.assertTrue(setting_restart_required("CROSS_ENCODER_MODEL"))
         self.assertFalse(setting_restart_required("PDF_RENDER_MAX_PAGES_PER_DOC"))
         self.assertFalse(setting_restart_required("LLM_NUM_PREDICT"))
+
+    def test_auto_batches_use_gpu_recommendations(self):
+        gpu = {"available": True, "memoryTotalMiB": 24576}
+        config = {
+            "EMBED_BATCH_SIZE": 16,
+            "EMBED_BATCH_AUTO": True,
+            "RERANK_BATCH_SIZE": 32,
+            "RERANK_BATCH_AUTO": True,
+        }
+
+        self.assertEqual(effective_embedding_batch_size(config, gpu), 156)
+        self.assertEqual(effective_rerank_batch_size(config, gpu), 96)
+
+    def test_manual_batches_keep_configured_values(self):
+        gpu = {"available": True, "memoryTotalMiB": 24576}
+        config = {
+            "EMBED_BATCH_SIZE": 16,
+            "EMBED_BATCH_AUTO": False,
+            "RERANK_BATCH_SIZE": 32,
+            "RERANK_BATCH_AUTO": False,
+        }
+
+        self.assertEqual(effective_embedding_batch_size(config, gpu), 16)
+        self.assertEqual(effective_rerank_batch_size(config, gpu), 32)
 
 
 if __name__ == "__main__":

@@ -87,8 +87,16 @@ class ChunkingUtils:
             "pdip", "cdip", "sop", "so", "db", "ns", "nipdau", "green", "rohs",
             "non-rohs", "lead", "finish", "package", "orderable", "top-side", "marking",
         }
+        package_token_count = sum(1 for token in tokens if token in package_tokens)
+        has_package_token = package_token_count > 0
+        has_digit = any(any(char.isdigit() for char in token) for token in tokens)
         short_or_package = sum(1 for token in tokens if token in package_tokens or len(token) <= 3)
-        if len(tokens) <= 12 and short_or_package / max(1, len(tokens)) >= 0.75:
+        if (
+            len(tokens) <= 12
+            and has_package_token
+            and (has_digit or package_token_count >= 2)
+            and short_or_package / max(1, len(tokens)) >= 0.75
+        ):
             return True
         if re.fullmatch(r"[A-Z0-9]{2,8}(?:\s*[|/]\s*[A-Z0-9]{1,8})+", line.strip()):
             return True
@@ -174,7 +182,8 @@ class ChunkingUtils:
         electronics_terms = [
             "pin", "vcc", "gnd", "ground", "trigger", "threshold", "discharge", "reset",
             "output", "input", "timer", "timing", "capacitor", "resistor", "current", "voltage",
-            "frequency", "duty", "oscillator", "monostable", "astable",
+            "frequency", "duty", "oscillator", "monostable", "astable", "led", "diode",
+            "transistor", "collector", "emitter", "base", "mosfet", "gate", "source", "drain",
         ]
 
         if len(alpha_words) < 2 and not any(term in lower for term in electronics_terms):
@@ -312,7 +321,7 @@ class ChunkingUtils:
             
 
     def smart_chunk_text(self, text, source_file, force_math=False, chunk_size=None, overlap=None):
-        self.trace_logger.info(f"📀 Using smart_chunk_text for {source_file}")
+        self.trace_logger.debug(f"Using smart_chunk_text for {source_file}")
         chunks_out, meta = [], []
         
         if(chunk_size is None):
@@ -332,7 +341,7 @@ class ChunkingUtils:
             self.trace_logger.info(f"🔍 Auto-detected math-heavy content in {source_file}. Switching to math chunking.")
 
         if not force_math and self.config.get("CHUNKING_MODE", "deterministic") == "deterministic":
-            self.trace_logger.info(f"🧱 Deterministic page chunking for {source_file}")
+            self.trace_logger.debug(f"Deterministic page chunking for {source_file}")
             return self.deterministic_chunk_text(text, source_file, chunk_size, overlap)
 
         if force_math:

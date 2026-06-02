@@ -10,12 +10,19 @@ User=hellweek
 Group=hellweek
 WorkingDirectory=/FastDrive/CircuitShelf
 Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=2
+Environment=OPENBLAS_NUM_THREADS=2
+Environment=MKL_NUM_THREADS=2
+Environment=NUMEXPR_NUM_THREADS=2
+Environment=TOKENIZERS_PARALLELISM=false
 EnvironmentFile=-/etc/circuitshelf/circuitshelf.env
 ExecStart=/FastDrive/CircuitShelf/.venv/bin/python /FastDrive/CircuitShelf/circuitshelf.py
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=60
 KillSignal=SIGTERM
+AllowedCPUs=0-7
+CPUQuota=800%
 
 [Install]
 WantedBy=multi-user.target

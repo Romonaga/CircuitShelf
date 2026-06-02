@@ -28,7 +28,9 @@ from backend.services.retrieval_service import QueryPreprocessor, RuntimeChunkMa
 from backend.services.runtime_status_service import (
     RuntimeStatusReporter,
     effective_embedding_batch_size as runtime_effective_embedding_batch_size,
+    effective_rerank_batch_size as runtime_effective_rerank_batch_size,
 )
+from backend.services.model_runtime import resolve_model_device
 from backend.services.source_metadata import (
     build_source_payload,
     display_source_name,
@@ -68,6 +70,9 @@ class CircuitShelfRuntime:
     stores: object
     runtime_settings: object
     trace_log_helper: object
+    ingest_status_callback: object | None = None
+    ingest_status_provider: object | None = None
+    enable_inprocess_ingest_watch: bool = False
 
     def __post_init__(self):
         self._load_config_values()
@@ -97,6 +102,7 @@ class CircuitShelfRuntime:
         self.llm_num_predict = config.get("LLM_NUM_PREDICT", 3072)
         self.llm_num_ctx = config.get("LLM_NUM_CTX")
         self.cross_encoder_model = config.get("CROSS_ENCODER_MODEL")
+        self.model_device = resolve_model_device(config)
         self.llm_model_options = config.get("LLM_MODEL_OPTIONS")
         self.max_chat_history_turns = config.get("MAX_CHAT_HISTORY_TURNS", 5)
         self.max_chat_history_chars = config.get("MAX_CHAT_HISTORY_CHARS", 2000)
@@ -133,13 +139,24 @@ class CircuitShelfRuntime:
             config=self.config,
             trace_logger=self.trace_logger,
         )
-        self.embedder = SentenceTransformer(self.embed_model_name)
-        self.reranker_engine = Reranker(self.config, self.state, self.chunker, self.trace_logger)
+        self.trace_logger.info(f"🧠 Loading embedding and reranker models on device: {self.model_device}")
+        self.embedder = SentenceTransformer(self.embed_model_name, device=self.model_device)
+        self.reranker_engine = Reranker(
+            self.config,
+            self.state,
+            self.chunker,
+            self.trace_logger,
+            device=self.model_device,
+            batch_size_resolver=self.effective_rerank_batch_size,
+        )
         self.runtime_settings.register_callback(
             "RERANK_PROFILES",
             lambda value: setattr(self.reranker_engine, "rerank_profiles", value),
         )
-        self.ingest_progress = IngestProgressTracker(config=self.config)
+        self.ingest_progress = IngestProgressTracker(
+            config=self.config,
+            status_callback=self.ingest_status_callback,
+        )
         self.index_status = self.ingest_progress.status
         self.image_retrieval_service = ImageRetrievalService(
             state=self.state,
@@ -251,14 +268,15 @@ class CircuitShelfRuntime:
             utc_now=utc_now,
             utc_now_iso=utc_now_iso,
         )
-        self.runtime_settings.register_callback(
-            "INGEST_WATCH_ENABLED",
-            self.index_lifecycle_service.apply_ingest_watch_enabled,
-        )
-        self.runtime_settings.register_callback(
-            "INGEST_WATCH_INTERVAL_SECONDS",
-            self.index_lifecycle_service.apply_ingest_watch_interval,
-        )
+        if self.enable_inprocess_ingest_watch:
+            self.runtime_settings.register_callback(
+                "INGEST_WATCH_ENABLED",
+                self.index_lifecycle_service.apply_ingest_watch_enabled,
+            )
+            self.runtime_settings.register_callback(
+                "INGEST_WATCH_INTERVAL_SECONDS",
+                self.index_lifecycle_service.apply_ingest_watch_interval,
+            )
 
     def _build_query_services(self):
         stores = self.stores
@@ -341,11 +359,13 @@ class CircuitShelfRuntime:
             embedding_model_name=self.embed_model_name,
             reranker_model_name=self.cross_encoder_model,
             llm_model_name=self.llm_model_name,
+            model_device_name=self.model_device,
             detected_cpu_count_fn=detected_cpu_count,
             reserved_core_count_fn=reserved_core_count,
             usable_core_count_fn=usable_core_count,
             active_document_worker_count_fn=self.ingest_progress.active_document_worker_count,
             index_status=self.index_status,
+            ingest_status_provider=self.ingest_status_provider,
         )
         self.document_management_service = DocumentManagementService(
             vector_store=stores.vector_store,
@@ -416,6 +436,9 @@ class CircuitShelfRuntime:
 
     def effective_embedding_batch_size(self):
         return runtime_effective_embedding_batch_size(self.config)
+
+    def effective_rerank_batch_size(self):
+        return runtime_effective_rerank_batch_size(self.config)
 
     def session_timeout_seconds(self) -> int:
         return max(60, int(self.config.get("SESSION_TIMEOUT_SECONDS", self.config.get("SESSION_TTL_SECONDS", 28800))))

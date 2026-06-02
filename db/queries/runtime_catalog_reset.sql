@@ -9,6 +9,7 @@ TRUNCATE TABLE
     query_logs,
     ingest_run_documents,
     ingest_runs,
+    document_ingest_ai_reviews,
     document_intelligence_facts,
     document_intelligence_pins,
     document_intelligence,

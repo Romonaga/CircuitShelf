@@ -13,6 +13,208 @@ RESOURCE_SAMPLE_STATE: dict[str, tuple[float, ...] | None] = {
     "system": None,
     "process": None,
 }
+RESOURCE_PEAK_STATE: dict[str, float | int | None] = {
+    "cpuPercent": None,
+    "cpuTemperatureC": None,
+    "cpuPowerW": None,
+    "processCpuPercent": None,
+    "memoryUsedPercent": None,
+    "processMemoryBytes": None,
+    "processThreads": None,
+    "gpuPercent": None,
+    "gpuMemoryUsedPercent": None,
+    "gpuMemoryUsedMiB": None,
+    "gpuTemperatureC": None,
+    "gpuPowerW": None,
+    "activeDocumentWorkers": None,
+}
+
+CPU_HWMON_NAMES = {
+    "coretemp",
+    "k10temp",
+    "zenpower",
+    "cpu_thermal",
+    "x86_pkg_temp",
+    "fam15h_power",
+}
+NON_CPU_HWMON_NAMES = {
+    "amdgpu",
+    "asus",
+    "drivetemp",
+    "iwlwifi_1",
+    "nvme",
+    "nvidia",
+    "spd5118",
+}
+
+
+def _read_text_file(path: str) -> str | None:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return None
+
+
+def _read_millidegree_file(path: str) -> float | None:
+    value = _read_text_file(path)
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    if number > 1000:
+        number = number / 1000.0
+    if number < -20 or number > 130:
+        return None
+    return round(number, 2)
+
+
+def _read_microwatt_file(path: str) -> float | None:
+    value = _read_text_file(path)
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    if number > 1000:
+        number = number / 1_000_000.0
+    if number < 0 or number > 2000:
+        return None
+    return round(number, 2)
+
+
+def _cpu_temp_score(sensor_name: str, label: str) -> int:
+    name = sensor_name.lower()
+    normalized_label = label.lower()
+    if name in NON_CPU_HWMON_NAMES:
+        return -100
+    score = 0
+    if name in CPU_HWMON_NAMES:
+        score += 100
+    if "tdie" in normalized_label or "package id 0" in normalized_label:
+        score += 30
+    elif "tctl" in normalized_label:
+        score += 25
+    elif "cpu" in normalized_label:
+        score += 20
+    elif normalized_label.startswith("core"):
+        score += 10
+    return score
+
+
+def _cpu_power_score(sensor_name: str, label: str) -> int:
+    name = sensor_name.lower()
+    normalized_label = label.lower()
+    if name in NON_CPU_HWMON_NAMES:
+        return -100
+    score = 0
+    if name in CPU_HWMON_NAMES:
+        score += 100
+    if "package" in normalized_label or "rapl_p_package" in normalized_label:
+        score += 30
+    elif "cpu" in normalized_label:
+        score += 20
+    return score
+
+
+def _read_cpu_temperature_status() -> dict[str, Any]:
+    candidates = []
+    hwmon_root = "/sys/class/hwmon"
+    try:
+        hwmon_dirs = sorted(os.listdir(hwmon_root))
+    except OSError:
+        hwmon_dirs = []
+
+    for dirname in hwmon_dirs:
+        path = os.path.join(hwmon_root, dirname)
+        sensor_name = (_read_text_file(os.path.join(path, "name")) or "").strip()
+        if not sensor_name:
+            continue
+        try:
+            files = os.listdir(path)
+        except OSError:
+            continue
+        for filename in files:
+            if not filename.startswith("temp") or not filename.endswith("_input"):
+                continue
+            prefix = filename.removesuffix("_input")
+            label = _read_text_file(os.path.join(path, f"{prefix}_label")) or sensor_name
+            temperature = _read_millidegree_file(os.path.join(path, filename))
+            if temperature is None:
+                continue
+            score = _cpu_temp_score(sensor_name, label)
+            if score <= 0:
+                continue
+            candidates.append((score, temperature, sensor_name, label))
+
+    if candidates:
+        score, temperature, sensor_name, label = sorted(candidates, key=lambda item: (item[0], item[1]), reverse=True)[0]
+        return {
+            "temperatureC": temperature,
+            "temperatureSensor": f"{sensor_name}:{label}",
+        }
+
+    thermal_root = "/sys/class/thermal"
+    try:
+        zones = sorted(os.listdir(thermal_root))
+    except OSError:
+        zones = []
+    for zone in zones:
+        if not zone.startswith("thermal_zone"):
+            continue
+        path = os.path.join(thermal_root, zone)
+        zone_type = _read_text_file(os.path.join(path, "type")) or zone
+        temperature = _read_millidegree_file(os.path.join(path, "temp"))
+        if temperature is None:
+            continue
+        if any(term in zone_type.lower() for term in ("cpu", "x86_pkg_temp", "soc", "package")):
+            return {
+                "temperatureC": temperature,
+                "temperatureSensor": zone_type,
+            }
+    return {}
+
+
+def _read_cpu_power_status() -> dict[str, Any]:
+    candidates = []
+    hwmon_root = "/sys/class/hwmon"
+    try:
+        hwmon_dirs = sorted(os.listdir(hwmon_root))
+    except OSError:
+        hwmon_dirs = []
+
+    for dirname in hwmon_dirs:
+        path = os.path.join(hwmon_root, dirname)
+        sensor_name = (_read_text_file(os.path.join(path, "name")) or "").strip()
+        if not sensor_name:
+            continue
+        try:
+            files = os.listdir(path)
+        except OSError:
+            continue
+        for filename in files:
+            if not filename.startswith("power") or not filename.endswith("_input"):
+                continue
+            prefix = filename.removesuffix("_input")
+            label = _read_text_file(os.path.join(path, f"{prefix}_label")) or sensor_name
+            power_w = _read_microwatt_file(os.path.join(path, filename))
+            if power_w is None:
+                continue
+            score = _cpu_power_score(sensor_name, label)
+            if score <= 0:
+                continue
+            candidates.append((score, power_w, sensor_name, label))
+
+    if not candidates:
+        return {}
+    _, power_w, sensor_name, label = sorted(candidates, key=lambda item: (item[0], item[1]), reverse=True)[0]
+    return {
+        "powerW": power_w,
+        "powerSensor": f"{sensor_name}:{label}",
+    }
 
 
 def _read_system_cpu_times():
@@ -89,6 +291,19 @@ def _read_process_status():
     return result
 
 
+def _max_peak(key: str, value):
+    if value is None:
+        return RESOURCE_PEAK_STATE.get(key)
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return RESOURCE_PEAK_STATE.get(key)
+    previous = RESOURCE_PEAK_STATE.get(key)
+    if previous is None or numeric > float(previous):
+        RESOURCE_PEAK_STATE[key] = int(numeric) if isinstance(value, int) else numeric
+    return RESOURCE_PEAK_STATE.get(key)
+
+
 def read_gpu_status():
     query = "name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw"
     try:
@@ -151,6 +366,13 @@ def effective_embedding_batch_size(config: Any, gpu_status: dict[str, Any] | Non
     return max(configured, recommended_embedding_batch(config, gpu_status or read_gpu_status()))
 
 
+def effective_rerank_batch_size(config: Any, gpu_status: dict[str, Any] | None = None):
+    configured = int(config.get("RERANK_BATCH_SIZE", 32))
+    if str(config.get("RERANK_BATCH_AUTO", True)).lower() in {"0", "false", "no", "off"}:
+        return configured
+    return max(configured, recommended_rerank_batch(config, gpu_status or read_gpu_status()))
+
+
 def build_resource_status(cpu_count: int):
     system_sample = _read_system_cpu_times()
     process_sample = _read_process_cpu_times()
@@ -169,6 +391,8 @@ def build_resource_status(cpu_count: int):
             "cores": cpu_count,
             "utilizationPercent": _percent_from_delta(previous_system, system_sample),
             "loadAverage": list(os.getloadavg()) if hasattr(os, "getloadavg") else None,
+            **_read_cpu_temperature_status(),
+            **_read_cpu_power_status(),
         },
         "memory": _read_memory_status(),
         "process": process,
@@ -182,6 +406,7 @@ def build_runtime_batch_status(
     embedding_model: str | None,
     reranker_model: str | None,
     gpu_status: dict[str, Any],
+    model_device: str | None = None,
 ):
     embedding_configured = int(config.get("EMBED_BATCH_SIZE", 16))
     rerank_configured = int(config.get("RERANK_BATCH_SIZE", 32))
@@ -192,18 +417,42 @@ def build_runtime_batch_status(
     return {
         "embedding": {
             "model": embedding_model,
+            "device": model_device,
             "configured": embedding_configured,
             "recommended": embedding_recommended,
-            "active": max(embedding_configured, embedding_recommended) if embedding_auto else embedding_configured,
+            "active": effective_embedding_batch_size(config, gpu_status),
             "auto": embedding_auto,
         },
         "reranker": {
             "model": reranker_model,
+            "device": model_device,
             "configured": rerank_configured,
             "recommended": rerank_recommended,
-            "active": max(rerank_configured, rerank_recommended) if rerank_auto else rerank_configured,
+            "active": effective_rerank_batch_size(config, gpu_status),
             "auto": rerank_auto,
         },
+    }
+
+
+def build_resource_peaks(resources: dict[str, Any], active_document_workers: int):
+    cpu = resources.get("cpu") or {}
+    memory = resources.get("memory") or {}
+    process = resources.get("process") or {}
+    gpu = resources.get("gpu") or {}
+    return {
+        "cpuPercent": _max_peak("cpuPercent", cpu.get("utilizationPercent")),
+        "cpuTemperatureC": _max_peak("cpuTemperatureC", cpu.get("temperatureC")),
+        "cpuPowerW": _max_peak("cpuPowerW", cpu.get("powerW")),
+        "processCpuPercent": _max_peak("processCpuPercent", process.get("cpuPercent")),
+        "memoryUsedPercent": _max_peak("memoryUsedPercent", memory.get("usedPercent")),
+        "processMemoryBytes": _max_peak("processMemoryBytes", process.get("memoryBytes")),
+        "processThreads": _max_peak("processThreads", process.get("threads")),
+        "gpuPercent": _max_peak("gpuPercent", gpu.get("utilizationPercent") if gpu.get("available") else None),
+        "gpuMemoryUsedPercent": _max_peak("gpuMemoryUsedPercent", gpu.get("memoryUsedPercent") if gpu.get("available") else None),
+        "gpuMemoryUsedMiB": _max_peak("gpuMemoryUsedMiB", gpu.get("memoryUsedMiB") if gpu.get("available") else None),
+        "gpuTemperatureC": _max_peak("gpuTemperatureC", gpu.get("temperatureC") if gpu.get("available") else None),
+        "gpuPowerW": _max_peak("gpuPowerW", gpu.get("powerW") if gpu.get("available") else None),
+        "activeDocumentWorkers": _max_peak("activeDocumentWorkers", active_document_workers),
     }
 
 
@@ -221,11 +470,13 @@ class RuntimeStatusReporter:
         embedding_model_name: str | None,
         reranker_model_name: str | None,
         llm_model_name: str | None,
+        model_device_name: str | None,
         detected_cpu_count_fn,
         reserved_core_count_fn,
         usable_core_count_fn,
         active_document_worker_count_fn,
         index_status: dict,
+        ingest_status_provider=None,
     ):
         self.config = config
         self.state = state
@@ -237,11 +488,15 @@ class RuntimeStatusReporter:
         self.embedding_model_name = embedding_model_name
         self.reranker_model_name = reranker_model_name
         self.llm_model_name = llm_model_name
+        self.model_device_name = model_device_name
         self.detected_cpu_count_fn = detected_cpu_count_fn
         self.reserved_core_count_fn = reserved_core_count_fn
         self.usable_core_count_fn = usable_core_count_fn
         self.active_document_worker_count_fn = active_document_worker_count_fn
         self.index_status = index_status
+        self.ingest_status_provider = ingest_status_provider
+        self._sampler_stop = threading.Event()
+        self._sampler_thread: threading.Thread | None = None
 
     def build_runtime_status(self) -> dict[str, Any]:
         vector_counts = self.vector_store.counts()
@@ -249,6 +504,9 @@ class RuntimeStatusReporter:
         image_ids = self.state.get_image_id_list()
         cpu_count = self.detected_cpu_count_fn()
         system_resources = build_resource_status(cpu_count)
+        ingest_status = self._current_ingest_status()
+        active_document_workers = self._active_document_workers_from_status(ingest_status)
+        system_resources["peaks"] = build_resource_peaks(system_resources, active_document_workers)
         payload = {
             "chunks": vector_counts.get("chunks", 0),
             "sources": vector_counts.get("documents", 0),
@@ -263,35 +521,96 @@ class RuntimeStatusReporter:
                 "cpuCores": cpu_count,
                 "reservedCores": self.reserved_core_count_fn(cpu_count),
                 "usableCores": self.usable_core_count_fn(cpu_count),
-                "activeDocumentWorkers": self.active_document_worker_count_fn() if self.index_status.get("running") else 0,
+                "activeDocumentWorkers": active_document_workers,
             },
             "runtimeBatches": build_runtime_batch_status(
                 config=self.config,
                 embedding_model=self.embedding_model_name,
                 reranker_model=self.reranker_model_name,
+                model_device=self.model_device_name,
                 gpu_status=system_resources.get("gpu", {}),
             ),
             "systemResources": system_resources,
-            "ingest": dict(self.index_status),
+            "ingest": ingest_status,
         }
         self.performance_store.record_resource_sample(payload)
         return payload
+
+    def _current_ingest_status(self) -> dict[str, Any]:
+        if self.ingest_status_provider:
+            try:
+                status = self.ingest_status_provider()
+                if status:
+                    return dict(status)
+            except Exception:
+                pass
+        return dict(self.index_status)
+
+    def _active_document_workers_from_status(self, ingest_status: dict[str, Any]) -> int:
+        if not ingest_status.get("running"):
+            return 0
+        try:
+            local_count = int(self.active_document_worker_count_fn() or 0)
+        except Exception:
+            local_count = 0
+        if local_count:
+            return local_count
+        details = ingest_status.get("details") or {}
+        if details.get("activeWorkers") is not None:
+            try:
+                return int(details.get("activeWorkers") or 0)
+            except (TypeError, ValueError):
+                pass
+        return len(ingest_status.get("currentFiles") or [])
+
+    def start_resource_sampler(self):
+        if self._sampler_thread and self._sampler_thread.is_alive():
+            return
+        interval = max(1, int(getattr(self.performance_store, "sample_interval_seconds", 5)))
+        self._sampler_stop.clear()
+
+        def loop():
+            while not self._sampler_stop.wait(interval):
+                try:
+                    self.build_runtime_status()
+                except Exception:
+                    # Sampling must never destabilize ingestion or request handling.
+                    continue
+
+        self._sampler_thread = threading.Thread(target=loop, name="circuitshelf-resource-sampler", daemon=True)
+        self._sampler_thread.start()
+
+    def stop_resource_sampler(self):
+        self._sampler_stop.set()
+        if self._sampler_thread and self._sampler_thread.is_alive():
+            self._sampler_thread.join(timeout=2)
+        self._sampler_thread = None
 
     def build_readiness_status(self) -> tuple[bool, dict[str, Any]]:
         runtime = self.build_runtime_status()
         checks = {
             "modelConfigured": bool(self.llm_model_name),
             "embeddingModelConfigured": bool(self.embedding_model_name),
+            "databaseConfigured": self.database.configured,
+            "databaseReachable": self.database.health_check(),
+        }
+        retrieval = {
+            "indexedDocumentsAvailable": runtime["sources"] > 0,
             "textChunksLoaded": runtime["chunks"] > 0,
             "textIndexLoaded": runtime["vectorEmbeddings"] > 0,
             "embeddingsLoaded": runtime["embeddings"] > 0,
-            "databaseConfigured": self.database.configured,
-            "databaseReachable": self.database.health_check(),
+            "pendingReview": runtime["pendingReview"],
+            "state": "ready"
+            if runtime["chunks"] > 0 and runtime["vectorEmbeddings"] > 0
+            else "pending_review"
+            if runtime["pendingReview"] > 0
+            else "empty",
         }
         ready = all(checks.values())
         return ready, {
             "status": "ready" if ready else "not_ready",
             "service": "CircuitShelf",
             "checks": checks,
+            "retrieval": retrieval,
             "runtime": runtime,
         }

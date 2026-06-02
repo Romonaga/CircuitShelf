@@ -22,7 +22,15 @@ function formatDate(value?: string | null): string {
   return new Date(value).toLocaleString();
 }
 
-export function RecentWorkTable({ rows }: { rows: PerformanceWorkRun[] }) {
+export function RecentWorkTable({
+  rows,
+  showIndexChecks,
+  onShowIndexChecksChange
+}: {
+  rows: PerformanceWorkRun[];
+  showIndexChecks: boolean;
+  onShowIndexChecksChange: (value: boolean) => void;
+}) {
   return (
     <section className="performance-chart-card">
       <div className="performance-chart-heading">
@@ -30,7 +38,17 @@ export function RecentWorkTable({ rows }: { rows: PerformanceWorkRun[] }) {
           <h3>Recent work</h3>
           <p>Completed checks, document ingestion runs, and other measured work.</p>
         </div>
-        <span>{formatInteger(rows.length)} rows</span>
+        <div className="performance-heading-actions">
+          <label className="inline-checkbox">
+            <input
+              type="checkbox"
+              checked={showIndexChecks}
+              onChange={(event) => onShowIndexChecksChange(event.target.checked)}
+            />
+            Show index checks
+          </label>
+          <span>{formatInteger(rows.length)} rows</span>
+        </div>
       </div>
       <div className="table-wrap">
         <table className="data-table performance-work-table">

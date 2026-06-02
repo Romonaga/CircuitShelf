@@ -1,6 +1,7 @@
-import type { ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../types";
+import type { DatasheetIntelligence, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../types";
 import { formatInteger } from "../lib/format";
 import { maxChunkPreviewLimit } from "../hooks/useReviewQueue";
+import { DatasheetIntelligencePanel } from "./DatasheetIntelligencePanel";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { ReviewScopeBadge } from "./ReviewScopeBadge";
 import { SectionHeader } from "./SectionHeader";
@@ -16,6 +17,7 @@ export function ReviewDocumentDetail({
   chunks,
   detailBusy,
   images,
+  intelligence,
   reindexSelected,
   removeSelected,
   scopeAudit,
@@ -33,6 +35,7 @@ export function ReviewDocumentDetail({
   chunks: ReviewChunk[];
   detailBusy: boolean;
   images: ReviewImage[];
+  intelligence: DatasheetIntelligence | null;
   reindexSelected: () => void;
   removeSelected: () => void;
   scopeAudit: ReviewScopeAudit[];
@@ -95,6 +98,7 @@ export function ReviewDocumentDetail({
           <span>Loading review details...</span>
         </div>
       ) : null}
+      {!detailBusy ? <DatasheetIntelligencePanel intelligence={intelligence} /> : null}
       <ReviewImageSection images={images} selectedDocument={selectedDocument} detailBusy={detailBusy} />
       <ReviewScopeAuditSection rows={scopeAudit} />
       <ReviewChunkList chunks={chunks} detailBusy={detailBusy} />

@@ -9,7 +9,11 @@ class ImageRetrievalService:
 
     def search_top_images(self, question: str, top_n: int = 4) -> list[tuple[str, float]]:
         action_keywords = ["click", "enter", "select", "choose", "screen", "dashboard", "button", "setting"]
-        query_emb = self.embedder.encode([question], convert_to_numpy=True).astype("float32")
+        query_emb = self.embedder.encode(
+            [question],
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        ).astype("float32")
         results = []
 
         for row in self.image_store.search_images(query_emb[0], top_k=top_n * 2):

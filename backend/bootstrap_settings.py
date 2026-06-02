@@ -16,6 +16,9 @@ DEFAULT_APP_SETTINGS = [
     ("PDF_RENDER_ZOOM", 1.5, "Scale used when rendering visual PDF pages."),
     ("PDF_RENDER_RASTER_PAGES", True, "Render raster-heavy scanned PDF pages as searchable images."),
     ("PDF_RENDER_MIN_RASTER_COVERAGE", 0.8, "Minimum page image coverage before a PDF page is considered raster-heavy."),
+    ("PDF_EMBEDDED_IMAGE_OCR_MIN_WIDTH", 80, "Minimum embedded PDF image width queued for OCR."),
+    ("PDF_EMBEDDED_IMAGE_OCR_MIN_HEIGHT", 80, "Minimum embedded PDF image height queued for OCR."),
+    ("PDF_EMBEDDED_IMAGE_OCR_MIN_AREA", 6400, "Minimum embedded PDF image pixel area queued for OCR."),
     (
         "INGEST_OPENAI_ASSIST_ENABLED",
         False,

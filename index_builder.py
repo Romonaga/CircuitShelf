@@ -88,7 +88,12 @@ class IndexBuilder:
 
     def _encode(self, texts: list[str]) -> np.ndarray:
         batch_size = self.batch_size_resolver() if self.batch_size_resolver else self.config.get("EMBED_BATCH_SIZE", 32)
-        embeddings = self.embedder.encode(texts, batch_size=batch_size, convert_to_numpy=True)
+        embeddings = self.embedder.encode(
+            texts,
+            batch_size=batch_size,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        )
         embeddings = np.asarray(embeddings, dtype="float32")
         if embeddings.ndim != 2 or embeddings.shape[0] != len(texts):
             raise ValueError(f"Embedder returned invalid shape {embeddings.shape} for {len(texts)} texts.")

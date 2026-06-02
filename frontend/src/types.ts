@@ -621,6 +621,7 @@ export interface IngestWorkerBudget {
 
 export interface RuntimeBatchStatus {
   model?: string | null;
+  device?: string | null;
   configured: number;
   recommended: number;
   active: number;
@@ -637,6 +638,10 @@ export interface SystemResources {
   cpu?: {
     cores?: number;
     utilizationPercent?: number | null;
+    temperatureC?: number | null;
+    temperatureSensor?: string | null;
+    powerW?: number | null;
+    powerSensor?: string | null;
     loadAverage?: number[] | null;
   };
   memory?: {
@@ -662,11 +667,28 @@ export interface SystemResources {
     powerW?: number | null;
     error?: string | null;
   };
+  peaks?: {
+    cpuPercent?: number | null;
+    cpuTemperatureC?: number | null;
+    cpuPowerW?: number | null;
+    processCpuPercent?: number | null;
+    memoryUsedPercent?: number | null;
+    processMemoryBytes?: number | null;
+    processThreads?: number | null;
+    gpuPercent?: number | null;
+    gpuMemoryUsedPercent?: number | null;
+    gpuMemoryUsedMiB?: number | null;
+    gpuTemperatureC?: number | null;
+    gpuPowerW?: number | null;
+    activeDocumentWorkers?: number | null;
+  };
 }
 
 export interface PerformanceSample {
   sampledAt?: string | null;
   cpu?: number | null;
+  cpuTemperatureC?: number | null;
+  cpuPowerW?: number | null;
   processCpu?: number | null;
   processMemoryBytes?: number | null;
   processThreads?: number | null;

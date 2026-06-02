@@ -54,7 +54,7 @@ class Config:
             exit(1)
 
     def validate_rerank_profiles(self, profiles):
-        unused = [name for name, data in profiles.items() if not data.get("keywords")]
+        unused = [name for name, data in profiles.items() if name != "default" and not data.get("keywords")]
         if unused:
             self.trace_logger.warning(f"⚠️ RERANK_PROFILES missing keywords: {unused}")
         if "default" not in profiles:

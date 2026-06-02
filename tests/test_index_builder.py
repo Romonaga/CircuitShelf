@@ -21,7 +21,7 @@ class FakeChunker:
 
 
 class FakeEmbedder:
-    def encode(self, texts, batch_size=32, convert_to_numpy=True):
+    def encode(self, texts, batch_size=32, convert_to_numpy=True, normalize_embeddings=False):
         return np.array(
             [[float(len(text)), float(sum(ord(char) for char in text) % 97)] for text in texts],
             dtype="float32",
@@ -29,7 +29,7 @@ class FakeEmbedder:
 
 
 class BadShapeEmbedder:
-    def encode(self, texts, batch_size=32, convert_to_numpy=True):
+    def encode(self, texts, batch_size=32, convert_to_numpy=True, normalize_embeddings=False):
         return np.array([1.0, 2.0, 3.0], dtype="float32")
 
 

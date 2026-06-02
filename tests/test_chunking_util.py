@@ -117,6 +117,20 @@ class ChunkingUtilTests(unittest.TestCase):
         self.assertNotIn("SPQ L", joined)
         self.assertEqual(meta[0]["section"], "Pin Configuration and Functions")
 
+    def test_short_electronics_labels_are_not_treated_as_package_noise(self):
+        text = """
+        Pin labels
+        VCC GND
+        LED
+        OUT
+        """
+
+        cleaned = self.chunker.normalize_extracted_text(text)
+
+        self.assertIn("VCC GND", cleaned)
+        self.assertIn("LED", cleaned)
+        self.assertIn("OUT", cleaned)
+
     def test_package_outline_chunks_are_marked_low_value(self):
         meta = self.chunker.make_chunk_meta(
             ".228-.244 TYP [5.80-6.19] [1.75] [1.27] 8X .012-.020",

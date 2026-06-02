@@ -75,6 +75,24 @@ def review_image_payload(row: Any) -> dict:
     }
 
 
+def review_intelligence_payload(rows: list[dict], source: str, get_or_build_datasheet_intelligence: Callable[..., dict]) -> dict | None:
+    chunks = []
+    metadata = []
+    for row in rows:
+        chunks.append(row.get("chunk_text") or "")
+        metadata.append({
+            "source": source,
+            "parent_source": source,
+            "page": row.get("page_number"),
+            "section": row.get("section_title") or "Unknown",
+            "category": row.get("category") or "Uncategorized",
+            "source_image_id": row.get("source_image_key"),
+        })
+    if not chunks:
+        return None
+    return get_or_build_datasheet_intelligence(source, chunks, metadata)
+
+
 def scope_audit_payload(row: Any) -> dict:
     return {
         "id": int(row["id"]),
@@ -100,6 +118,7 @@ def create_router(
     refresh_active_state_from_db: Callable[[], int],
     reindex_review_source: Callable[[str], Any],
     remove_document_from_store: Callable[..., tuple[dict, int]],
+    get_or_build_datasheet_intelligence: Callable[..., dict],
 ) -> APIRouter:
     router = APIRouter()
 
@@ -138,14 +157,16 @@ def create_router(
             return error
         rows = vector_store.review_document_chunks(source, limit=max(1, min(int(limit), 500)))
         audit = vector_store.document_scope_audit(source, limit=25)
+        intelligence = review_intelligence_payload(rows, source, get_or_build_datasheet_intelligence)
         if not rows:
-            return {"document": source, "chunks": [], "scopeAudit": [scope_audit_payload(row) for row in audit]}
+            return {"document": source, "chunks": [], "scopeAudit": [scope_audit_payload(row) for row in audit], "intelligence": intelligence}
         return {
             "document": source,
             "displayName": rows[0]["display_name"],
             "status": rows[0]["status"],
             "chunks": [review_chunk_payload(row) for row in rows],
             "scopeAudit": [scope_audit_payload(row) for row in audit],
+            "intelligence": intelligence,
         }
 
     @router.get("/api/review/document/images")

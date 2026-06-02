@@ -11,8 +11,9 @@ def utc_now():
 
 
 class IngestProgressTracker:
-    def __init__(self, *, config):
+    def __init__(self, *, config, status_callback=None):
         self.config = config
+        self.status_callback = status_callback
         self.status = {
             "enabled": bool(config.get("INGEST_WATCH_ENABLED", True)),
             "running": False,
@@ -34,10 +35,21 @@ class IngestProgressTracker:
         self._worker_lock = threading.Lock()
         self._active_workers = 0
 
+    def _notify_status(self, status):
+        if not self.status_callback:
+            return
+        try:
+            self.status_callback(dict(status))
+        except Exception:
+            # Progress persistence must not destabilize ingestion.
+            return
+
     def set_status(self, **updates):
         with self._status_lock:
             self.status.update(updates)
-            return dict(self.status)
+            snapshot = dict(self.status)
+        self._notify_status(snapshot)
+        return snapshot
 
     def watch_interval_seconds(self) -> int:
         return max(30, int(self.config.get("INGEST_WATCH_INTERVAL_SECONDS", 300)))
@@ -94,14 +106,18 @@ class IngestProgressTracker:
                 self.status["processedFiles"] = int(self.status.get("processedFiles") or 0) + 1
             self.status["currentFiles"] = active_files
             self.status["fileProgress"] = {name: file_progress.get(name, {}) for name in active_files}
-            return dict(self.status)
+            snapshot = dict(self.status)
+        self._notify_status(snapshot)
+        return snapshot
 
     def update_detail(self, **updates):
         with self._status_lock:
             details = dict(self.status.get("details") or {})
             details.update({key: value for key, value in updates.items() if value is not None})
             self.status["details"] = details
-            return dict(self.status)
+            snapshot = dict(self.status)
+        self._notify_status(snapshot)
+        return snapshot
 
     def snapshot(self) -> dict:
         with self._status_lock:

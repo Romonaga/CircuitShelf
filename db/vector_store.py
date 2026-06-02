@@ -222,6 +222,7 @@ class VectorStore:
                         record.mtime_ns,
                         clean_db_text(record.sha256, None),
                         clean_db_text(status),
+                        None if stats.get("pageCount") is None else int(stats.get("pageCount") or 0),
                         int(stats.get("rawChunkCount", 0) or 0),
                         int(stats.get("chunkCount", 0) or 0),
                         int(stats.get("droppedChunkCount", 0) or 0),

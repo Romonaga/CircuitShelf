@@ -1,4 +1,4 @@
-import type { IngestStatus, IngestWorkerBudget } from "../types";
+import type { IngestStatus, IngestWorkerBudget, RuntimeBatches, RuntimeBatchStatus } from "../types";
 import { formatInteger } from "../lib/format";
 import { LoadingSpinner } from "./LoadingSpinner";
 
@@ -9,6 +9,33 @@ function fileListSummary(files?: string[]): string {
   const visible = files.slice(0, 3).join(", ");
   const hidden = files.length - 3;
   return hidden > 0 ? `${visible}, +${formatInteger(hidden)} more` : visible;
+}
+
+function batchSummary(batch?: RuntimeBatchStatus): string {
+  if (!batch) {
+    return "n/a";
+  }
+  const device = batch.device ? `${batch.device} ` : "";
+  const mode = batch.auto ? "auto" : "manual";
+  return `${device}${formatInteger(batch.active)} active | ${formatInteger(batch.recommended)} rec | ${formatInteger(batch.configured)} cfg | ${mode}`;
+}
+
+function batchBrief(batch?: RuntimeBatchStatus): string {
+  if (!batch) {
+    return "n/a";
+  }
+  const device = batch.device ? `${batch.device.toUpperCase()} ` : "";
+  return `${device}${formatInteger(batch.active)} active`;
+}
+
+function compactInteger(value: string | number | boolean | null | undefined): string {
+  if (typeof value !== "number") {
+    return formatDetailValue(value);
+  }
+  return new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: value >= 10_000 ? 1 : 0
+  }).format(value);
 }
 
 function formatDateTime(value?: string | null): string {
@@ -70,8 +97,10 @@ function formatDetailLabel(key: string): string {
     extractedImages: "Extracted images",
     totalImagesToSave: "Images to save",
     savedImages: "Saved images",
-    skippedImages: "Skipped images",
-    imageCandidates: "Indexed image OCR",
+    skippedImages: "Skipped image assets",
+    imageCandidates: "Queued image OCR",
+    skippedImageCandidates: "Tiny/invalid images",
+    duplicateImageCandidates: "Duplicate image refs",
     storedImages: "Stored images",
     indexedImageTexts: "Indexed image texts",
     imageEmbeddingTexts: "Embedded image texts",
@@ -116,7 +145,20 @@ function imageProgress(progress: Record<string, string | number | boolean | null
   if (saved !== undefined && total !== undefined) {
     return `${formatDetailValue(saved)} / ${formatDetailValue(total)}`;
   }
-  return formatDetailValue(progress.imageCandidates);
+  const queued = progress.imageCandidates;
+  const skipped = progress.skippedImageCandidates;
+  const duplicates = progress.duplicateImageCandidates;
+  if (queued !== undefined && (skipped !== undefined || duplicates !== undefined)) {
+    const parts = [`Q ${compactInteger(queued)}`];
+    if (skipped !== undefined) {
+      parts.push(`tiny ${compactInteger(skipped)}`);
+    }
+    if (duplicates !== undefined) {
+      parts.push(`dup ${compactInteger(duplicates)}`);
+    }
+    return parts.join(" | ");
+  }
+  return formatDetailValue(queued);
 }
 
 function chunkProgress(progress: Record<string, string | number | boolean | null | undefined>): string {
@@ -186,11 +228,13 @@ function compactPhase(progress: Record<string, string | number | boolean | null 
 export function IngestStatusPanel({
   ingest,
   workerBudget,
+  runtimeBatches,
   pendingReview,
   onOpenReview
 }: {
   ingest?: IngestStatus | null;
   workerBudget?: IngestWorkerBudget | null;
+  runtimeBatches?: RuntimeBatches | null;
   pendingReview?: number;
   onOpenReview?: () => void;
 }) {
@@ -240,6 +284,8 @@ export function IngestStatusPanel({
           <span><small>Reserved</small><strong>{formatInteger(workerBudget.reservedCores)}</strong></span>
           <span><small>Usable</small><strong>{formatInteger(workerBudget.usableCores)}</strong></span>
           <span><small>Doc workers</small><strong>{formatInteger(workerBudget.activeDocumentWorkers)}</strong></span>
+          <span><small>Embed CUDA</small><strong title={batchSummary(runtimeBatches?.embedding)}>{batchBrief(runtimeBatches?.embedding)}</strong></span>
+          <span><small>Rerank CUDA</small><strong title={batchSummary(runtimeBatches?.reranker)}>{batchBrief(runtimeBatches?.reranker)}</strong></span>
         </div>
       ) : null}
       {isRunning && totalFiles ? (

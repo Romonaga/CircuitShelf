@@ -102,6 +102,7 @@ class ImageStateService:
                 [image_text[key] for key in image_ids],
                 batch_size=self.effective_embedding_batch_size(),
                 convert_to_numpy=True,
+                normalize_embeddings=True,
             ).astype("float32")
             image_embeddings = {key: encoded[idx] for idx, key in enumerate(image_ids)}
             if not progress_file:
@@ -163,6 +164,7 @@ class ImageStateService:
             [row["embedding_text"] for row in missing],
             batch_size=self.effective_embedding_batch_size(),
             convert_to_numpy=True,
+            normalize_embeddings=True,
         ).astype("float32")
         self.image_store.update_embeddings(
             {row["image_key"]: encoded[idx] for idx, row in enumerate(missing)},

@@ -190,7 +190,11 @@ class RagService:
         all_hits = []
         vector_start = time.time()
         for synonym in synonyms:
-            embedding = self.embedder.encode([synonym], convert_to_numpy=True).astype("float32")
+            embedding = self.embedder.encode(
+                [synonym],
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+            ).astype("float32")
             vector_results = self.vector_store.search_chunks(embedding[0], top_k=top_k, entity_id=entity_id)
             for index, distance in self.runtime_chunk_mapper.vector_results_to_hits(vector_results):
                 adjusted = distance * (1 + 0.1 * (1 - len(self.state.chunks[index]) / 500))

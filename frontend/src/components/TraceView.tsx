@@ -2,12 +2,15 @@ import { useEffect, useState } from "react";
 import { getTrace } from "../api";
 import { errorMessage } from "../lib/errors";
 import { formatObject } from "../lib/format";
+import { useLogTail } from "../hooks/useLogTail";
 import { ErrorMessage } from "./ErrorMessage";
+import { LogTailPanel } from "./LogTailPanel";
 import { SectionHeader } from "./SectionHeader";
 
-export function TraceView() {
+export function TraceView({ isActive, isAdmin }: { isActive: boolean; isAdmin: boolean }) {
   const [trace, setTrace] = useState<Record<string, unknown>>({});
   const [error, setError] = useState("");
+  const logTail = useLogTail(isActive && isAdmin);
 
   async function refresh() {
     setError("");
@@ -35,6 +38,7 @@ export function TraceView() {
       />
       <ErrorMessage message={error} />
       <pre className="json-view">{formatObject(trace)}</pre>
+      {isAdmin ? <LogTailPanel tail={logTail.tail} loading={logTail.loading} error={logTail.error} onRefresh={logTail.refresh} /> : null}
     </section>
   );
 }

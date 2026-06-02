@@ -15,6 +15,7 @@ PDF_RENDER_MIN_DRAWINGS: 100
 PDF_RENDER_ZOOM: 1.5
 PDF_RENDER_RASTER_PAGES: true
 PDF_RENDER_MIN_RASTER_COVERAGE: 0.8
+PDF_RENDER_OCR_PAGES: true
 USE_ADAPTIVE_CHUNKING: false
 ENABLE_MATH_HEAVY_CHUNKING: false
 ENABLE_TOKEN_NORMALIZATION: false
@@ -32,6 +33,7 @@ SERVER_PID_FILE: "data/circuitshelf.pid"
 
 EMBED_MODEL_NAME: "sentence-transformers/all-mpnet-base-v2"
 CROSS_ENCODER_MODEL: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+MODEL_DEVICE: auto
 
 LLM_MODEL_NAME: "electronics-helper:latest"
 LLM_MODEL_OPTIONS:
@@ -100,6 +102,9 @@ MIN_CHUNK_QUALITY: 0.15
 MIN_ACCEPTED_SCORE: 0.25
 RERANK_FALLBACK_TOP_K: 8
 EMBED_BATCH_SIZE: 16
+EMBED_BATCH_AUTO: true
+RERANK_BATCH_SIZE: 32
+RERANK_BATCH_AUTO: true
 
 PROMPT_SECURITY:
   BANNED_PHRASES:
@@ -128,45 +133,62 @@ QUERY_SYNONYMS:
 RERANK_PROFILES:
   default:
     weight_vector: 0.4
-    weight_rerank: 0.8
+    weight_rerank: 0.6
+    keywords: []
+  wiring:
+    weight_vector: 0.3
+    weight_rerank: 0.65
     keywords:
-      - pin
-      - wiring
-      - circuit
+      - breadboard
+      - build
+      - connect
+      - diagram
+      - parts
+      - pin to pin
+      - pin-to-pin
+      - project
       - schematic
-      - datasheet
-      - diagram
-      - application
-      - typical
-      - absolute maximum
-      - electrical characteristics
-      - 555
-      - timer
-  technical:
-    weight_vector: 0.6
-    weight_rerank: 0.4
+      - wire
+      - wiring
+  datasheet:
+    weight_vector: 0.45
+    weight_rerank: 0.5
     keywords:
-      - pinout
-      - voltage
+      - absolute maximum
       - current
-      - resistor
-      - capacitor
-      - transistor
-      - oscillator
-      - diagram
+      - data sheet
+      - datasheet
+      - electrical characteristics
+      - package
+      - pin
+      - pinout
+      - supply
+      - vcc
+      - vdd
+      - voltage
+  timing_math:
+    weight_vector: 0.5
+    weight_rerank: 0.45
+    keywords:
       - 555
-      - timer
+      - calculate
+      - duty cycle
       - equation
       - formula
+      - frequency
+      - oscillator
+      - period
+      - timer
       - timing
   summary:
-    weight_vector: 0.3
+    weight_vector: 0.25
     weight_rerank: 0.7
     keywords:
+      - explain
       - overview
       - purpose
       - summary
-      - goal
+      - what is
 
 CHUNK_CATEGORIES:
   HIGH_LEVEL_DETAIL:
@@ -252,5 +274,8 @@ OCR_MIN_CONFIDENCE: 25
 OCR_MIN_IMAGE_WIDTH: 20
 OCR_MIN_IMAGE_HEIGHT: 20
 OCR_MIN_IMAGE_AREA: 900
+PDF_EMBEDDED_IMAGE_OCR_MIN_WIDTH: 80
+PDF_EMBEDDED_IMAGE_OCR_MIN_HEIGHT: 80
+PDF_EMBEDDED_IMAGE_OCR_MIN_AREA: 6400
 OCR_MIN_IMAGE_CONTRAST: 0.0
 OCR_INDEX_TEXT_MIN_CHARS: 80

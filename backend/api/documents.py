@@ -5,6 +5,8 @@ import uuid
 from collections import OrderedDict
 from typing import Any
 
+from collections.abc import Callable
+
 from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
@@ -25,6 +27,10 @@ def safe_upload_filename(filename: str, supported_extensions: set[str]) -> str:
     return name
 
 
+def upload_display_name(filename: str | None) -> str:
+    return str(filename or "").strip() or "(unnamed file)"
+
+
 async def write_uploaded_documents(files: list[UploadFile], overwrite: bool, training_dir: str, supported_extensions: set[str]) -> dict:
     if not files:
         raise ValueError("Upload must include at least one file.")
@@ -39,9 +45,15 @@ async def write_uploaded_documents(files: list[UploadFile], overwrite: bool, tra
 
     try:
         for file in files:
-            filename = safe_upload_filename(file.filename or "", supported_extensions)
+            display_name = upload_display_name(file.filename)
+            try:
+                filename = safe_upload_filename(file.filename or "", supported_extensions)
+            except ValueError as exc:
+                skipped.append({"filename": display_name, "reason": str(exc)})
+                continue
+
             if filename in seen_names:
-                skipped.append({"filename": filename, "reason": "duplicate selection"})
+                skipped.append({"filename": display_name, "reason": f"duplicate file name: {filename}"})
                 continue
             seen_names.add(filename)
 
@@ -66,7 +78,10 @@ async def write_uploaded_documents(files: list[UploadFile], overwrite: bool, tra
                     bytes_written += len(chunk)
                     out_file.write(chunk)
             if bytes_written <= 0:
-                raise ValueError(f"Uploaded file was empty: {filename}")
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                skipped.append({"filename": filename, "reason": "empty file"})
+                continue
             uploaded.append({
                 "filename": filename,
                 "destination": destination,
@@ -99,13 +114,13 @@ def create_router(
     image_store: Any,
     state: Any,
     trace_logger: Any,
-    start_index_check: Callable[[str], dict],
+    start_index_check: Callable[..., dict],
     image_asset_belongs_to_document: Callable[[str, str], bool],
     extract_page_number: Callable[[str], int | None],
     document_source_from_metadata: Callable[[str, dict], str],
     source_image_id_from_metadata: Callable[[str, dict], str | None],
     extract_pinout_map: Callable[[list, list, str], dict],
-    get_or_build_datasheet_intelligence: Callable[[str], dict],
+    get_or_build_datasheet_intelligence: Callable[..., dict],
     display_source_name: Callable[[str], str],
 ) -> APIRouter:
     router = APIRouter()
@@ -121,6 +136,8 @@ def create_router(
         image_captions = state.get_image_captions()
         image_text = state.get_image_page_text()
         image_mime_types = state.get_image_mime_types()
+        intelligence_chunks = []
+        intelligence_metadata = []
 
         for image_id, image_base64 in sorted(image_store_payload.items()):
             if not image_asset_belongs_to_document(image_id, doc_name):
@@ -144,6 +161,8 @@ def create_router(
             if doc_source != doc_name:
                 continue
             text = chunks[idx] if idx < len(chunks) else ""
+            intelligence_chunks.append(text)
+            intelligence_metadata.append({**meta, "source": doc_name, "parent_source": doc_name})
             row = {
                 "index": idx,
                 "section": meta.get("section", "Unknown"),
@@ -158,14 +177,21 @@ def create_router(
             if page is not None:
                 pages.setdefault(page, {"page": page, "chunks": [], "images": []})["chunks"].append(row)
 
-        pinout_chunks = list(chunks)
-        pinout_metadata = list(metadata)
+        pinout_chunks = list(intelligence_chunks)
+        pinout_metadata = list(intelligence_metadata)
         for image in image_assets:
             if image.get("ocrText"):
                 pinout_chunks.append(image["ocrText"])
-                pinout_metadata.append({"source": doc_name, "page": image.get("page")})
+                pinout_metadata.append({
+                    "source": doc_name,
+                    "parent_source": doc_name,
+                    "page": image.get("page"),
+                    "source_image_id": image.get("imageKey"),
+                    "section": "Image OCR",
+                    "category": "ocr",
+                })
         pinout = extract_pinout_map(pinout_chunks, pinout_metadata, doc_name)
-        intelligence = get_or_build_datasheet_intelligence(doc_name)
+        intelligence = get_or_build_datasheet_intelligence(doc_name, pinout_chunks, pinout_metadata)
         return {
             "document": doc_name,
             "displayName": display_source_name(doc_name),
@@ -228,6 +254,7 @@ def create_router(
         file: UploadFile = File(...),
         overwrite: bool = Query(False),
         scope: str = Query("entity"),
+        defer_index: bool = Query(False),
     ):
         entity_id = None
         created_by_user_id = None
@@ -262,7 +289,11 @@ def create_router(
                 created_by_user_id=created_by_user_id,
             )
         filename = uploaded_files[0]["filename"] if uploaded_files else ""
-        index_job = start_index_check(f"upload:{filename}") if uploaded_files else {"started": False}
+        index_job = (
+            start_index_check(f"upload:{filename}", requested_by_user_id=created_by_user_id)
+            if uploaded_files and not defer_index
+            else {"started": False, "deferred": bool(uploaded_files)}
+        )
         return {
             "ok": True,
             "filename": filename,
@@ -280,6 +311,7 @@ def create_router(
         files: list[UploadFile] = File(...),
         overwrite: bool = Query(False),
         scope: str = Query("entity"),
+        defer_index: bool = Query(False),
     ):
         entity_id = None
         created_by_user_id = None
@@ -314,7 +346,11 @@ def create_router(
                 created_by_user_id=created_by_user_id,
             )
         reason = f"upload-batch:{len(uploaded_files)}"
-        index_job = start_index_check(reason) if uploaded_files else {"started": False}
+        index_job = (
+            start_index_check(reason, requested_by_user_id=created_by_user_id)
+            if uploaded_files and not defer_index
+            else {"started": False, "deferred": bool(uploaded_files)}
+        )
         return {
             "ok": True,
             "files": uploaded_files,

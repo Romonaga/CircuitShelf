@@ -21,21 +21,30 @@ class OcrResult:
 
 def should_skip_image(image: Image.Image, config: dict[str, Any]) -> tuple[bool, str]:
     width, height = image.size
-    min_width = int(config.get("OCR_MIN_IMAGE_WIDTH", 20))
-    min_height = int(config.get("OCR_MIN_IMAGE_HEIGHT", 20))
-    min_area = int(config.get("OCR_MIN_IMAGE_AREA", 900))
-    min_contrast = float(config.get("OCR_MIN_IMAGE_CONTRAST", 0.0))
+    skip, reason = should_skip_image_dimensions(width, height, config)
+    if skip:
+        return skip, reason
 
-    if width < min_width or height < min_height:
-        return True, f"image too small ({width}x{height})"
-    if width * height < min_area:
-        return True, f"image area too small ({width * height})"
+    min_contrast = float(config.get("OCR_MIN_IMAGE_CONTRAST", 0.0))
 
     if min_contrast > 0:
         grayscale = image.convert("L")
         contrast = ImageStat.Stat(grayscale).stddev[0]
         if contrast < min_contrast:
             return True, f"image contrast too low ({contrast:.2f})"
+
+    return False, ""
+
+
+def should_skip_image_dimensions(width: int, height: int, config: dict[str, Any]) -> tuple[bool, str]:
+    min_width = int(config.get("OCR_MIN_IMAGE_WIDTH", 20))
+    min_height = int(config.get("OCR_MIN_IMAGE_HEIGHT", 20))
+    min_area = int(config.get("OCR_MIN_IMAGE_AREA", 900))
+
+    if width < min_width or height < min_height:
+        return True, f"image too small ({width}x{height})"
+    if width * height < min_area:
+        return True, f"image area too small ({width * height})"
 
     return False, ""
 

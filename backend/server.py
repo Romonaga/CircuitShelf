@@ -4,7 +4,7 @@ import os
 from typing import Any
 
 import uvicorn
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 
@@ -26,8 +26,10 @@ def mount_react_app(app: Any, *, react_dist_dir: str, logger: Any = None) -> Non
 
     @app.get("/{full_path:path}")
     async def react_spa(full_path: str):
-        if full_path.startswith("api/") or full_path.startswith("assets/"):
-            return {"error": "Not found"}
+        if full_path.startswith("api/"):
+            return Response("Not found", status_code=404, media_type="text/plain")
+        if full_path.startswith("assets/"):
+            return Response("Asset not found; refresh the application.", status_code=404, media_type="text/plain")
         return FileResponse(index_html, headers=index_headers)
 
 

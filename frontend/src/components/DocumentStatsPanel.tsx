@@ -58,21 +58,6 @@ export function DocumentStatsPanel({ detail }: { detail: DocumentDetail | null }
           {detail.intelligence.summary ? <p>{detail.intelligence.summary}</p> : null}
         </div>
       ) : null}
-
-      {pinCount ? (
-        <details className="document-pinout-details">
-          <summary>Detected pinout ({formatInteger(pinCount)})</summary>
-          <div className="document-pinout-grid">
-            {detail.pinout.pins.map((pin) => (
-              <div key={pin.pin} className="document-pin-card">
-                <span>Pin {pin.pin}</span>
-                <strong>{pin.function}</strong>
-                {pin.page ? <small>Page {pin.page}</small> : null}
-              </div>
-            ))}
-          </div>
-        </details>
-      ) : null}
     </div>
   );
 }

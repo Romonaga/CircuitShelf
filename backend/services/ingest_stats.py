@@ -27,6 +27,22 @@ def count_state_chunks_by_document(target_state, *, vector_store) -> dict[str, i
     return counts
 
 
+def count_state_pages_by_document(target_state, *, vector_store) -> dict[str, int]:
+    counts = {}
+    sources = target_state.get_sources()
+    metadata = target_state.get_metadata()
+    for idx, source in enumerate(sources):
+        meta = metadata[idx] if idx < len(metadata) else {}
+        rel_path = vector_store.rel_path_for_source(source, meta)
+        try:
+            page = int(meta.get("page") or 0)
+        except (TypeError, ValueError):
+            page = 0
+        if page > 0:
+            counts[rel_path] = max(counts.get(rel_path, 0), page)
+    return counts
+
+
 def count_state_images_by_document(
     image_keys,
     rel_paths,
@@ -54,6 +70,7 @@ def collect_document_ingest_stats(
 ) -> dict[str, dict]:
     rel_paths = list(rel_paths or [])
     kept_chunk_counts = count_state_chunks_by_document(target_state, vector_store=vector_store)
+    page_counts = count_state_pages_by_document(target_state, vector_store=vector_store)
     indexed_image_counts = count_state_images_by_document(
         target_state.get_image_id_list(),
         rel_paths,
@@ -77,6 +94,7 @@ def collect_document_ingest_stats(
         kept_chunks = int(kept_chunk_counts.get(rel_path, 0) or 0)
         stats[rel_path] = {
             "rawChunkCount": raw_chunks,
+            "pageCount": int(page_counts.get(rel_path, 0) or 0) or None,
             "chunkCount": kept_chunks,
             "droppedChunkCount": max(raw_chunks - kept_chunks, 0),
             "extractedImageCount": int(raw_image_counts.get(rel_path, 0) or 0),

@@ -1,5 +1,5 @@
 import type { DatasheetFact, DatasheetIntelligence } from "../types";
-import { formatNumber } from "../lib/format";
+import { formatInteger, formatNumber } from "../lib/format";
 
 const FACT_LABELS: Record<string, string> = {
   voltage: "Voltage",
@@ -26,6 +26,7 @@ export function DatasheetIntelligencePanel({ intelligence }: { intelligence?: Da
   }
 
   const groups = groupFacts(intelligence.facts ?? []);
+  const pins = intelligence.pinout?.pins ?? [];
 
   return (
     <div className="intelligence-panel">
@@ -38,6 +39,21 @@ export function DatasheetIntelligencePanel({ intelligence }: { intelligence?: Da
         </div>
       </div>
       {intelligence.summary ? <p className="intelligence-summary">{intelligence.summary}</p> : null}
+      {pins.length ? (
+        <section className="intelligence-pinout">
+          <h4>Detected pinout ({formatInteger(pins.length)})</h4>
+          <div className="document-pinout-grid">
+            {pins.map((pin) => (
+              <div key={`${pin.pin}-${pin.function}`} className="document-pin-card">
+                <span>Pin {pin.pin}</span>
+                <strong>{pin.function || pin.label}</strong>
+                {pin.label && pin.label !== pin.function ? <small>{pin.label}</small> : null}
+                {pin.page ? <small>Page {pin.page}</small> : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <div className="intelligence-facts">
         {groups.map((group) => (
           <section key={group.type}>

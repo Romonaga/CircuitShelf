@@ -43,6 +43,7 @@ export function ReviewView({
         chunks={review.chunks}
         detailBusy={review.detailBusy}
         images={review.images}
+        intelligence={review.intelligence}
         reindexSelected={review.reindexSelected}
         removeSelected={review.removeSelected}
         scopeAudit={review.scopeAudit}

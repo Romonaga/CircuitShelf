@@ -1,27 +1,35 @@
 from sentence_transformers import CrossEncoder
 
+
 class Reranker:
-    def __init__(self, config, state, chunker, trace_logger):
+    def __init__(self, config, state, chunker, trace_logger, *, device=None, batch_size_resolver=None):
         self.config = config
         self.state = state
         self.chunker = chunker
         self.trace_logger = trace_logger
+        self.device = device
+        self.batch_size_resolver = batch_size_resolver
 
         self.rerank_profiles = config.get("RERANK_PROFILES")
         self.model_name = config.get("CROSS_ENCODER_MODEL")
-        self.cross_encoder = CrossEncoder(self.model_name)
-        
-  
+        self.cross_encoder = CrossEncoder(self.model_name, device=device)
 
     def rerank_chunks(self, dedup_hits, question):
+        if not dedup_hits:
+            return [], "0.00", "default"
+
         chunks = self.state.get_chunks()
         texts = [chunks[i] for i, _ in dedup_hits]
 
-       
         combined_inputs = [[question, t] for t in texts]
-        
-        # Predict CrossEncoder (reranker) scores
-        raw_scores = self.cross_encoder.predict(combined_inputs).tolist()
+
+        batch_size = self.effective_batch_size()
+        raw_scores = self.cross_encoder.predict(
+            combined_inputs,
+            batch_size=batch_size,
+            show_progress_bar=False,
+            device=self.device,
+        ).tolist()
         scores = self.normalize_rerank_scores(raw_scores)
 
         # Fuse vector-distance and reranker scores.
@@ -70,15 +78,15 @@ class Reranker:
     def fuse_scores_with_ranks(self, vector_hits, rerank_scores, question):
         q_lower = str(question).lower()
         profile = "default"
-        for pname, pdata in self.rerank_profiles.items():
+        profiles = self.rerank_profiles or {}
+        for pname, pdata in profiles.items():
             keywords = [str(kw).lower() for kw in pdata.get("keywords", [])]
             if any(kw in q_lower for kw in keywords):
                 profile = pname
                 break
 
-        weights = self.rerank_profiles.get(profile, self.rerank_profiles["default"])
-        w_vector = weights.get("weight_vector", 0.4)
-        w_rerank = weights.get("weight_rerank", 0.6)
+        weights = profiles.get(profile) or profiles.get("default") or {}
+        w_vector, w_rerank = self.normalized_weights(weights)
 
         vector_scores = [1.0 - min(d / 15.0, 1.0) for _, d in vector_hits]
         fused = []
@@ -88,6 +96,20 @@ class Reranker:
 
         fused.sort(key=lambda x: x[3], reverse=True)
         return fused, profile
+
+    def effective_batch_size(self):
+        if self.batch_size_resolver:
+            return max(1, int(self.batch_size_resolver()))
+        return max(1, int(self.config.get("RERANK_BATCH_SIZE", 32)))
+
+    @staticmethod
+    def normalized_weights(weights):
+        vector = float(weights.get("weight_vector", 0.4))
+        rerank = float(weights.get("weight_rerank", 0.6))
+        total = vector + rerank
+        if total <= 0:
+            return 0.4, 0.6
+        return vector / total, rerank / total
 
     def build_chunk_payload(self, selected_hits):
         chunks = self.state.get_chunks()

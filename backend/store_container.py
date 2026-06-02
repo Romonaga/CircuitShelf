@@ -9,6 +9,7 @@ from db.conversation_store import ConversationStore
 from db.datasheet_intelligence_store import DatasheetIntelligenceStore
 from db.entities import EntityStore
 from db.image_store import ImageStore
+from db.ingest_jobs import IngestJobStore
 from db.lab_inventory import LabInventoryStore, ProjectFinderStore
 from db.performance_store import PerformanceStore
 from db.query_log_store import QueryLogStore
@@ -39,6 +40,7 @@ class StoreContainer:
     lab_inventory_store: LabInventoryStore
     project_finder_store: ProjectFinderStore
     db_response_cache: PostgresResponseCache
+    ingest_job_store: IngestJobStore
 
     def assert_available(self) -> None:
         checks = [
@@ -51,6 +53,7 @@ class StoreContainer:
             (self.assembly_plan_store, "Postgres assembly plan store"),
             (self.user_preferences_store, "Postgres user preferences store"),
             (self.lab_inventory_store, "Postgres lab inventory store"),
+            (self.ingest_job_store, "Postgres ingest job store"),
         ]
         for store, label in checks:
             if not store.available():
@@ -84,4 +87,5 @@ def create_store_container(*, database, config, trace_logger) -> StoreContainer:
             capacity=config.get("RESPONSE_CACHE_CAPACITY", 200),
             logger=trace_logger,
         ),
+        ingest_job_store=IngestJobStore(database, trace_logger),
     )

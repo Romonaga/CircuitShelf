@@ -1,5 +1,8 @@
+import { lazy, Suspense } from "react";
 import type { StatusHistoryPoint } from "../hooks/useStatusHistory";
 import { formatNumber } from "../lib/format";
+
+const EChartsLineChart = lazy(() => import("./EChartsLineChart").then((module) => ({ default: module.EChartsLineChart })));
 
 export interface ChartSeries {
   key: keyof StatusHistoryPoint;
@@ -15,28 +18,8 @@ function numericValues(history: StatusHistoryPoint[], series: ChartSeries[]) {
   );
 }
 
-function pathForSeries(
-  history: StatusHistoryPoint[],
-  series: ChartSeries,
-  min: number,
-  max: number,
-  width: number,
-  height: number
-) {
-  const values = history
-    .map((point, index) => ({ index, value: point[series.key] }))
-    .filter((point): point is { index: number; value: number } => typeof point.value === "number" && Number.isFinite(point.value));
-  if (!values.length) {
-    return "";
-  }
-  const denominator = Math.max(max - min, 1);
-  return values
-    .map(({ index, value }, pathIndex) => {
-      const x = history.length <= 1 ? 0 : (index / (history.length - 1)) * width;
-      const y = height - ((value - min) / denominator) * height;
-      return `${pathIndex === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
+function formatTooltipDate(value: number) {
+  return new Date(value).toLocaleString();
 }
 
 export function PerformanceChart({
@@ -46,6 +29,7 @@ export function PerformanceChart({
   series,
   fixedMin,
   fixedMax,
+  topPaddingRatio = fixedMax === 100 ? 0.25 : 0.06,
   unit = ""
 }: {
   title: string;
@@ -54,14 +38,17 @@ export function PerformanceChart({
   series: ChartSeries[];
   fixedMin?: number;
   fixedMax?: number;
+  topPaddingRatio?: number;
   unit?: string;
 }) {
-  const width = 760;
-  const height = 250;
   const values = numericValues(history, series);
   const min = fixedMin ?? Math.min(0, ...values);
   const rawMax = fixedMax ?? Math.max(10, ...values);
-  const max = rawMax === min ? min + 1 : rawMax;
+  const range = rawMax - min;
+  const paddedMax = rawMax + Math.max(range || 1, 1) * topPaddingRatio;
+  const max = rawMax === min ? min + 1 : paddedMax;
+  const labelMax = fixedMax === 100 && unit === "%" ? 100 : undefined;
+  const ceiling = labelMax === 100 ? 100 : undefined;
   const latest = history[history.length - 1];
 
   return (
@@ -73,20 +60,18 @@ export function PerformanceChart({
         </div>
         <span>{history.length} samples</span>
       </div>
-      <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
-        {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
-          <g key={ratio}>
-            <line x1="0" x2={width} y1={height * ratio} y2={height * ratio} />
-            <text x="0" y={Math.max(11, height * ratio - 5)}>
-              {formatNumber(max - (max - min) * ratio)}{unit}
-            </text>
-          </g>
-        ))}
-        {series.map((item) => {
-          const path = pathForSeries(history, item, min, max, width, height);
-          return path ? <path key={item.label} d={path} stroke={item.color} /> : null;
-        })}
-      </svg>
+      <Suspense fallback={<div className="performance-echart loading-chart">Loading chart...</div>}>
+        <EChartsLineChart
+          title={title}
+          history={history}
+          series={series}
+          min={min}
+          max={max}
+          unit={unit}
+          labelMax={labelMax}
+          ceiling={ceiling}
+        />
+      </Suspense>
       <div className="chart-legend">
         {series.map((item) => (
           <span key={item.label}>
@@ -95,6 +80,7 @@ export function PerformanceChart({
             <strong>{latest ? formatNumber(latest[item.key] as number | null) : "n/a"}{unit}</strong>
           </span>
         ))}
+        {latest ? <small className="chart-latest-time">Latest {formatTooltipDate(latest.sampledAt)}</small> : null}
       </div>
     </section>
   );

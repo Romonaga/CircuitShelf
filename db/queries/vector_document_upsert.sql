@@ -6,6 +6,7 @@ INSERT INTO documents (
     mtime_ns,
     sha256,
     status,
+    page_count,
     raw_chunk_count,
     chunk_count,
     dropped_chunk_count,
@@ -18,7 +19,7 @@ INSERT INTO documents (
     last_ingested_at,
     last_error
 )
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), NULL)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), NULL)
 ON CONFLICT (source_path) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     file_extension = EXCLUDED.file_extension,
@@ -26,6 +27,7 @@ ON CONFLICT (source_path) DO UPDATE SET
     mtime_ns = EXCLUDED.mtime_ns,
     sha256 = EXCLUDED.sha256,
     status = EXCLUDED.status,
+    page_count = EXCLUDED.page_count,
     raw_chunk_count = EXCLUDED.raw_chunk_count,
     chunk_count = EXCLUDED.chunk_count,
     dropped_chunk_count = EXCLUDED.dropped_chunk_count,

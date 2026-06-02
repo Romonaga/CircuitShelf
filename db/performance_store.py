@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import threading
 import time
 from datetime import datetime, timezone
@@ -25,7 +26,7 @@ class PerformanceStore:
             return False
         try:
             with self.database.connection() as conn:
-                conn.execute(load_query("performance_resource_samples_recent.sql"), (1, 1))
+                conn.execute(load_query("performance_resource_samples_recent.sql"), (3600, 3600, 1, 1))
             return True
         except UndefinedTable:
             return False
@@ -58,6 +59,8 @@ class PerformanceStore:
                     load_query("performance_resource_sample_insert.sql"),
                     (
                         self._optional_float(cpu.get("utilizationPercent")),
+                        self._optional_float(cpu.get("temperatureC")),
+                        self._optional_float(cpu.get("powerW")),
                         self._optional_float(process.get("cpuPercent")),
                         self._optional_int(process.get("memoryBytes")),
                         self._optional_int(process.get("threads")),
@@ -142,9 +145,10 @@ class PerformanceStore:
             return {"samples": [], "recentWork": [], "available": False}
         try:
             with self.database.connection() as conn:
+                bucket_seconds = self._bucket_seconds(hours=max(1, int(hours)), sample_limit=max(1, int(sample_limit)))
                 sample_rows = conn.execute(
                     load_query("performance_resource_samples_recent.sql"),
-                    (max(1, int(hours)), max(1, int(sample_limit))),
+                    (bucket_seconds, bucket_seconds, max(1, int(hours)), max(1, int(sample_limit))),
                 ).fetchall()
                 work_rows = conn.execute(
                     load_query("performance_work_runs_recent.sql"),
@@ -161,10 +165,17 @@ class PerformanceStore:
             return {"samples": [], "recentWork": [], "available": False, "error": str(exc)}
 
     @staticmethod
+    def _bucket_seconds(*, hours: int, sample_limit: int) -> int:
+        window_seconds = max(1, int(hours)) * 3600
+        return max(1, int(math.ceil(window_seconds / max(1, int(sample_limit)))))
+
+    @staticmethod
     def _sample_row(row: dict[str, Any]) -> dict[str, Any]:
         return {
             "sampledAt": row["sampled_at"].isoformat() if row.get("sampled_at") else None,
             "cpu": PerformanceStore._optional_float(row.get("cpu_percent")),
+            "cpuTemperatureC": PerformanceStore._optional_float(row.get("cpu_temperature_c")),
+            "cpuPowerW": PerformanceStore._optional_float(row.get("cpu_power_w")),
             "processCpu": PerformanceStore._optional_float(row.get("process_cpu_percent")),
             "processMemoryBytes": PerformanceStore._optional_int(row.get("process_memory_bytes")),
             "processThreads": PerformanceStore._optional_int(row.get("process_threads")),

@@ -43,7 +43,12 @@ export function StatusView({
       <pre className="json-view">{formatObject(status?.cacheStats)}</pre>
       <RuntimeBatchPanel batches={status?.runtimeBatches} />
       <h3>Ingestion</h3>
-      <IngestStatusPanel ingest={status?.ingest} workerBudget={status?.ingestWorkerBudget} pendingReview={status?.pendingReview} />
+      <IngestStatusPanel
+        ingest={status?.ingest}
+        workerBudget={status?.ingestWorkerBudget}
+        runtimeBatches={status?.runtimeBatches}
+        pendingReview={status?.pendingReview}
+      />
       <pre className="json-view">{formatObject(status?.ingest)}</pre>
       {isAdmin ? <LogTailPanel tail={logTail.tail} loading={logTail.loading} error={logTail.error} onRefresh={logTail.refresh} /> : null}
     </section>

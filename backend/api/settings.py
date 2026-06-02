@@ -18,7 +18,7 @@ def create_router(
     settings_store: Any,
     runtime_settings: Any,
     trace_logger: Any,
-    start_index_check: Callable[[str], dict],
+    start_index_check: Callable[..., dict],
 ) -> APIRouter:
     router = APIRouter()
 
@@ -49,10 +49,11 @@ def create_router(
 
     @router.post("/api/index/check")
     async def index_check(req: Request):
-        _, error = require_admin_user(req)
+        user, error = require_admin_user(req)
         if error:
             return error
-        result = start_index_check("manual")
+        user_id = user.get("id") if isinstance(user, dict) else getattr(user, "id", None)
+        result = start_index_check("manual", requested_by_user_id=user_id)
         return {"ok": True, **result}
 
     return router

@@ -8,7 +8,7 @@ import {
   removeReviewDocument,
   updateReviewDocumentScope
 } from "../api";
-import type { ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../types";
+import type { DatasheetIntelligence, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../types";
 import { errorMessage } from "../lib/errors";
 import { formatInteger } from "../lib/format";
 
@@ -29,6 +29,7 @@ export function useReviewQueue({
   const [chunks, setChunks] = useState<ReviewChunk[]>([]);
   const [chunkLimit, setChunkLimit] = useState(initialChunkPreviewLimit);
   const [images, setImages] = useState<ReviewImage[]>([]);
+  const [intelligence, setIntelligence] = useState<DatasheetIntelligence | null>(null);
   const [scopeAudit, setScopeAudit] = useState<ReviewScopeAudit[]>([]);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
@@ -83,6 +84,7 @@ export function useReviewQueue({
     if (!selected) {
       setChunks([]);
       setImages([]);
+      setIntelligence(null);
       setScopeAudit([]);
       setDetailBusy(false);
       return;
@@ -91,12 +93,14 @@ export function useReviewQueue({
     setDetailBusy(true);
     setChunks([]);
     setImages([]);
+    setIntelligence(null);
     setScopeAudit([]);
     setError("");
     Promise.all([getReviewDocument(selected, chunkLimit), getReviewDocumentImages(selected)])
       .then(([documentResponse, imageResponse]) => {
         if (active) {
           setChunks(documentResponse.chunks);
+          setIntelligence(documentResponse.intelligence ?? null);
           setScopeAudit(documentResponse.scopeAudit || []);
           setImages(imageResponse.images);
         }
@@ -129,6 +133,7 @@ export function useReviewQueue({
       );
       setChunks([]);
       setImages([]);
+      setIntelligence(null);
       setScopeAudit([]);
     });
   }
@@ -195,6 +200,7 @@ export function useReviewQueue({
     filter,
     filteredDocuments,
     images,
+    intelligence,
     loadDocuments,
     message,
     reindexSelected,

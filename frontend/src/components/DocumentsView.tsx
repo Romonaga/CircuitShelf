@@ -9,6 +9,7 @@ import { IngestStatusPanel } from "./IngestStatusPanel";
 import { DocumentPageInspector } from "./DocumentPageInspector";
 import { DocumentStatsPanel } from "./DocumentStatsPanel";
 import { DocumentUploadPanel } from "./DocumentUploadPanel";
+import { DatasheetIntelligencePanel } from "./DatasheetIntelligencePanel";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { SectionHeader } from "./SectionHeader";
 
@@ -233,6 +234,7 @@ export function DocumentsView({
           <IngestStatusPanel
             ingest={status?.ingest}
             workerBudget={status?.ingestWorkerBudget}
+            runtimeBatches={status?.runtimeBatches}
             pendingReview={status?.pendingReview}
             onOpenReview={onOpenReview}
           />
@@ -248,6 +250,7 @@ export function DocumentsView({
           </div>
         ) : null}
         {!detailBusy ? <DocumentStatsPanel detail={detail} /> : null}
+        {!detailBusy ? <DatasheetIntelligencePanel intelligence={detail?.intelligence} /> : null}
         {!detailBusy && detail?.pages.length ? (
           <div className="document-explorer">
             <div className="page-strip">

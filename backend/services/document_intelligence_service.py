@@ -33,6 +33,14 @@ class DocumentIntelligenceService:
     def rel_path(self, source: str | None) -> str:
         return self.vector_store.rel_path_for_source(source or "", {})
 
+    def build_from_payload(self, doc_name: str, chunks: list[str], metadata: list[dict]) -> dict:
+        return build_datasheet_intelligence(
+            chunks,
+            metadata,
+            doc_name,
+            self.display_source_name(doc_name),
+        )
+
     def build_for_document(self, doc_name: str) -> dict:
         doc_chunks = []
         doc_metadata = []
@@ -59,12 +67,7 @@ class DocumentIntelligenceService:
                     "source_image_id": image_id,
                 })
 
-        return build_datasheet_intelligence(
-            doc_chunks,
-            doc_metadata,
-            doc_name,
-            self.display_source_name(doc_name),
-        )
+        return self.build_from_payload(doc_name, doc_chunks, doc_metadata)
 
     @staticmethod
     def stored_is_usable(stored: dict | None) -> bool:
@@ -75,18 +78,18 @@ class DocumentIntelligenceService:
             return False
         return bool(stored.get("facts") or stored.get("pinout", {}).get("pins"))
 
-    def get_or_build(self, doc_name: str) -> dict:
+    def get_or_build(self, doc_name: str, chunks: list[str] | None = None, metadata: list[dict] | None = None) -> dict:
         rel_path = self.rel_path(doc_name)
         stored = self.intelligence_store.get_for_source(rel_path)
         if self.stored_is_usable(stored):
             if not stored.get("pinout", {}).get("pins"):
-                refreshed = self.build_for_document(doc_name)
+                refreshed = self.build_from_payload(doc_name, chunks, metadata or []) if chunks is not None else self.build_for_document(doc_name)
                 if refreshed.get("pinout", {}).get("pins"):
                     self.intelligence_store.upsert(rel_path, refreshed)
                     return refreshed
             return stored
 
-        intelligence = self.build_for_document(doc_name)
+        intelligence = self.build_from_payload(doc_name, chunks, metadata or []) if chunks is not None else self.build_for_document(doc_name)
         stored = self.intelligence_store.replace_for_source(rel_path, intelligence)
         if stored:
             return stored

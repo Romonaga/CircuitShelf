@@ -118,6 +118,7 @@ def register_api_routes(
         refresh_active_state_from_db=refresh_active_state_from_db,
         reindex_review_source=reindex_review_source,
         remove_document_from_store=remove_document_from_store,
+        get_or_build_datasheet_intelligence=get_or_build_datasheet_intelligence,
     ))
     app.include_router(assembly_plans_api.create_router(
         api_dependencies,

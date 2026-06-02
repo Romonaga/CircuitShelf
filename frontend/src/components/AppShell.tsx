@@ -1,10 +1,11 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import type { StatusPayload, View } from "../types";
 import { formatNumber } from "../lib/format";
 import type { ThemeMode } from "../hooks/useThemePreference";
 import { LogoMark } from "./LogoMark";
 import { Stat } from "./Stat";
 import { SidebarSystemCard } from "./SidebarSystemCard";
+import { canAccessView } from "../lib/viewAccess";
 
 export function AppShell({
   activeView,
@@ -12,6 +13,7 @@ export function AppShell({
   siteName,
   user,
   isAdmin,
+  canManageEntity,
   canManageSystem,
   entityName,
   entityRole,
@@ -26,6 +28,7 @@ export function AppShell({
   siteName: string;
   user: string;
   isAdmin: boolean;
+  canManageEntity: boolean;
   canManageSystem: boolean;
   entityName?: string | null;
   entityRole?: string | null;
@@ -35,6 +38,14 @@ export function AppShell({
   onLogout: () => void;
   children: ReactNode;
 }) {
+  const [monitorMode, setMonitorMode] = useState(false);
+  type NavItem = { id: View; label: string };
+  type NavGroup = { label: string; items: NavItem[] };
+  const access = {
+    authenticated: true,
+    canManageEntity,
+    canManageSystem
+  };
   const viewLabels: Record<View, string> = {
     ask: "Ask",
     bench: "Bench",
@@ -52,21 +63,21 @@ export function AppShell({
     entity: "Entity",
     account: "Account"
   };
-  const navGroups: Array<{ label: string; items: Array<{ id: View; label: string }> }> = [
+  const navGroups: NavGroup[] = [
     {
       label: "Workbench",
       items: [
-        { id: "ask", label: "Ask" },
-        { id: "bench", label: "Bench" },
-        { id: "finder", label: "Finder" }
+        { id: "ask" as View, label: "Ask" },
+        { id: "bench" as View, label: "Bench" },
+        { id: "finder" as View, label: "Finder" }
       ]
     },
     {
       label: "Lab",
       items: [
-        { id: "inventory", label: "Inventory" },
-        { id: "documents", label: "Documents" },
-        { id: "entity", label: "Entity" }
+        { id: "inventory" as View, label: "Inventory" },
+        { id: "documents" as View, label: "Documents" },
+        { id: "entity" as View, label: "Entity" }
       ]
     },
     {
@@ -78,12 +89,12 @@ export function AppShell({
         { id: "aiUsage" as View, label: "AI Usage" }
       ]
     },
-    ...(isAdmin || canManageSystem
+    ...(isAdmin || canManageEntity || canManageSystem
       ? [{
       label: "Admin",
       items: [
         ...(canManageSystem ? [{ id: "corpus" as View, label: "Corpus" }] : []),
-        ...(isAdmin ? [{ id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` }] : []),
+        ...(isAdmin || canManageEntity || canManageSystem ? [{ id: "review" as View, label: `Review${status?.pendingReview ? ` (${status.pendingReview})` : ""}` }] : []),
         ...(canManageSystem ? [
           { id: "settings" as View, label: "System Settings" },
           { id: "runtime" as View, label: "Runtime Catalog" }
@@ -91,10 +102,15 @@ export function AppShell({
       ]
     }]
       : [])
-  ];
+  ]
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canAccessView(item.id, access))
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
-    <div className="app-shell">
+    <div className={monitorMode ? "app-shell sidebar-monitor-mode" : "app-shell"}>
       <aside className="sidebar">
         <div className="brand-block">
           <LogoMark />
@@ -104,11 +120,14 @@ export function AppShell({
             {entityName ? <p className="brand-entity">{entityName} · {entityRole}</p> : null}
             <div className="brand-actions">
               <button type="button" onClick={() => setActiveView("account")}>Account</button>
+              <button type="button" onClick={() => setMonitorMode((value) => !value)}>
+                {monitorMode ? "Full menu" : "Monitor"}
+              </button>
               <button type="button" onClick={onLogout}>Sign out</button>
             </div>
           </div>
         </div>
-        <nav>
+        <nav className="sidebar-nav">
           {navGroups.map((group) => (
             <section key={group.label} className="nav-group">
               <p className="nav-group-label">{group.label}</p>
@@ -125,9 +144,13 @@ export function AppShell({
           ))}
         </nav>
         <div className="sidebar-footer">
-          <SidebarSystemCard status={status} />
-          <Stat label="Chunks" value={formatNumber(status?.chunks)} />
-          <Stat label="Sources" value={formatNumber(status?.sources)} />
+          <SidebarSystemCard status={status} detailed={monitorMode} />
+          {!monitorMode ? (
+            <>
+              <Stat label="Chunks" value={formatNumber(status?.chunks)} />
+              <Stat label="Sources" value={formatNumber(status?.sources)} />
+            </>
+          ) : null}
         </div>
       </aside>
       <main className="workspace">

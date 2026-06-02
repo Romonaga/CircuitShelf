@@ -15,7 +15,7 @@ function BatchRow({
     <div className="batch-row">
       <div>
         <strong>{label}</strong>
-        <p>{batch.model || "Model not configured"}</p>
+        <p>{batch.model || "Model not configured"}{batch.device ? ` · ${batch.device}` : ""}</p>
       </div>
       <span><small>Active</small><b>{formatInteger(batch.active)}</b></span>
       <span><small>Configured</small><b>{formatInteger(batch.configured)}</b></span>

@@ -1,6 +1,8 @@
 INSERT INTO performance_resource_samples (
     sampled_at,
     cpu_percent,
+    cpu_temperature_c,
+    cpu_power_w,
     process_cpu_percent,
     process_memory_bytes,
     process_threads,
@@ -20,7 +22,7 @@ INSERT INTO performance_resource_samples (
 )
 VALUES (
     now(),
-    %s, %s, %s, %s, %s,
+    %s, %s, %s, %s, %s, %s, %s,
     %s, %s, %s, %s, %s, %s,
     %s, %s, %s, %s, %s, %s
 );
