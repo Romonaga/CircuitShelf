@@ -1,0 +1,14 @@
+storage:
+  # Storage mode controls where Verlyn writes artifacts.
+  # It does not decide whether you are using workspace mode, repo-local mode, or assistant mode.
+  # Example for repo-local artifacts:
+  # mode: repo_local
+  mode: workspace
+
+changes:
+  root_dir: workstream/changes
+  template_dir: workstream/changes/_template
+
+governance:
+  install_mode: governance
+  pr_gate_workflow: .github/workflows/verlyn-pr-gate.yml
