@@ -7,6 +7,7 @@ from typing import Any
 import fitz
 
 from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsset
+from backend.ingestion.pdf_native import mupdf_native_section
 from ocr_utils import should_skip_image_dimensions
 from pdf_visuals import page_image_coverage, rendered_page_image_key, should_render_visual_page
 
@@ -29,56 +30,57 @@ class PdfExtractor:
         if progress_callback:
             progress_callback(currentDocument=base_name, documentPhase="Scanning PDF")
 
-        with fitz.open(path) as pdf:
-            total_pages = len(pdf)
-            for page_index, page in enumerate(pdf):
-                page_number = page_index + 1
-                if progress_callback and self._should_report_page(page_number, total_pages):
-                    progress_callback(
-                        currentDocument=base_name,
-                        documentPhase="Scanning PDF",
-                        pdfPage=page_number,
-                        pdfPages=total_pages,
-                        imageCandidates=len(image_jobs),
-                        duplicateImageCandidates=duplicate_xrefs,
-                        skippedImageCandidates=skipped_images,
-                    )
+        with mupdf_native_section():
+            with fitz.open(path) as pdf:
+                total_pages = len(pdf)
+                for page_index, page in enumerate(pdf):
+                    page_number = page_index + 1
+                    if progress_callback and self._should_report_page(page_number, total_pages):
+                        progress_callback(
+                            currentDocument=base_name,
+                            documentPhase="Scanning PDF",
+                            pdfPage=page_number,
+                            pdfPages=total_pages,
+                            imageCandidates=len(image_jobs),
+                            duplicateImageCandidates=duplicate_xrefs,
+                            skippedImageCandidates=skipped_images,
+                        )
 
-                text = (page.get_text("text") or "").strip()
-                pages.append(ExtractedPage(page_number=page_number, text=text))
-                page_image_refs = self._unique_page_images(page)
+                    text = (page.get_text("text") or "").strip()
+                    pages.append(ExtractedPage(page_number=page_number, text=text))
+                    page_image_refs = self._unique_page_images(page)
 
-                for image_number, image in enumerate(page_image_refs, start=1):
-                    xref = int(image[0])
-                    if xref in seen_xrefs:
-                        duplicate_xrefs += 1
-                        continue
-                    seen_xrefs.add(xref)
-                    width = int(image[2] or 0) if len(image) > 3 else 0
-                    height = int(image[3] or 0) if len(image) > 3 else 0
-                    if self._skip_dimensions(width, height):
-                        skipped_images += 1
-                        continue
-                    try:
-                        extracted = pdf.extract_image(xref)
-                    except Exception as exc:
-                        if self.trace_logger:
-                            self.trace_logger.warning(f"Failed to extract PDF image xref {xref} on page {page_number}: {exc}")
-                        continue
-                    base_width = int(extracted.get("width") or width)
-                    base_height = int(extracted.get("height") or height)
-                    if self._skip_dimensions(base_width, base_height):
-                        skipped_images += 1
-                        continue
-                    image_key = f"{base_name}_page{page_number}_img{image_number}"
-                    image_jobs.append((len(image_jobs), page_number, extracted["image"], image_key, "embedded"))
+                    for image_number, image in enumerate(page_image_refs, start=1):
+                        xref = int(image[0])
+                        if xref in seen_xrefs:
+                            duplicate_xrefs += 1
+                            continue
+                        seen_xrefs.add(xref)
+                        width = int(image[2] or 0) if len(image) > 3 else 0
+                        height = int(image[3] or 0) if len(image) > 3 else 0
+                        if self._skip_dimensions(width, height):
+                            skipped_images += 1
+                            continue
+                        try:
+                            extracted = pdf.extract_image(xref)
+                        except Exception as exc:
+                            if self.trace_logger:
+                                self.trace_logger.warning(f"Failed to extract PDF image xref {xref} on page {page_number}: {exc}")
+                            continue
+                        base_width = int(extracted.get("width") or width)
+                        base_height = int(extracted.get("height") or height)
+                        if self._skip_dimensions(base_width, base_height):
+                            skipped_images += 1
+                            continue
+                        image_key = f"{base_name}_page{page_number}_img{image_number}"
+                        image_jobs.append((len(image_jobs), page_number, extracted["image"], image_key, "embedded"))
 
-                if self._should_render_page(page, text, len(page_image_refs)):
-                    try:
-                        render_jobs.append((len(image_jobs) + len(render_jobs), page_number, self._render_page_png(page), rendered_page_image_key(path, page_number), "rendered"))
-                    except Exception as exc:
-                        if self.trace_logger:
-                            self.trace_logger.warning(f"Could not render PDF page {page_number} from {base_name}: {exc}")
+                    if self._should_render_page(page, text, len(page_image_refs)):
+                        try:
+                            render_jobs.append((len(image_jobs) + len(render_jobs), page_number, self._render_page_png(page), rendered_page_image_key(path, page_number), "rendered"))
+                        except Exception as exc:
+                            if self.trace_logger:
+                                self.trace_logger.warning(f"Could not render PDF page {page_number} from {base_name}: {exc}")
 
         if progress_callback:
             progress_callback(
