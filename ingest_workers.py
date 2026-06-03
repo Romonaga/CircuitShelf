@@ -33,6 +33,16 @@ def document_worker_count(file_count: int, cpu_count: int | None = None) -> int:
     return max(1, min(files, workers, 16))
 
 
+def persist_worker_count(file_count: int, cpu_count: int | None = None) -> int:
+    files = max(0, int(file_count or 0))
+    if files <= 0:
+        return 0
+    if files == 1:
+        return 1
+    workers = max(1, usable_core_count(cpu_count) // 8)
+    return max(1, min(files, workers, 4))
+
+
 def ocr_worker_count(item_count: int, active_document_workers: int = 1, cpu_count: int | None = None) -> int:
     items = max(0, int(item_count or 0))
     if items <= 0:

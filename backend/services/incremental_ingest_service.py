@@ -1,7 +1,7 @@
 import os
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
 
 import numpy as np
 
@@ -33,6 +33,7 @@ class IncrementalIngestService:
         reserved_core_count,
         usable_core_count,
         document_worker_count,
+        persist_worker_count,
         begin_document_worker,
         finish_document_worker,
         update_index_progress,
@@ -61,6 +62,7 @@ class IncrementalIngestService:
         self.reserved_core_count = reserved_core_count
         self.usable_core_count = usable_core_count
         self.document_worker_count = document_worker_count
+        self.persist_worker_count = persist_worker_count
         self.begin_document_worker = begin_document_worker
         self.finish_document_worker = finish_document_worker
         self.update_index_progress = update_index_progress
@@ -248,9 +250,11 @@ class IncrementalIngestService:
         if changed_rel_paths:
             cpu_count = self.detected_cpu_count()
             max_workers = self.document_worker_count(len(changed_rel_paths), cpu_count=cpu_count)
+            save_workers = self.persist_worker_count(len(changed_rel_paths), cpu_count=cpu_count)
             self.trace_logger.info(
                 f"⚙️ Ingest worker budget: {cpu_count} cores detected, reserving {self.reserved_core_count(cpu_count)}, "
-                f"{self.usable_core_count(cpu_count)} usable, {max_workers} document workers for {len(changed_rel_paths)} files."
+                f"{self.usable_core_count(cpu_count)} usable, {max_workers} document workers and "
+                f"{save_workers} save workers for {len(changed_rel_paths)} files."
             )
             self.update_index_progress(
                 stage="processing_documents",
@@ -258,62 +262,122 @@ class IncrementalIngestService:
                 details={
                     "documents": len(changed_rel_paths),
                     "activeWorkers": max_workers,
+                    "persistWorkers": save_workers,
+                    "queuedSaveDocuments": 0,
                 },
             )
 
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(self.extract_document_for_incremental_ingest, source): source
+            completed_documents = 0
+            pending_persists = {}
+
+            def update_aggregate_details(document_source, persist_future):
+                nonlocal total_chunks, total_dropped_chunks, total_images, embedding_dim, final_details, completed_documents
+                try:
+                    build_result, document_details = persist_future.result()
+                    total_chunks += build_result.chunks
+                    total_dropped_chunks += build_result.dropped_chunks
+                    total_images += build_result.images
+                    embedding_dim = build_result.embedding_dim
+                    completed_documents += 1
+                    for key in aggregate_details:
+                        aggregate_details[key] += int(document_details.get(key, 0) or 0)
+                    final_details = {
+                        "documents": len(changed_rel_paths),
+                        "completedDocuments": completed_documents,
+                        "persistWorkers": save_workers,
+                        "queuedSaveDocuments": len(pending_persists),
+                        **aggregate_details,
+                        "failedDocuments": len(failed_files),
+                    }
+                    self.update_index_detail(**final_details)
+                except ValueError as exc:
+                    failed_files.append(document_source)
+                    self.trace_logger.warning(f"⚠️ {document_source} produced no valid chunks: {exc}")
+                    self.vector_store.delete_sources([document_source])
+                    self.update_index_progress(
+                        stage="processing_documents",
+                        finished_file=document_source,
+                        details={
+                            "documents": len(changed_rel_paths),
+                            "persistWorkers": save_workers,
+                            "queuedSaveDocuments": len(pending_persists),
+                            "failedDocuments": len(failed_files),
+                            "failedFiles": failed_files[:10],
+                        },
+                    )
+                except Exception as exc:
+                    failed_files.append(document_source)
+                    self.trace_logger.error(f"❌ Incremental document ingest failed for {document_source}: {exc}")
+                    self.update_index_progress(
+                        stage="processing_documents",
+                        finished_file=document_source,
+                        details={
+                            "documents": len(changed_rel_paths),
+                            "persistWorkers": save_workers,
+                            "queuedSaveDocuments": len(pending_persists),
+                            "failedDocuments": len(failed_files),
+                            "failedFiles": failed_files[:10],
+                        },
+                    )
+
+            def drain_persist_queue(*, block: bool):
+                if not pending_persists:
+                    return
+                done, _ = wait(
+                    pending_persists,
+                    timeout=None if block else 0,
+                    return_when=FIRST_COMPLETED,
+                )
+                for persist_future in done:
+                    document_source = pending_persists.pop(persist_future)
+                    update_aggregate_details(document_source, persist_future)
+
+            with ThreadPoolExecutor(max_workers=max_workers) as extract_executor, ThreadPoolExecutor(max_workers=save_workers) as persist_executor:
+                extract_futures = {
+                    extract_executor.submit(self.extract_document_for_incremental_ingest, source): source
                     for source in changed_rel_paths
                 }
-                for future in as_completed(futures):
-                    source = futures[future]
+                for future in as_completed(extract_futures):
+                    source = extract_futures[future]
                     try:
                         extracted = future.result()
-                        build_result, document_details = self.persist_incremental_document(extracted, current_manifest)
-                        total_chunks += build_result.chunks
-                        total_dropped_chunks += build_result.dropped_chunks
-                        total_images += build_result.images
-                        embedding_dim = build_result.embedding_dim
-                        for key in aggregate_details:
-                            aggregate_details[key] += int(document_details.get(key, 0) or 0)
-                        final_details = {
-                            "documents": len(changed_rel_paths),
-                            "completedDocuments": int(self.index_status.get("processedFiles") or 0),
-                            **aggregate_details,
-                            "failedDocuments": len(failed_files),
-                        }
-                        self.update_index_detail(**final_details)
-                    except ValueError as exc:
-                        failed_files.append(source)
-                        self.trace_logger.warning(f"⚠️ {source} produced no valid chunks: {exc}")
-                        self.vector_store.delete_sources([source])
                         self.update_index_progress(
                             stage="processing_documents",
-                            finished_file=source,
+                            current_file=source,
+                            file_details={"documentPhase": "Queued for save"},
                             details={
-                                "documents": len(changed_rel_paths),
-                                "failedDocuments": len(failed_files),
-                                "failedFiles": failed_files[:10],
+                                "persistWorkers": save_workers,
+                                "queuedSaveDocuments": len(pending_persists) + 1,
                             },
                         )
+                        persist_future = persist_executor.submit(self.persist_incremental_document, extracted, current_manifest)
+                        pending_persists[persist_future] = source
+                        while len(pending_persists) >= max(1, save_workers * 2):
+                            drain_persist_queue(block=True)
+                        drain_persist_queue(block=False)
                     except Exception as exc:
                         failed_files.append(source)
-                        self.trace_logger.error(f"❌ Incremental document ingest failed for {source}: {exc}")
+                        self.trace_logger.error(f"❌ Incremental document extract failed for {source}: {exc}")
                         self.update_index_progress(
                             stage="processing_documents",
                             finished_file=source,
                             details={
                                 "documents": len(changed_rel_paths),
+                                "persistWorkers": save_workers,
+                                "queuedSaveDocuments": len(pending_persists),
                                 "failedDocuments": len(failed_files),
                                 "failedFiles": failed_files[:10],
                             },
                         )
+                while pending_persists:
+                    drain_persist_queue(block=True)
 
             final_details = {
                 **final_details,
                 "documents": len(changed_rel_paths),
-                "completedDocuments": len(changed_rel_paths) - len(failed_files),
+                "completedDocuments": completed_documents,
+                "persistWorkers": save_workers,
+                "queuedSaveDocuments": 0,
                 **aggregate_details,
                 "failedDocuments": len(failed_files),
             }

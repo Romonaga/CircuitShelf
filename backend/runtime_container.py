@@ -46,6 +46,7 @@ from ingest_workers import (
     detected_cpu_count,
     document_worker_count,
     ocr_worker_count,
+    persist_worker_count,
     reserved_core_count,
     usable_core_count,
 )
@@ -231,6 +232,7 @@ class CircuitShelfRuntime:
             reserved_core_count=reserved_core_count,
             usable_core_count=usable_core_count,
             document_worker_count=document_worker_count,
+            persist_worker_count=persist_worker_count,
             begin_document_worker=self.ingest_progress.begin_document_worker,
             finish_document_worker=self.ingest_progress.finish_document_worker,
             update_index_progress=self.ingest_progress.update_progress,
