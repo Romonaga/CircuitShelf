@@ -61,7 +61,42 @@ class IngestWorkerRunner:
         self.runtime.cleanup_stale_tesseract_temp_files()
         self.runtime.get_or_build_index()
         self.runtime.runtime_status_reporter.start_resource_sampler()
+        self._recover_abandoned_jobs()
         self.runtime.ingest_progress.schedule_next_check()
+
+    def _recover_abandoned_jobs(self):
+        recovered = self.job_store.recover_abandoned_running(worker_pid=os.getpid())
+        if not recovered:
+            return
+        reasons = [str(job.get("reason") or "unknown") for job in recovered]
+        self.trace_logger.warning(
+            f"⚠️ Recovered {len(recovered)} abandoned ingest job(s) after worker restart: {', '.join(reasons[:5])}"
+        )
+        self.runtime.ingest_progress.set_status(
+            running=False,
+            stage="failed",
+            currentFiles=[],
+            fileProgress={},
+            lastFinishedAt=self.runtime.ingest_progress.snapshot().get("lastFinishedAt"),
+            lastResult="worker_restarted",
+            lastError="Previous ingest worker exited before its running job completed.",
+            details={
+                "recoveredAbandonedJobs": len(recovered),
+                "recoveredReasons": reasons[:10],
+            },
+        )
+        counts = self.job_store.counts()
+        if counts.get("queued", 0) or counts.get("running", 0):
+            return
+        self.job_store.enqueue(
+            "crash-recovery",
+            details={
+                "requestedFrom": "ingest-worker-startup",
+                "recoveredJobIds": [job.get("id") for job in recovered],
+                "recoveredReasons": reasons[:10],
+            },
+        )
+        self.trace_logger.info("🔁 Queued crash-recovery ingest scan after abandoned job cleanup.")
 
     def _maybe_enqueue_watch_check(self):
         if not self.runtime.config.get("INGEST_WATCH_ENABLED", True):

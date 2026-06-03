@@ -6,9 +6,12 @@ from contextlib import asynccontextmanager
 
 from backend.app_factory import create_circuitshelf_app, register_api_routes
 from backend.bootstrap_runtime import USER_PREFERENCE_KEYS, bootstrap_runtime
+from backend.native_faults import enable_native_fault_diagnostics
 from backend.server import mount_react_app, start_app_server
 from process_lock import ProcessLockError, acquire_process_lock
 
+
+enable_native_fault_diagnostics()
 
 boot = bootstrap_runtime(
     ingest_status_provider=lambda: boot.stores.ingest_job_store.get_status() if "boot" in globals() else {},

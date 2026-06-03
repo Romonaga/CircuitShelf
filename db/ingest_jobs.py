@@ -52,6 +52,23 @@ class IngestJobStore:
             row = conn.execute(load_query("ingest_job_claim_next.sql"), (int(worker_pid),)).fetchone()
         return dict(row) if row else None
 
+    def recover_abandoned_running(self, *, worker_pid: int) -> list[dict[str, Any]]:
+        error = (
+            "Ingest worker restarted while this job was running. "
+            "The previous worker likely exited or crashed before it could finish cleanup."
+        )
+        details = {
+            "abandoned": True,
+            "recoveredByWorkerPid": int(worker_pid),
+            "recoveryAction": "marked_failed",
+        }
+        with self.database.connection() as conn:
+            rows = conn.execute(
+                load_query("ingest_jobs_recover_abandoned.sql"),
+                (error, json.dumps(details, default=str)),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def finish(
         self,
         job_id: int,

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from backend.bootstrap_runtime import bootstrap_runtime
+from backend.native_faults import enable_native_fault_diagnostics
 from backend.workers.ingest_worker import IngestWorkerRunner
 from process_lock import ProcessLockError, acquire_process_lock
 
+
+enable_native_fault_diagnostics()
 
 boot = bootstrap_runtime(
     ingest_status_callback=lambda status: boot.stores.ingest_job_store.save_status(status) if "boot" in globals() else None,
