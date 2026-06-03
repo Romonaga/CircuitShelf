@@ -3484,18 +3484,19 @@ nav {
 
 .upload-selection-list li {
   display: grid;
-  gap: 2px;
-  align-content: center;
+  grid-template-rows: auto auto;
+  gap: 4px;
+  align-content: start;
   min-width: 0;
-  min-height: 32px;
+  min-height: 48px;
   overflow: hidden;
-  padding: 7px 8px;
+  padding: 8px 9px;
   color: var(--text);
   border: 1px solid rgba(22, 119, 129, 0.22);
   border-radius: 7px;
   background: var(--panel-soft);
   font-size: 0.78rem;
-  line-height: 1.25;
+  line-height: 1.15;
 }
 
 .upload-selection-name,
@@ -3509,12 +3510,14 @@ nav {
 .upload-selection-name {
   color: var(--text);
   font-weight: 850;
+  line-height: 1.2;
 }
 
 .upload-selection-path {
   color: var(--muted);
   font-size: 0.7rem;
   font-weight: 750;
+  line-height: 1.15;
 }
 
 :root[data-theme="dark"] .upload-selection-card {
