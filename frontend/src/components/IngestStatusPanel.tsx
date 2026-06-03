@@ -174,6 +174,9 @@ function phaseTone(progress: Record<string, string | number | boolean | null | u
   if (phase.includes("save") || phase.includes("persist")) {
     return "save";
   }
+  if (phase.includes("queued for db") || phase.includes("waiting for db")) {
+    return "save";
+  }
   if (phase.includes("embed")) {
     return "embed";
   }
@@ -192,7 +195,7 @@ function compactPhase(progress: Record<string, string | number | boolean | null 
     return "Active";
   }
   const text = formatDetailValue(phase);
-  const normalized = text.toLowerCase().replace(/\s+/g, "_");
+  const normalized = text.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   const labels: Record<string, string> = {
     extracting_text: "Text",
     extracting_images: "Images",
@@ -205,7 +208,9 @@ function compactPhase(progress: Record<string, string | number | boolean | null 
     embedding_chunks: "Embedding",
     persisting_chunks: "Saving text",
     persisting_images: "Saving images",
-    waiting_to_save: "Waiting save",
+    waiting_to_save: "Extracted",
+    extracted_waiting_for_db_save: "Extracted",
+    queued_for_db_save: "DB queued",
     readying_review: "Review"
   };
   return labels[text] ?? labels[normalized] ?? formatStage(text);
@@ -282,7 +287,7 @@ export function IngestStatusPanel({
           <span><small>Processed</small><strong>{formatInteger(processedFiles)}</strong></span>
           <span><small>Indexed</small><strong>{formatInteger(indexedDocuments)}</strong></span>
           <span><small>Failed</small><strong>{formatInteger(failedDocuments)}</strong></span>
-          <span><small>Saving</small><strong>{formatInteger(queuedSaveDocuments)}</strong></span>
+          <span><small>DB queue</small><strong>{formatInteger(queuedSaveDocuments)}</strong></span>
           <span><small>Active</small><strong>{formatInteger(trackedFiles)}</strong></span>
           <span><small>Not started</small><strong>{formatInteger(notStartedFiles)}</strong></span>
           <span><small>Total</small><strong>{formatInteger(totalFiles)}</strong></span>

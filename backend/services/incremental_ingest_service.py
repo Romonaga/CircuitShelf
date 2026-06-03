@@ -103,7 +103,7 @@ class IncrementalIngestService:
             self.update_index_progress(
                 stage="processing_documents",
                 current_file=source,
-                file_details={"documentPhase": "Waiting to save"},
+                file_details={"documentPhase": "Extracted, waiting for DB save"},
             )
             return {
                 "source": source,
@@ -344,7 +344,7 @@ class IncrementalIngestService:
                         self.update_index_progress(
                             stage="processing_documents",
                             current_file=source,
-                            file_details={"documentPhase": "Queued for save"},
+                            file_details={"documentPhase": "Queued for DB save"},
                             details={
                                 "persistWorkers": save_workers,
                                 "queuedSaveDocuments": len(pending_persists) + 1,
