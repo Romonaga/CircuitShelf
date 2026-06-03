@@ -3473,11 +3473,13 @@ nav {
 .upload-selection-list {
   display: grid;
   gap: 4px;
-  max-height: 132px;
+  max-height: min(220px, 28vh);
   margin: 0;
-  padding: 0;
+  padding: 2px 4px 2px 0;
   overflow: auto;
   list-style: none;
+  scrollbar-color: var(--accent) transparent;
+  scrollbar-width: thin;
 }
 
 .upload-selection-list li {

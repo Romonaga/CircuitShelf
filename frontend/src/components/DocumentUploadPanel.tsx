@@ -154,10 +154,9 @@ export function DocumentUploadPanel({
             <span>{selection.totalSize}</span>
           </div>
           <ul className="upload-selection-list">
-            {selection.preview.map((name) => (
-              <li key={name}>{name}</li>
+            {selection.names.map((name, index) => (
+              <li key={`${index}-${name}`} title={name}>{name}</li>
             ))}
-            {selection.extraCount > 0 ? <li className="muted">+{formatInteger(selection.extraCount)} more files</li> : null}
           </ul>
         </div>
       ) : (
@@ -239,15 +238,14 @@ function formatUploadEta(seconds: number | null | undefined, percent: number) {
 
 function summarizeSelection(files: File[]) {
   if (!files.length) {
-    return { label: "No files selected.", title: "", totalSize: "", preview: [], extraCount: 0 };
+    return { label: "No files selected.", title: "", totalSize: "", names: [] };
   }
   const names = files.map((file) => file.webkitRelativePath || file.name);
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   return {
     label: `${formatInteger(files.length)} selected`,
     totalSize: formatBytes(totalBytes),
-    preview: names.slice(0, 6),
-    extraCount: Math.max(0, names.length - 6),
+    names,
     title: names.join("\n")
   };
 }
