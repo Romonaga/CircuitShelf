@@ -41,6 +41,8 @@ export function StatusView({
       </div>
       <h3>Cache</h3>
       <pre className="json-view">{formatObject(status?.cacheStats)}</pre>
+      <h3>Database pool</h3>
+      <pre className="json-view">{formatObject(status?.databasePool)}</pre>
       <RuntimeBatchPanel batches={status?.runtimeBatches} />
       <h3>Ingestion</h3>
       <IngestStatusPanel

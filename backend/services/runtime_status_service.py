@@ -557,6 +557,7 @@ class RuntimeStatusReporter:
             "imageEmbeddings": image_counts.get("embeddings", 0),
             "pendingReview": self.vector_store.pending_review_count(),
             "cacheStats": self.response_cache.stats(),
+            "databasePool": self.database.pool_stats() if hasattr(self.database, "pool_stats") else {"enabled": False},
             "ingestWorkerBudget": {
                 "cpuCores": cpu_count,
                 "reservedCores": self.reserved_core_count_fn(cpu_count),

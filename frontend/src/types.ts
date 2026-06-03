@@ -606,10 +606,19 @@ export interface StatusPayload {
   imageEmbeddings: number;
   pendingReview?: number;
   cacheStats: unknown;
+  databasePool?: DatabasePoolStatus;
   ingestWorkerBudget?: IngestWorkerBudget;
   runtimeBatches?: RuntimeBatches;
   systemResources?: SystemResources;
   ingest?: IngestStatus;
+}
+
+export interface DatabasePoolStatus {
+  enabled: boolean;
+  open: boolean;
+  minSize: number;
+  maxSize: number;
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 export interface IngestWorkerBudget {
