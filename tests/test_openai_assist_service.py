@@ -127,3 +127,40 @@ def test_ingestion_review_uses_scoped_provider_and_records_cost(monkeypatch):
     assert store.events[0]["estimated_cost"] == 0.0123
     assert store.reviews[0]["source_path"] == "555.pdf"
     assert store.reviews[0]["review_json"]["quality"] == "good"
+
+
+def test_datasheet_repair_records_usage_and_structured_review(monkeypatch):
+    store = IngestionAssistStore()
+    service = OpenAIAssistService(store)
+
+    monkeypatch.setattr(
+        service,
+        "_create_response",
+        lambda **_kwargs: {
+            "output_text": (
+                '{"componentName":"LM555","componentType":"timer","confidence":0.92,'
+                '"facts":[{"type":"voltage","label":"VCC","value":"5 to 15","unit":"V","page":5,"evidence":"VCC 5 V to 15 V"}],'
+                '"pinout":{"pins":[{"pin":1,"label":"GND","function":"Ground","page":3,"evidence":"Pin 1 GND"}]},'
+                '"notes":[]}'
+            ),
+            "usage": {"input_tokens": 200, "output_tokens": 50, "input_tokens_details": {"cached_tokens": 10}},
+        },
+    )
+
+    result = service.repair_datasheet_intelligence(
+        source_path="lm555.pdf",
+        is_global=False,
+        entity_id=4,
+        user_id=7,
+        local_intelligence={"componentName": "LM555", "componentType": "timer", "confidence": 0.7, "facts": [], "pinout": {"pins": []}},
+        sample_text="LM555 pin functions page text",
+        enabled=True,
+    )
+
+    assert result is not None
+    assert result["repair"]["componentName"] == "LM555"
+    assert store.resolved == {"is_global": False, "entity_id": 4, "user_id": 7}
+    assert store.events[0]["task_type"] == "ingestion_assist"
+    assert store.events[0]["context_type"] == "datasheet_intelligence"
+    assert store.events[0]["estimated_cost"] == 0.0123
+    assert store.reviews[0]["review_json"]["kind"] == "datasheet_intelligence_repair"

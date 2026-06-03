@@ -24,6 +24,11 @@ DEFAULT_APP_SETTINGS = [
         False,
         "Use OpenAI during ingestion to review extraction quality. Corpus uses the system key; entity documents use entity then user key fallback.",
     ),
+    (
+        "DATASHEET_OPENAI_REPAIR_ENABLED",
+        True,
+        "Use deterministic gates to repair weak datasheet pinout/fact extraction with OpenAI when a scoped key is configured.",
+    ),
     ("RESPONSE_FINALIZER_ENABLED", True, "Run a second model pass to validate and clean up generated answers."),
     (
         "RESPONSE_FINALIZER_MODE",

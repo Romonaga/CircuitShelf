@@ -359,6 +359,132 @@ class OpenAIAssistService:
                 self.logger.warning(f"OpenAI ingestion assist failed for {source_path}: {message}")
             return None
 
+    def repair_datasheet_intelligence(
+        self,
+        *,
+        source_path: str,
+        is_global: bool,
+        entity_id: int | None,
+        user_id: int | None,
+        local_intelligence: dict[str, Any],
+        sample_text: str,
+        enabled: bool,
+    ) -> dict[str, Any] | None:
+        if not enabled:
+            return None
+        settings = self.ai_provider_store.resolve_openai_ingestion_assist(
+            is_global=is_global,
+            entity_id=entity_id,
+            user_id=user_id,
+        )
+        if not settings or not settings.get("apiKey") or settings.get("assistMode") == "off":
+            return None
+
+        prompt = (
+            "Repair this CircuitShelf datasheet intelligence record using only the provided extracted text. "
+            "Return compact JSON only with keys: componentName, componentType, summary, confidence, facts, pinout, notes. "
+            "facts must be a list of objects with type, label, value, unit, page, evidence. "
+            "pinout must be an object with pins, where pins is a list of objects with pin, label, function, page, evidence. "
+            "Do not guess missing pins, voltages, current limits, or packages. If evidence is absent, leave the field empty.\n\n"
+            f"Source: {source_path}\n"
+            f"Scope: {'global corpus' if is_global else 'entity private'}\n"
+            f"Local intelligence: {json.dumps(compact_intelligence_for_prompt(local_intelligence), sort_keys=True)}\n\n"
+            f"Extracted text excerpts:\n{sample_text[:9000]}"
+        )
+        event_base = {
+            "entity_id": None if is_global else entity_id,
+            "user_id": user_id,
+            "provider": "openai",
+            "task_type": "ingestion_assist",
+            "model_name": settings["modelName"],
+            "context_type": "datasheet_intelligence",
+            "context_id": None,
+            "round_number": 1,
+            "round_count": 1,
+            "paid_by": settings["paidBy"],
+            "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
+        }
+        budget_block = self._budget_block_message(settings)
+        if budget_block:
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=0,
+                cached_input_tokens=0,
+                output_tokens=0,
+                estimated_cost=0,
+                success=False,
+                error_message=budget_block,
+            )
+            return None
+
+        try:
+            data = self._create_response(
+                api_key=settings["apiKey"],
+                model=settings["modelName"],
+                instructions=(
+                    "You are CircuitShelf's deterministic datasheet intelligence repair assistant. "
+                    "Return only compact JSON. Prefer explicit pin-function tables and pin diagrams. "
+                    "Never invent unsupported component data."
+                ),
+                input_text=prompt,
+                max_output_tokens=1800,
+            )
+            usage = extract_usage(data)
+            estimated_cost = self.ai_provider_store.estimate_cost(
+                provider="openai",
+                model_name=settings["modelName"],
+                input_tokens=usage["inputTokens"],
+                cached_input_tokens=usage["cachedInputTokens"],
+                output_tokens=usage["outputTokens"],
+                billing_scope=settings["pricingScope"],
+                entity_id=settings.get("pricingEntityId"),
+                user_id=settings.get("pricingUserId"),
+            )
+            text = extract_response_text(data)
+            parsed = parse_json_object(text)
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=usage["inputTokens"],
+                cached_input_tokens=usage["cachedInputTokens"],
+                output_tokens=usage["outputTokens"],
+                estimated_cost=estimated_cost,
+                success=True,
+            )
+            self.ai_provider_store.record_document_ingest_ai_review(
+                source_path=source_path,
+                provider="openai",
+                model_name=settings["modelName"],
+                paid_by=settings["paidBy"],
+                review_text=text,
+                review_json={
+                    "kind": "datasheet_intelligence_repair",
+                    "repair": parsed,
+                    "localConfidence": local_intelligence.get("confidence"),
+                },
+                estimated_cost=estimated_cost,
+            )
+            return {
+                "provider": "openai",
+                "model": settings["modelName"],
+                "paidBy": settings["paidBy"],
+                "estimatedCost": estimated_cost,
+                "repair": parsed,
+            }
+        except Exception as exc:
+            message = safe_error_message(exc)
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=0,
+                cached_input_tokens=0,
+                output_tokens=0,
+                estimated_cost=0,
+                success=False,
+                error_message=message,
+            )
+            if self.logger:
+                self.logger.warning(f"OpenAI datasheet intelligence repair failed for {source_path}: {message}")
+            return None
+
     def _create_response(
         self,
         *,
@@ -437,3 +563,24 @@ def parse_json_object(text: str) -> dict[str, Any]:
         return parsed if isinstance(parsed, dict) else {"raw": parsed}
     except Exception:
         return {"raw": text[:4000]}
+
+
+def compact_intelligence_for_prompt(intelligence: dict[str, Any]) -> dict[str, Any]:
+    pinout = intelligence.get("pinout") or {}
+    return {
+        "componentName": intelligence.get("componentName") or "",
+        "componentType": intelligence.get("componentType") or "",
+        "summary": intelligence.get("summary") or "",
+        "confidence": intelligence.get("confidence"),
+        "factCount": len(intelligence.get("facts") or []),
+        "pinCount": len(pinout.get("pins") or []),
+        "pins": [
+            {
+                "pin": pin.get("pin"),
+                "label": pin.get("label"),
+                "function": pin.get("function"),
+                "page": pin.get("page"),
+            }
+            for pin in (pinout.get("pins") or [])[:32]
+        ],
+    }

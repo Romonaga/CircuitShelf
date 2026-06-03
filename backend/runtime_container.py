@@ -286,6 +286,8 @@ class CircuitShelfRuntime:
             document_source_from_metadata=document_source_from_metadata,
             image_asset_belongs_to_document=image_asset_belongs_to_document,
             extract_page_number=self.document_processing_service.extract_page_number,
+            config=self.config,
+            openai_assist_service=stores.openai_assist_service,
         )
         self.query_preprocessor = QueryPreprocessor(
             config=self.config,

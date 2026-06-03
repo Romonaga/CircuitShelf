@@ -85,6 +85,7 @@ SETTING_UI = {
     "PDF_RENDER_MIN_RASTER_COVERAGE": ("ingestion", "Raster page coverage", "Minimum page area covered by embedded images before a PDF page is considered raster-heavy.", True),
     "PDF_RENDER_OCR_PAGES": ("ingestion", "OCR rendered PDF pages", "OCR rendered visual PDF pages when extracted page text is too sparse for retrieval.", False),
     "INGEST_OPENAI_ASSIST_ENABLED": ("ingestion", "OpenAI ingestion review", "When enabled, OpenAI reviews extraction quality during ingestion. Corpus work uses the system key; entity work uses entity then user key fallback.", False),
+    "DATASHEET_OPENAI_REPAIR_ENABLED": ("ingestion", "OpenAI datasheet repair", "Repair weak datasheet pinout and fact extraction using deterministic quality gates and the scoped OpenAI key.", False),
     "CHUNKING_MODE": ("chunking", "Chunking mode", "Strategy used to split documents before embedding.", False),
     "CHUNK_SIZE": ("chunking", "Target chunk size", "Approximate target size for generated text chunks.", False),
     "CHUNK_OVERLAP": ("chunking", "Chunk overlap", "Amount of neighboring context repeated between chunks.", False),
