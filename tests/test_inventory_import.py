@@ -37,6 +37,16 @@ class InventoryImportTests(unittest.TestCase):
         self.assertEqual(result["items"][0]["action"], "merge")
         self.assertEqual(result["items"][0]["existingPartId"], "part-1")
 
+    def test_led_color_lines_with_trailing_x_quantity(self):
+        result = parse_inventory_import("White LED X50\nYellow LED X50\nBlue LED X50")
+        items = {item["displayName"]: item for item in result["items"]}
+
+        self.assertEqual(items["White LEDs"]["quantity"], 50)
+        self.assertEqual(items["White LEDs"]["partType"], "diode")
+        self.assertIn("white led", items["White LEDs"]["aliases"])
+        self.assertEqual(items["Yellow LEDs"]["quantity"], 50)
+        self.assertEqual(items["Blue LEDs"]["quantity"], 50)
+
 
 if __name__ == "__main__":
     unittest.main()

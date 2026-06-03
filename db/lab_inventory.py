@@ -93,6 +93,27 @@ class LabInventoryStore:
             rows = conn.execute(load_query("lab_parts_list.sql"), (user_id,)).fetchall()
         return [self._part_payload(row) for row in rows]
 
+    def list_locations(self, user_id: int) -> list[dict[str, Any]]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("lab_locations_list.sql"), (user_id,)).fetchall()
+        return [self._location_payload(row) for row in rows]
+
+    def upsert_location(self, user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        display_name = clean_db_text(payload.get("displayName") or payload.get("name") or "").strip()
+        if not display_name:
+            raise ValueError("Location name is required.")
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("lab_location_upsert.sql"),
+                (
+                    int(user_id),
+                    display_name,
+                    normalize_part_name(display_name),
+                    clean_db_text(payload.get("notes") or ""),
+                ),
+            ).fetchone()
+        return self._location_payload(row)
+
     def upsert_part(self, user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         display_name = clean_db_text(payload.get("displayName") or payload.get("name") or "").strip()
         if not display_name:
@@ -102,12 +123,14 @@ class LabInventoryStore:
         aliases = self._normalized_aliases(payload.get("aliases") or [])
         part_id = str(payload.get("id") or "").strip()
         with self.database.connection() as conn:
+            location_id, location_label = self._resolve_location(conn, user_id, payload)
             values = (
                 display_name,
                 normalized,
                 clean_db_text(payload.get("partType") or payload.get("type") or "component"),
                 max(0, int(payload.get("quantity") or 0)),
-                clean_db_text(payload.get("location") or ""),
+                location_id,
+                location_label,
                 clean_db_text(payload.get("notes") or ""),
             )
             if part_id:
@@ -139,6 +162,28 @@ class LabInventoryStore:
             rows = conn.execute(load_query("lab_inventory_terms.sql"), (user_id, user_id)).fetchall()
         return [dict(row) for row in rows]
 
+    def _resolve_location(self, conn, user_id: int, payload: dict[str, Any]) -> tuple[str | None, str]:
+        location_id = str(payload.get("locationId") or "").strip()
+        if location_id:
+            row = conn.execute(load_query("lab_location_get.sql"), (location_id, int(user_id))).fetchone()
+            if not row:
+                raise ValueError("Inventory location not found.")
+            return str(row["id"]), row["display_name"] or ""
+
+        location_name = clean_db_text(payload.get("location") or "").strip()
+        if not location_name:
+            return None, ""
+        row = conn.execute(
+            load_query("lab_location_upsert.sql"),
+            (
+                int(user_id),
+                location_name,
+                normalize_part_name(location_name),
+                "",
+            ),
+        ).fetchone()
+        return str(row["id"]), row["display_name"] or location_name
+
     def _normalized_aliases(self, aliases: Any) -> list[str]:
         if isinstance(aliases, str):
             aliases = re.split(r"[,;\n]", aliases)
@@ -158,9 +203,22 @@ class LabInventoryStore:
             "normalizedName": row["normalized_name"],
             "partType": row["part_type"],
             "quantity": int(row["quantity"] or 0),
+            "locationId": str(row["location_id"]) if row.get("location_id") else None,
             "location": row["location"] or "",
             "notes": row["notes"] or "",
             "aliases": list(row["aliases"] or []),
+            "createdAt": row["created_at"].isoformat() if row["created_at"] else None,
+            "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
+        }
+
+    @staticmethod
+    def _location_payload(row) -> dict[str, Any]:
+        return {
+            "id": str(row["id"]),
+            "userId": int(row["user_id"]),
+            "displayName": row["display_name"],
+            "normalizedName": row["normalized_name"],
+            "notes": row["notes"] or "",
             "createdAt": row["created_at"].isoformat() if row["created_at"] else None,
             "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
         }

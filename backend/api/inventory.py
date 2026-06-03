@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -23,6 +23,7 @@ def create_router(
     lab_inventory_store: Any,
     project_finder_store: Any,
     parse_inventory_import: Any,
+    inventory_photo_import_service: Any | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -32,6 +33,25 @@ def create_router(
         if error:
             return error
         return {"parts": lab_inventory_store.list_parts(deps.user_id_for_user(user))}
+
+    @router.get("/api/inventory/locations")
+    async def inventory_locations(req: Request):
+        user, error = deps.require_authenticated_user(req)
+        if error:
+            return error
+        return {"locations": lab_inventory_store.list_locations(deps.user_id_for_user(user))}
+
+    @router.post("/api/inventory/locations")
+    async def inventory_location_upsert(req: Request):
+        user, error = deps.require_authenticated_user(req)
+        if error:
+            return error
+        data = await req.json()
+        try:
+            location = lab_inventory_store.upsert_location(deps.user_id_for_user(user), data)
+        except (TypeError, ValueError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return {"location": location}
 
     @router.post("/api/inventory/parts")
     async def inventory_part_upsert(req: Request):
@@ -72,9 +92,11 @@ def create_router(
                 if existing:
                     item = {
                         **item,
+                        "id": existing["id"],
                         "displayName": existing["displayName"],
                         "partType": existing["partType"],
-                        "quantity": max(int(existing.get("quantity") or 0), int(item.get("quantity") or 0)),
+                        "quantity": max(0, int(existing.get("quantity") or 0)) + max(0, int(item.get("quantity") or 0)),
+                        "locationId": existing.get("locationId") or item.get("locationId"),
                         "location": existing.get("location") or item.get("location") or "",
                         "notes": "\n".join(
                             note
@@ -90,6 +112,40 @@ def create_router(
             except (TypeError, ValueError) as exc:
                 return JSONResponse({"error": str(exc)}, status_code=400)
         return {"parts": saved, "count": len(saved)}
+
+    @router.post("/api/inventory/import/photo-preview")
+    async def inventory_photo_import_preview(
+        req: Request,
+        file: UploadFile = File(...),
+        note: str = Form(""),
+    ):
+        user, error = deps.require_authenticated_user(req)
+        if error:
+            return error
+        if inventory_photo_import_service is None:
+            return JSONResponse({"error": "Inventory photo import is not configured."}, status_code=503)
+        content_type = file.content_type or ""
+        if not content_type.startswith("image/"):
+            return JSONResponse({"error": "Upload an image file for photo inventory import."}, status_code=400)
+        image_bytes = await file.read()
+        if not image_bytes:
+            return JSONResponse({"error": "Image file is empty."}, status_code=400)
+        if len(image_bytes) > 12 * 1024 * 1024:
+            return JSONResponse({"error": "Image is too large. Use a photo under 12 MB."}, status_code=400)
+        user_id = deps.user_id_for_user(user)
+        entity = deps.entity_store.current_for_user(user_id)
+        existing = lab_inventory_store.list_parts(user_id)
+        try:
+            return inventory_photo_import_service.preview(
+                image_bytes=image_bytes,
+                mime_type=content_type,
+                note=note,
+                entity_id=entity.get("id") if entity else None,
+                user_id=user_id,
+                existing_parts=existing,
+            )
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
 
     @router.delete("/api/inventory/parts/{part_id}")
     async def inventory_part_delete(part_id: str, req: Request):

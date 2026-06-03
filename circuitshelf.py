@@ -59,6 +59,7 @@ register_api_routes(
     lab_inventory_store=stores.lab_inventory_store,
     project_finder_store=stores.project_finder_store,
     parse_inventory_import=runtime.parse_inventory_import,
+    inventory_photo_import_service=stores.inventory_photo_import_service,
     require_admin_user=auth_dependencies.require_admin_user,
     settings_store=boot.settings_store,
     runtime_config_store=boot.runtime_config_store,

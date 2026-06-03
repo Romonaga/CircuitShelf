@@ -8,7 +8,7 @@ from db.lab_inventory import normalize_part_name
 
 
 QUANTITY_RE = re.compile(
-    r"\b(?:about|around|approx(?:imately)?|~)?\s*(\d{1,5})\s*(?:x|pcs?|pieces?|count|qty|of each)?\b",
+    r"\b(?:about|around|approx(?:imately)?|~)?\s*(?:x\s*)?(\d{1,5})\s*(?:x|pcs?|pieces?|count|qty|of each)?\b",
     re.IGNORECASE,
 )
 MODEL_RE = re.compile(r"\b[A-Za-z]{1,8}\d{2,5}[A-Za-z0-9-]*\b")
@@ -95,6 +95,12 @@ def part_from_text(text: str, quantity: int, raw_line: str) -> dict[str, Any]:
         return import_item("Assorted capacitors", "capacitor", quantity, raw_line, capacitor_aliases(), "Capacitor assortment. Verify voltage rating, polarity, ESR, and tolerance before use.", warnings)
     if "diode" in lower:
         return import_item("Assorted diodes", "diode", quantity, raw_line, diode_aliases(), "Diode assortment. Verify current, reverse voltage, speed, and polarity before use.", warnings)
+    if "led" in lower or "light emitting diode" in lower:
+        color = led_color(lower)
+        display_name = f"{color.title()} LEDs" if color else "Assorted LEDs"
+        aliases = ["led", "leds", "light emitting diode", f"{color} led" if color else ""]
+        notes = "LED inventory. Verify forward voltage, current limit resistor, package size, and polarity before use."
+        return import_item(display_name, "diode", quantity, raw_line, aliases, notes, warnings)
     if "raspberry" in lower or "raspi" in lower or re.search(r"\brpi\b|\bpi\s*[45]\b", lower):
         return import_item("Raspberry Pi boards", "board", quantity, raw_line, ["raspberry pi", "raspi", "rpi", "raspberry pi 4", "pi 4", "raspberry pi 5", "pi 5", "gpio board", "sbc", "3.3v gpio"], "Raspberry Pi boards. GPIO is 3.3 V logic only.", warnings)
     if "arduino" in lower and any(word in lower for word in ("bare", "ic", "chip")):
@@ -162,9 +168,16 @@ def aliases_for_model(model: str) -> list[str]:
 
 
 def clean_display_name(value: str) -> str:
-    text = re.sub(r"\b(?:have|i have|about|around|approx(?:imately)?|\d+\s*x?)\b", " ", value, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:have|i have|about|around|approx(?:imately)?|x?\s*\d+\s*x?)\b", " ", value, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip(" ,.-")
     return text[:80] or "Imported part"
+
+
+def led_color(text: str) -> str:
+    for color in ("white", "yellow", "blue", "red", "green", "orange", "amber", "rgb"):
+        if re.search(rf"\b{color}\b", text, re.IGNORECASE):
+            return color
+    return ""
 
 
 def resistor_aliases() -> list[str]:

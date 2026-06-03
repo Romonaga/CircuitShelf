@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import type { InventoryPart, InventoryPartInput } from "../types";
+import type { InventoryLocation, InventoryPart, InventoryPartInput } from "../types";
 
 const partTypes = ["component", "ic", "resistor", "capacitor", "diode", "transistor", "sensor", "module", "board", "display", "tooling", "power"];
 
@@ -15,21 +15,25 @@ const initialPart: InventoryPartInput = {
 export function InventoryPartForm({
   saving,
   editingPart,
+  locations,
   onCancel,
   onSave
 }: {
   saving: boolean;
   editingPart?: InventoryPart | null;
+  locations: InventoryLocation[];
   onCancel?: () => void;
   onSave: (part: InventoryPartInput) => Promise<boolean>;
 }) {
   const [part, setPart] = useState<InventoryPartInput>(initialPart);
   const [aliasesText, setAliasesText] = useState("");
+  const [customLocation, setCustomLocation] = useState("");
 
   useEffect(() => {
     if (!editingPart) {
       setPart(initialPart);
       setAliasesText("");
+      setCustomLocation("");
       return;
     }
     setPart({
@@ -37,17 +41,22 @@ export function InventoryPartForm({
       displayName: editingPart.displayName,
       partType: editingPart.partType,
       quantity: editingPart.quantity,
+      locationId: editingPart.locationId,
       location: editingPart.location,
       notes: editingPart.notes,
       aliases: editingPart.aliases
     });
     setAliasesText(editingPart.aliases.join("\n"));
+    setCustomLocation("");
   }, [editingPart]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const locationName = customLocation.trim() ? customLocation.trim() : part.location;
     const saved = await onSave({
       ...part,
+      locationId: customLocation.trim() ? null : part.locationId,
+      location: locationName,
       aliases: aliasesText
         .split(/[,;\n]/)
         .map((alias) => alias.trim())
@@ -56,6 +65,7 @@ export function InventoryPartForm({
     if (saved && !editingPart) {
       setPart(initialPart);
       setAliasesText("");
+      setCustomLocation("");
     }
   }
 
@@ -92,12 +102,42 @@ export function InventoryPartForm({
       </div>
       <label>
         Location
-        <input
-          value={part.location}
-          onChange={(event) => setPart({ ...part, location: event.target.value })}
-          placeholder="Drawer A3, resistor box, bench shelf"
-        />
+        <select
+          value={customLocation ? "__new__" : part.locationId || ""}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value === "__new__") {
+              setPart({ ...part, locationId: null, location: "" });
+              setCustomLocation(part.location || "");
+              return;
+            }
+            const location = locations.find((item) => item.id === value);
+            setCustomLocation("");
+            setPart({ ...part, locationId: location?.id || null, location: location?.displayName || "" });
+          }}
+        >
+          <option value="">Unsorted</option>
+          {locations.map((location) => (
+            <option key={location.id} value={location.id}>
+              {location.displayName}
+            </option>
+          ))}
+          <option value="__new__">Create new location...</option>
+        </select>
       </label>
+      {customLocation || (!part.locationId && part.location && !locations.some((location) => location.displayName === part.location)) ? (
+        <label>
+          New location
+          <input
+            value={customLocation || part.location}
+            onChange={(event) => {
+              setCustomLocation(event.target.value);
+              setPart({ ...part, locationId: null, location: event.target.value });
+            }}
+            placeholder="Drawer A3, resistor box, bench shelf"
+          />
+        </label>
+      ) : null}
       <label>
         Aliases
         <textarea

@@ -11,12 +11,13 @@ import { formatNumber } from "../lib/format";
 export function InventoryView({ isActive }: { isActive: boolean }) {
   const {
     parts,
+    locations,
     loading,
     error,
     savePart,
     removePart,
     updateQuantity,
-    loadParts
+    refreshInventory
   } = useInventory(isActive);
   const [saving, setSaving] = useState(false);
   const [quantitySavingId, setQuantitySavingId] = useState("");
@@ -96,14 +97,16 @@ export function InventoryView({ isActive }: { isActive: boolean }) {
             <InventoryPartForm
               saving={saving}
               editingPart={editingPart}
+              locations={locations}
               onCancel={() => setEditingPart(null)}
               onSave={submitPart}
             />
           </section>
           <InventoryImportPanel
+            locations={locations}
             onImported={(count) => {
               setMessage(`${count} inventory items imported.`);
-              void loadParts();
+              void refreshInventory();
             }}
           />
         </aside>

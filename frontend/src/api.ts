@@ -25,6 +25,7 @@ import type {
   LogTailPayload,
   InventoryPart,
   InventoryPartInput,
+  InventoryLocation,
   InventoryImportItem,
   InventoryImportPreview,
   ProjectFinderResponse,
@@ -424,6 +425,17 @@ export function getInventoryParts(): Promise<{ parts: InventoryPart[] }> {
   return requestJson<{ parts: InventoryPart[] }>("/api/inventory/parts");
 }
 
+export function getInventoryLocations(): Promise<{ locations: InventoryLocation[] }> {
+  return requestJson<{ locations: InventoryLocation[] }>("/api/inventory/locations");
+}
+
+export function saveInventoryLocation(location: Pick<InventoryLocation, "displayName"> & Partial<InventoryLocation>): Promise<{ location: InventoryLocation }> {
+  return requestJson<{ location: InventoryLocation }>("/api/inventory/locations", {
+    method: "POST",
+    body: JSON.stringify(location)
+  });
+}
+
 export function saveInventoryPart(part: InventoryPartInput): Promise<{ part: InventoryPart }> {
   return requestJson<{ part: InventoryPart }>("/api/inventory/parts", {
     method: "POST",
@@ -448,6 +460,16 @@ export function applyInventoryImport(items: InventoryImportItem[]): Promise<{ pa
   return requestJson<{ parts: InventoryPart[]; count: number }>("/api/inventory/import/apply", {
     method: "POST",
     body: JSON.stringify({ items })
+  });
+}
+
+export function previewInventoryPhotoImport(file: File, note = ""): Promise<InventoryImportPreview> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("note", note);
+  return requestJson<InventoryImportPreview>("/api/inventory/import/photo-preview", {
+    method: "POST",
+    body
   });
 }
 

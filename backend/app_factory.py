@@ -41,6 +41,7 @@ def register_api_routes(
     lab_inventory_store: Any,
     project_finder_store: Any,
     parse_inventory_import: Any,
+    inventory_photo_import_service: Any,
     require_admin_user: Any,
     settings_store: Any,
     runtime_config_store: Any,
@@ -98,6 +99,7 @@ def register_api_routes(
         lab_inventory_store=lab_inventory_store,
         project_finder_store=project_finder_store,
         parse_inventory_import=parse_inventory_import,
+        inventory_photo_import_service=inventory_photo_import_service,
     ))
     app.include_router(settings_api.create_router(
         require_admin_user=require_admin_user,

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { deleteInventoryPart, getInventoryParts, getProjectCandidates, saveInventoryPart } from "../api";
+import { deleteInventoryPart, getInventoryLocations, getInventoryParts, getProjectCandidates, saveInventoryPart } from "../api";
 import { errorMessage } from "../lib/errors";
-import type { InventoryPart, InventoryPartInput, ProjectCandidate, ProjectMissingPartSummary } from "../types";
+import type { InventoryLocation, InventoryPart, InventoryPartInput, ProjectCandidate, ProjectMissingPartSummary } from "../types";
 
 const emptyCandidates: ProjectCandidate[] = [];
 
 export function useInventory(isActive: boolean) {
   const [parts, setParts] = useState<InventoryPart[]>([]);
+  const [locations, setLocations] = useState<InventoryLocation[]>([]);
   const [candidates, setCandidates] = useState<ProjectCandidate[]>(emptyCandidates);
   const [loading, setLoading] = useState(false);
   const [finding, setFinding] = useState(false);
@@ -28,6 +29,19 @@ export function useInventory(isActive: boolean) {
       setLoading(false);
     }
   }, []);
+
+  const loadLocations = useCallback(async () => {
+    try {
+      const response = await getInventoryLocations();
+      setLocations(response.locations);
+    } catch (err) {
+      setError(errorMessage(err, "Could not load inventory locations"));
+    }
+  }, []);
+
+  const refreshInventory = useCallback(async () => {
+    await Promise.all([loadParts(), loadLocations()]);
+  }, [loadLocations, loadParts]);
 
   const findProjects = useCallback(async () => {
     setFinding(true);
@@ -55,6 +69,7 @@ export function useInventory(isActive: boolean) {
           const existing = current.filter((item) => item.id !== response.part.id);
           return [...existing, response.part].sort((left, right) => left.displayName.localeCompare(right.displayName));
         });
+        await loadLocations();
         return response.part;
       } catch (err) {
         setError(errorMessage(err, "Could not save part"));
@@ -91,6 +106,7 @@ export function useInventory(isActive: boolean) {
         displayName: part.displayName,
         partType: part.partType,
         quantity,
+        locationId: part.locationId,
         location: part.location,
         notes: part.notes,
         aliases: part.aliases
@@ -101,12 +117,13 @@ export function useInventory(isActive: boolean) {
 
   useEffect(() => {
     if (isActive) {
-      void loadParts();
+      void refreshInventory();
     }
-  }, [isActive, loadParts]);
+  }, [isActive, refreshInventory]);
 
   return {
     parts,
+    locations,
     candidates,
     inventoryCount,
     buildableCount,
@@ -116,6 +133,8 @@ export function useInventory(isActive: boolean) {
     finding,
     error,
     loadParts,
+    loadLocations,
+    refreshInventory,
     findProjects,
     savePart,
     removePart,

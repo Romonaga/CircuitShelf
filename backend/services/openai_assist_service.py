@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import time
 from typing import Any
 
@@ -485,6 +486,106 @@ class OpenAIAssistService:
                 self.logger.warning(f"OpenAI datasheet intelligence repair failed for {source_path}: {message}")
             return None
 
+    def identify_inventory_photo(
+        self,
+        *,
+        image_bytes: bytes,
+        mime_type: str,
+        note: str,
+        entity_id: int | None,
+        user_id: int | None,
+    ) -> dict[str, Any] | None:
+        settings = self.ai_provider_store.resolve_openai_assist(entity_id=entity_id, user_id=user_id)
+        if not settings or not settings.get("apiKey") or settings.get("assistMode") == "off":
+            return None
+        event_base = {
+            "entity_id": entity_id,
+            "user_id": user_id,
+            "provider": "openai",
+            "task_type": "inventory_photo_import",
+            "model_name": settings["modelName"],
+            "context_type": "inventory_import",
+            "context_id": None,
+            "round_number": 1,
+            "round_count": 1,
+            "paid_by": settings["paidBy"],
+            "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
+        }
+        budget_block = self._budget_block_message(settings)
+        if budget_block:
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=0,
+                cached_input_tokens=0,
+                output_tokens=0,
+                estimated_cost=0,
+                success=False,
+                error_message=budget_block,
+            )
+            raise ValueError(budget_block)
+
+        prompt = (
+            "Identify electronics inventory visible in this photo. Return only compact JSON with key items. "
+            "items must be an array of objects with displayName, partType, quantity, aliases, notes, confidence, warnings. "
+            "Use conservative quantities: if you cannot count items, use 1 and add a warning. "
+            "Prefer useful inventory names such as 'Red LED', 'NE555 timer IC', '10 kOhm resistor assortment'. "
+            "Do not invent exact part numbers unless markings are visible.\n\n"
+            f"User note: {note[:1000]}"
+        )
+        try:
+            data = self._create_multimodal_response(
+                api_key=settings["apiKey"],
+                model=settings["modelName"],
+                instructions=(
+                    "You are CircuitShelf's inventory photo assistant. "
+                    "Return JSON only and keep uncertain observations marked with warnings."
+                ),
+                input_text=prompt,
+                image_bytes=image_bytes,
+                mime_type=mime_type,
+                max_output_tokens=1400,
+            )
+            usage = extract_usage(data)
+            estimated_cost = self.ai_provider_store.estimate_cost(
+                provider="openai",
+                model_name=settings["modelName"],
+                input_tokens=usage["inputTokens"],
+                cached_input_tokens=usage["cachedInputTokens"],
+                output_tokens=usage["outputTokens"],
+                billing_scope=settings["pricingScope"],
+                entity_id=settings.get("pricingEntityId"),
+                user_id=settings.get("pricingUserId"),
+            )
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=usage["inputTokens"],
+                cached_input_tokens=usage["cachedInputTokens"],
+                output_tokens=usage["outputTokens"],
+                estimated_cost=estimated_cost,
+                success=True,
+            )
+            parsed = parse_json_object(extract_response_text(data))
+            parsed["estimatedCost"] = estimated_cost
+            parsed["model"] = settings["modelName"]
+            parsed["paidBy"] = settings["paidBy"]
+            return parsed
+        except ValueError:
+            raise
+        except Exception as exc:
+            message = safe_error_message(exc)
+            self.ai_provider_store.record_ai_assist_event(
+                **event_base,
+                input_tokens=0,
+                cached_input_tokens=0,
+                output_tokens=0,
+                estimated_cost=0,
+                success=False,
+                error_message=message,
+            )
+            if self.logger:
+                self.logger.warning(f"OpenAI inventory photo import failed: {message}")
+            raise ValueError(f"Inventory photo analysis failed: {message}") from exc
+
     def _create_response(
         self,
         *,
@@ -504,6 +605,44 @@ class OpenAIAssistService:
                 "model": model,
                 "instructions": instructions,
                 "input": input_text,
+                "max_output_tokens": max_output_tokens,
+                "store": False,
+            },
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _create_multimodal_response(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        instructions: str,
+        input_text: str,
+        image_bytes: bytes,
+        mime_type: str,
+        max_output_tokens: int,
+    ) -> dict[str, Any]:
+        image_url = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "instructions": instructions,
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": input_text},
+                            {"type": "input_image", "image_url": image_url},
+                        ],
+                    }
+                ],
                 "max_output_tokens": max_output_tokens,
                 "store": False,
             },

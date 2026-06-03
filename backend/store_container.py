@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from backend.services.openai_assist_service import OpenAIAssistService
+from backend.services.inventory_photo_import_service import InventoryPhotoImportService
 from backend.services.openai_model_service import OpenAIModelService
 from db.account_profile import AccountProfileStore
 from db.ai_provider_store import AIProviderStore
@@ -39,6 +40,7 @@ class StoreContainer:
     assembly_plan_store: AssemblyPlanStore
     lab_inventory_store: LabInventoryStore
     project_finder_store: ProjectFinderStore
+    inventory_photo_import_service: InventoryPhotoImportService
     db_response_cache: PostgresResponseCache
     ingest_job_store: IngestJobStore
 
@@ -64,13 +66,14 @@ def create_store_container(*, database, config, trace_logger) -> StoreContainer:
     training_dir = config.get("TRAINING_DIR", "training")
     lab_inventory_store = LabInventoryStore(database, trace_logger)
     ai_provider_store = AIProviderStore(database, "config/config.yaml", trace_logger)
+    openai_assist_service = OpenAIAssistService(ai_provider_store, trace_logger)
     return StoreContainer(
         user_store=UserStore(database, trace_logger),
         entity_store=EntityStore(database, trace_logger),
         password_policy_store=PasswordPolicyStore(database, trace_logger),
         account_profile_store=AccountProfileStore(database, trace_logger),
         ai_provider_store=ai_provider_store,
-        openai_assist_service=OpenAIAssistService(ai_provider_store, trace_logger),
+        openai_assist_service=openai_assist_service,
         openai_model_service=OpenAIModelService(ai_provider_store, trace_logger),
         user_preferences_store=UserPreferencesStore(database, trace_logger),
         query_log_store=QueryLogStore(database, trace_logger),
@@ -82,6 +85,7 @@ def create_store_container(*, database, config, trace_logger) -> StoreContainer:
         assembly_plan_store=AssemblyPlanStore(database, training_dir, trace_logger),
         lab_inventory_store=lab_inventory_store,
         project_finder_store=ProjectFinderStore(database, lab_inventory_store, trace_logger),
+        inventory_photo_import_service=InventoryPhotoImportService(openai_assist_service, trace_logger),
         db_response_cache=PostgresResponseCache(
             database,
             capacity=config.get("RESPONSE_CACHE_CAPACITY", 200),

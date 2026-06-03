@@ -498,9 +498,20 @@ export interface InventoryPart {
   normalizedName?: string;
   partType: string;
   quantity: number;
+  locationId?: string | null;
   location: string;
   notes: string;
   aliases: string[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface InventoryLocation {
+  id: string;
+  userId?: number;
+  displayName: string;
+  normalizedName?: string;
+  notes?: string;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -510,6 +521,7 @@ export interface InventoryPartInput {
   displayName: string;
   partType: string;
   quantity: number;
+  locationId?: string | null;
   location: string;
   notes: string;
   aliases: string[];
@@ -528,6 +540,10 @@ export interface InventoryImportItem extends InventoryPartInput {
 export interface InventoryImportPreview {
   items: InventoryImportItem[];
   count: number;
+  source?: string;
+  model?: string | null;
+  paidBy?: string | null;
+  estimatedCost?: number | null;
 }
 
 export interface ProjectCandidatePart {

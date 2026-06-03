@@ -1320,8 +1320,23 @@ nav {
   margin: 0;
 }
 
+.inventory-import-panel h4 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 .inventory-import-panel textarea {
   min-height: 130px;
+}
+
+.inventory-photo-import {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  margin-top: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: rgba(20, 184, 166, 0.06);
 }
 
 .inventory-import-list {
@@ -1342,7 +1357,7 @@ nav {
 
 .inventory-import-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px 76px;
+  grid-template-columns: minmax(0, 1fr) 120px 76px minmax(120px, 0.7fr);
   gap: 8px;
 }
 
