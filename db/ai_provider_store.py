@@ -691,8 +691,7 @@ class AIProviderStore:
             ),
         }
 
-    @staticmethod
-    def _usage_event_row(row: dict[str, Any]) -> dict[str, Any]:
+    def _usage_event_row(self, row: dict[str, Any]) -> dict[str, Any]:
         return {
             "id": row["id"],
             "createdAt": row["created_at"].isoformat() if row.get("created_at") else None,
