@@ -70,6 +70,11 @@ PRESERVED_CATEGORIES = [
     "schema migrations",
 ]
 
+PURGE_SCOPE = [
+    "runtime database rows: documents, chunks, images, ingest runs, conversations, cache, AI usage, and performance samples",
+    "training upload folder contents",
+]
+
 
 def database_url_from_environment() -> str | None:
     if os.environ.get("DATABASE_URL"):
@@ -200,13 +205,18 @@ def purge_training_dir(training_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Purge CircuitShelf dogfooding data while preserving accounts, entities, "
-            "settings, AI keys/config, pricing, lookup tables, and inventory."
+            "Purge CircuitShelf dogfooding data and the training upload folder while "
+            "preserving accounts, entities, settings, AI keys/config, pricing, lookup "
+            "tables, and inventory."
         )
     )
     parser.add_argument("--yes", action="store_true", help="Run without an interactive confirmation prompt.")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be purged without deleting anything.")
-    parser.add_argument("--db-only", action="store_true", help="Only purge database runtime tables.")
+    parser.add_argument(
+        "--db-only",
+        action="store_true",
+        help="Only purge database runtime tables. Do not use for normal dogfood resets because it leaves training uploads in place.",
+    )
     parser.add_argument("--training-only", action="store_true", help="Only purge the training upload folder.")
     parser.add_argument(
         "--clear-sessions",
@@ -221,6 +231,9 @@ def main() -> int:
 
     if not args.yes and not args.dry_run:
         print("This will clear CircuitShelf dogfooding/runtime data.")
+        print("Purged by default:")
+        for item in PURGE_SCOPE:
+            print(f"  - {item}")
         print("Preserved:")
         for category in PRESERVED_CATEGORIES:
             print(f"  - {category}")
