@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import type { InventoryLocation, InventoryPart, InventoryPartInput } from "../types";
 
 const partTypes = ["component", "ic", "resistor", "capacitor", "diode", "transistor", "sensor", "module", "board", "display", "tooling", "power"];
+type LocationMode = "existing" | "new";
 
 const initialPart: InventoryPartInput = {
   displayName: "",
@@ -28,14 +29,17 @@ export function InventoryPartForm({
   const [part, setPart] = useState<InventoryPartInput>(initialPart);
   const [aliasesText, setAliasesText] = useState("");
   const [customLocation, setCustomLocation] = useState("");
+  const [locationMode, setLocationMode] = useState<LocationMode>("existing");
 
   useEffect(() => {
     if (!editingPart) {
       setPart(initialPart);
       setAliasesText("");
       setCustomLocation("");
+      setLocationMode("existing");
       return;
     }
+    const hasKnownLocation = Boolean(editingPart.locationId);
     setPart({
       id: editingPart.id,
       displayName: editingPart.displayName,
@@ -47,15 +51,17 @@ export function InventoryPartForm({
       aliases: editingPart.aliases
     });
     setAliasesText(editingPart.aliases.join("\n"));
-    setCustomLocation("");
+    setCustomLocation(hasKnownLocation ? "" : editingPart.location || "");
+    setLocationMode(hasKnownLocation || !editingPart.location ? "existing" : "new");
   }, [editingPart]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const locationName = customLocation.trim() ? customLocation.trim() : part.location;
+    const isNewLocation = locationMode === "new";
+    const locationName = isNewLocation ? customLocation.trim() : part.location;
     const saved = await onSave({
       ...part,
-      locationId: customLocation.trim() ? null : part.locationId,
+      locationId: isNewLocation ? null : part.locationId,
       location: locationName,
       aliases: aliasesText
         .split(/[,;\n]/)
@@ -66,6 +72,7 @@ export function InventoryPartForm({
       setPart(initialPart);
       setAliasesText("");
       setCustomLocation("");
+      setLocationMode("existing");
     }
   }
 
@@ -103,15 +110,17 @@ export function InventoryPartForm({
       <label>
         Location
         <select
-          value={customLocation ? "__new__" : part.locationId || ""}
+          value={locationMode === "new" ? "__new__" : part.locationId || ""}
           onChange={(event) => {
             const value = event.target.value;
             if (value === "__new__") {
+              setLocationMode("new");
               setPart({ ...part, locationId: null, location: "" });
               setCustomLocation(part.location || "");
               return;
             }
             const location = locations.find((item) => item.id === value);
+            setLocationMode("existing");
             setCustomLocation("");
             setPart({ ...part, locationId: location?.id || null, location: location?.displayName || "" });
           }}
@@ -125,11 +134,11 @@ export function InventoryPartForm({
           <option value="__new__">Create new location...</option>
         </select>
       </label>
-      {customLocation || (!part.locationId && part.location && !locations.some((location) => location.displayName === part.location)) ? (
+      {locationMode === "new" ? (
         <label>
           New location
           <input
-            value={customLocation || part.location}
+            value={customLocation}
             onChange={(event) => {
               setCustomLocation(event.target.value);
               setPart({ ...part, locationId: null, location: event.target.value });
