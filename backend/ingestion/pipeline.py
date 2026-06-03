@@ -15,7 +15,7 @@ from lxml import etree
 from backend.ingestion.document_classifier import classify_document
 from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsset
 from backend.ingestion.ocr_assets import OcrAssetProcessor
-from backend.ingestion.pdf_extractor import PdfExtractor
+from backend.ingestion.pdf import PdfDocumentExtractor
 from pdf_visuals import link_chunks_to_rendered_pages
 
 
@@ -186,7 +186,7 @@ class IngestionPipeline:
             detected_cpu_count=self.detected_cpu_count,
             reserved_core_count=self.reserved_core_count,
         )
-        return PdfExtractor(config=self.config, ocr_assets=ocr_assets, trace_logger=self.trace_logger).extract(
+        return PdfDocumentExtractor(config=self.config, ocr_assets=ocr_assets, trace_logger=self.trace_logger).extract(
             fpath,
             progress_callback=progress_callback,
         )
@@ -217,7 +217,7 @@ class IngestionPipeline:
             reserved_core_count=self.reserved_core_count,
         )
         result = ocr_assets.run_jobs([(0, 1, raw, os.path.basename(fpath), "image")])[0]
-        asset = PdfExtractor._asset_from_ocr_result(result, os.path.basename(fpath), {})
+        asset = PdfDocumentExtractor._asset_from_ocr_result(result, os.path.basename(fpath), {})
         return ExtractedDocument(
             source_path=fpath,
             pages=[ExtractedPage(page_number=1, text=asset.ocr_text)],

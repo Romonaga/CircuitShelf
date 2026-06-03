@@ -165,9 +165,57 @@ def extract_pin_description_table_pinout(
     return pins
 
 
+def extract_pipe_table_pinout(
+    text: str,
+    *,
+    source: str,
+    page: int | None,
+    chunk_index: int | None,
+) -> list[PinoutPin]:
+    rows = [_split_table_row(line) for line in str(text or "").splitlines() if "|" in line]
+    rows = [row for row in rows if row]
+    if len(rows) < 2:
+        return []
+
+    header_index = next((index for index, row in enumerate(rows) if _looks_like_pin_table_header(row)), -1)
+    if header_index < 0:
+        return []
+    header = [_compact_header(cell) for cell in rows[header_index]]
+    pin_col = _first_header_index(header, {"PIN", "PIN#", "PINNO", "PINNUMBER", "NO", "NUMBER", "TERMINAL"})
+    if pin_col is None:
+        return []
+    name_col = _first_header_index(header, {"NAME", "SYMBOL", "SIGNAL", "TERMINALNAME", "MNEMONIC"})
+    function_col = _first_header_index(header, {"FUNCTION", "DESCRIPTION", "TYPE", "I/O", "IO"})
+
+    pins = []
+    for row in rows[header_index + 1 :]:
+        if pin_col >= len(row):
+            continue
+        pin_number = _pin_number_from_cell(row[pin_col])
+        if pin_number is None:
+            continue
+        label = _label_from_table_columns(row, name_col=name_col, function_col=function_col, pin_col=pin_col)
+        if not _is_signal_label(label):
+            continue
+        pins.append(
+            PinoutPin(
+                pin=pin_number,
+                label=label,
+                function=expand_pin_label(label),
+                source=source,
+                page=page,
+                chunk_index=chunk_index,
+            )
+        )
+    return pins
+
+
 def _looks_like_pin_description_table(lines: list[str]) -> bool:
     upper_lines = [line.upper() for line in lines]
-    return "PIN DESCRIPTIONS" in upper_lines and any(line in {"PIN #", "PIN", "PIN NUMBER"} for line in upper_lines)
+    joined = "\n".join(upper_lines)
+    has_marker = any(marker in joined for marker in PIN_TABLE_PAGE_MARKERS)
+    has_pin_header = any(line in {"PIN #", "PIN", "PIN NUMBER", "NO.", "NO"} for line in upper_lines)
+    return has_marker and has_pin_header
 
 
 def _pin_table_rows(lines: list[str]) -> list[list[str]]:
@@ -273,6 +321,7 @@ def extract_pinout_map(chunks: list[str], metadata: list[dict], source: str) -> 
         page_chunks.setdefault(page, []).append((index, text or ""))
         candidates = []
         candidates.extend(extract_compact_optocoupler_pinout(text, source=source, page=page, chunk_index=index))
+        candidates.extend(extract_pipe_table_pinout(text, source=source, page=page, chunk_index=index))
         candidates.extend(extract_pin_description_table_pinout(text, source=source, page=page, chunk_index=index))
         candidates.extend(extract_direct_pinouts(text, source=source, page=page, chunk_index=index))
         for pin in candidates:
@@ -327,6 +376,48 @@ def _optional_int(value) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _split_table_row(line: str) -> list[str]:
+    cells = [clean_pin_label(cell) for cell in str(line or "").split("|")]
+    return [cell for cell in cells if cell]
+
+
+def _looks_like_pin_table_header(row: list[str]) -> bool:
+    compact = {_compact_header(cell) for cell in row}
+    has_pin = bool(compact & {"PIN", "PIN#", "PINNO", "PINNUMBER", "NO", "NUMBER", "TERMINAL"})
+    has_label = bool(compact & {"NAME", "SYMBOL", "SIGNAL", "FUNCTION", "DESCRIPTION", "TERMINALNAME", "MNEMONIC"})
+    return has_pin and has_label
+
+
+def _first_header_index(header: list[str], names: set[str]) -> int | None:
+    for index, value in enumerate(header):
+        if value in names:
+            return index
+    return None
+
+
+def _pin_number_from_cell(value: str) -> int | None:
+    match = re.search(r"\b(\d{1,3})\b", str(value or ""))
+    if not match:
+        return None
+    pin = int(match.group(1))
+    return pin if 1 <= pin <= 256 else None
+
+
+def _label_from_table_columns(row: list[str], *, name_col: int | None, function_col: int | None, pin_col: int) -> str:
+    candidates: list[str] = []
+    if name_col is not None and name_col < len(row):
+        candidates.append(row[name_col])
+    if function_col is not None and function_col < len(row):
+        candidates.append(row[function_col])
+    candidates.extend(cell for index, cell in enumerate(row) if index != pin_col)
+
+    for candidate in candidates:
+        cleaned = _clean_signal_label(candidate)
+        if _is_signal_label(cleaned):
+            return cleaned
+    return ""
 
 
 def extract_ordered_pin_function_sequence(

@@ -4,7 +4,11 @@ lxml
 nltk
 numpy
 pandas
+pdfminer.six
+pdfplumber
 pillow
+pypdf
+pypdfium2
 pymupdf
 pytesseract
 psycopg[binary]

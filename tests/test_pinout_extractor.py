@@ -34,6 +34,36 @@ class PinoutExtractorTests(unittest.TestCase):
         self.assertEqual(pinout["pins"][0]["function"], "VCC")
         self.assertEqual(pinout["pins"][1]["function"], "Ground")
 
+    def test_extracts_generic_pipe_pin_table(self):
+        chunks = [
+            """Pin | Name | Function
+1 | GND | Ground
+2 | TRIG | Trigger input
+3 | OUT | Output
+4 | RESET | Active low reset
+5 | CONT | Control voltage
+6 | THRES | Threshold input
+7 | DISCH | Discharge
+8 | VCC | Supply voltage"""
+        ]
+        metadata = [{"source": "timer.pdf", "page": 3}]
+
+        pinout = extract_pinout_map(chunks, metadata, "timer.pdf")
+
+        self.assertEqual(
+            [(pin["pin"], pin["function"]) for pin in pinout["pins"]],
+            [
+                (1, "Ground"),
+                (2, "Trigger input"),
+                (3, "Output"),
+                (4, "Reset"),
+                (5, "Control voltage"),
+                (6, "Threshold input"),
+                (7, "Discharge"),
+                (8, "VCC"),
+            ],
+        )
+
     def test_extracts_datasheet_pin_description_table(self):
         chunks = [
             """PIN CONFIGURATIONS
