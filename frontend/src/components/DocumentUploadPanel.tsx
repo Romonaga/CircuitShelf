@@ -153,9 +153,12 @@ export function DocumentUploadPanel({
             <strong>{selection.label}</strong>
             <span>{selection.totalSize}</span>
           </div>
-          <ul className="upload-selection-list">
-            {selection.names.map((name, index) => (
-              <li key={`${index}-${name}`} title={name}>{name}</li>
+          <ul className="upload-selection-list" aria-label="Selected files">
+            {selection.files.map((file, index) => (
+              <li key={`${index}-${file.path}`} title={file.path}>
+                <span className="upload-selection-name">{file.name}</span>
+                {file.folder ? <span className="upload-selection-path">{file.folder}</span> : null}
+              </li>
             ))}
           </ul>
         </div>
@@ -238,14 +241,23 @@ function formatUploadEta(seconds: number | null | undefined, percent: number) {
 
 function summarizeSelection(files: File[]) {
   if (!files.length) {
-    return { label: "No files selected.", title: "", totalSize: "", names: [] };
+    return { label: "No files selected.", title: "", totalSize: "", files: [] };
   }
-  const names = files.map((file) => file.webkitRelativePath || file.name);
+  const selectedFiles = files.map((file) => {
+    const path = file.webkitRelativePath || file.name;
+    const parts = path.split("/");
+    const name = parts.pop() || path;
+    return {
+      path,
+      name,
+      folder: parts.join("/")
+    };
+  });
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   return {
     label: `${formatInteger(files.length)} selected`,
     totalSize: formatBytes(totalBytes),
-    names,
-    title: names.join("\n")
+    files: selectedFiles,
+    title: selectedFiles.map((file) => file.path).join("\n")
   };
 }

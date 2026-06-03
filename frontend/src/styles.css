@@ -3472,10 +3472,10 @@ nav {
 
 .upload-selection-list {
   display: grid;
-  gap: 4px;
-  max-height: min(220px, 28vh);
+  gap: 6px;
+  max-height: min(280px, 34vh);
   margin: 0;
-  padding: 2px 4px 2px 0;
+  padding: 2px 5px 2px 0;
   overflow: auto;
   list-style: none;
   scrollbar-color: var(--accent) transparent;
@@ -3483,13 +3483,36 @@ nav {
 }
 
 .upload-selection-list li {
+  display: grid;
+  gap: 2px;
   min-width: 0;
   overflow: hidden;
-  color: var(--muted);
-  font-size: 0.76rem;
+  padding: 7px 8px;
+  color: var(--text);
+  border: 1px solid rgba(22, 119, 129, 0.22);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.52);
+  font-size: 0.78rem;
   line-height: 1.25;
+}
+
+.upload-selection-name,
+.upload-selection-path {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.upload-selection-name {
+  color: var(--text);
+  font-weight: 850;
+}
+
+.upload-selection-path {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 750;
 }
 
 .upload-selection-list li.muted {
