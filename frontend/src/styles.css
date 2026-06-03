@@ -2369,6 +2369,7 @@ nav {
 .answer-rich {
   display: grid;
   gap: 14px;
+  color: var(--ink);
 }
 
 .answer-rich > * {
@@ -2381,6 +2382,7 @@ nav {
 .answer-rich h3 {
   margin-top: 18px;
   margin-bottom: 8px;
+  color: var(--ink);
   line-height: 1.2;
 }
 
@@ -2398,7 +2400,12 @@ nav {
 
 .answer-rich p,
 .answer-rich li {
+  color: var(--ink);
   line-height: 1.65;
+}
+
+.answer-rich strong {
+  color: var(--ink);
 }
 
 .answer-rich ul,
@@ -2453,7 +2460,7 @@ nav {
 .answer-details {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--panel-raised);
 }
 
 .answer-details .answer-details {
