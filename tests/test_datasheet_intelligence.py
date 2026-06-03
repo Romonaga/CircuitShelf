@@ -377,6 +377,95 @@ Input supply voltage, 4.5 V to 16 V.""",
         )
         self.assertNotIn("application", {fact["type"] for fact in intelligence["facts"]})
 
+    def test_voltage_range_suppresses_redundant_single_supply_conditions(self):
+        chunks = [
+            """SN74HC04 Hex Inverter Datasheet
+Features Pin Functions Electrical Characteristics Absolute Maximum Ratings
+Recommended Operating Conditions
+Operating voltage is 2 V to 6 V.
+Supply voltage test condition 2 V.
+Supply voltage test condition 4.5 V.""",
+            """1A
+1Y
+2A
+2Y
+3A
+3Y
+GND
+6A
+6Y
+5A
+5Y
+4A
+VCC
+4Y
+Pin Functions
+PIN
+NAME
+1A Input
+1Y Output
+2A Input
+2Y Output
+3A Input
+3Y Output
+GND Ground
+6A Input
+6Y Output
+5A Input
+5Y Output
+4A Input
+VCC Positive Supply
+4Y Output""",
+        ]
+        metadata = [
+            {"source": "sn74hc04.pdf", "parent_source": "sn74hc04.pdf", "page": 1},
+            {"source": "sn74hc04.pdf", "parent_source": "sn74hc04.pdf", "page": 3},
+        ]
+
+        intelligence = build_datasheet_intelligence(chunks, metadata, "sn74hc04.pdf", "sn74hc04.pdf")
+
+        voltage_facts = [fact for fact in intelligence["facts"] if fact["type"] == "voltage"]
+        self.assertEqual([(fact["label"], fact["value"]) for fact in voltage_facts], [("OPERATING VOLTAGE", "2 to 6")])
+
+    def test_warning_facts_skip_legal_and_ordering_notes(self):
+        chunks = [
+            """LM555 timer datasheet Pin Functions Electrical Characteristics
+Stresses beyond those listed under Absolute Maximum Ratings may cause permanent damage to the device.
+TI disclaims responsibility, and you will fully indemnify TI and its representatives against any claims, damages, costs, losses, and liabilities arising out of your use of the device.
+RoHS compliance indicates package option addendum ordering information.""",
+            """GND
+TRIGGER
+OUTPUT
+RESET
+VCC
+DISCHARGE
+THRESHOLD
+CONTROL
+VOLTAGE
+Pin Functions
+PIN
+NAME
+GND Ground
+Trigger Input
+Output Output
+Reset Reset
+VCC Supply voltage
+Discharge Discharge
+Threshold Threshold
+Control Voltage Control voltage""",
+        ]
+        metadata = [
+            {"source": "lm555.pdf", "parent_source": "lm555.pdf", "page": 4},
+            {"source": "lm555.pdf", "parent_source": "lm555.pdf", "page": 3},
+        ]
+
+        intelligence = build_datasheet_intelligence(chunks, metadata, "lm555.pdf", "lm555.pdf")
+
+        warning_values = [fact["value"] for fact in intelligence["facts"] if fact["type"] == "warning"]
+        self.assertEqual(len(warning_values), 1)
+        self.assertIn("permanent damage", warning_values[0])
+        self.assertFalse(any("disclaims responsibility" in value for value in warning_values))
+
 
 if __name__ == "__main__":
     unittest.main()

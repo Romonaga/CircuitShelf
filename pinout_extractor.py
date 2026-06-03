@@ -12,7 +12,18 @@ DIRECT_PIN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-PIN_TABLE_PAGE_MARKERS = ("PIN FUNCTIONS", "PIN DESCRIPTIONS", "PIN DESCRIPTION", "TERMINAL FUNCTIONS")
+PIN_TABLE_PAGE_MARKERS = (
+    "PIN FUNCTIONS",
+    "PIN DESCRIPTIONS",
+    "PIN DESCRIPTION",
+    "PIN CONFIGURATION",
+    "PIN CONFIGURATIONS",
+    "FUNCTIONAL PINOUT",
+    "CONNECTION DIAGRAM",
+    "TERMINAL FUNCTIONS",
+    "TERMINAL ASSIGNMENTS",
+    "PIN ASSIGNMENTS",
+)
 PIN_TABLE_COLUMN_MARKERS = {"PIN", "PIN#", "PINNO", "PINNUMBER", "NAME", "I/O", "DESCRIPTION", "FUNCTION"}
 PIN_LABEL_STOPWORDS = {
     "ACTIVE",
@@ -63,6 +74,8 @@ class PinoutPin:
 def expand_pin_label(label: str, *, role: str = "") -> str:
     normalized = re.sub(r"\s+", " ", label).strip()
     upper = normalized.upper()
+    if upper in {"+VCC", "V+", "VCC+"}:
+        return "VCC"
     if upper in {"GND", "GROUND"}:
         return "Ground"
     if upper in {"VDD", "VCC", "VSS", "VEE"}:
@@ -75,15 +88,15 @@ def expand_pin_label(label: str, *, role: str = "") -> str:
         return "ADDR"
     if upper in {"NC", "N/C", "NO CONNECT", "NO CONNECTION"}:
         return "No connection"
-    if upper == "TRIG":
+    if upper in {"TRIG", "TRIGGER"}:
         return "Trigger input"
-    if upper == "THRES":
+    if upper in {"THRES", "THRESHOLD"}:
         return "Threshold input"
-    if upper == "DISCH":
+    if upper in {"DISCH", "DISCHARGE"}:
         return "Discharge"
-    if upper == "CONT":
+    if upper in {"CONT", "CONTROL", "CONTROL VOLTAGE"}:
         return "Control voltage"
-    if upper == "OUT":
+    if upper in {"OUT", "OUTPUT"}:
         return "Output"
     if upper == "RESET":
         return "Reset"
@@ -266,8 +279,13 @@ def extract_pinout_map(chunks: list[str], metadata: list[dict], source: str) -> 
             pins_by_number.setdefault(pin.pin, pin)
 
     for page, page_items in page_chunks.items():
-        for pin in extract_ordered_pin_function_sequence(page_items, source=source, page=page):
-            pins_by_number.setdefault(pin.pin, pin)
+        ordered_pins = extract_ordered_pin_function_sequence(page_items, source=source, page=page)
+        if _should_replace_existing_pinout(ordered_pins, pins_by_number):
+            for pin in ordered_pins:
+                pins_by_number[pin.pin] = pin
+        else:
+            for pin in ordered_pins:
+                pins_by_number.setdefault(pin.pin, pin)
 
     return {
         "source": source,
@@ -283,6 +301,25 @@ def extract_pinout_map(chunks: list[str], metadata: list[dict], source: str) -> 
             for pin in sorted(pins_by_number.values(), key=lambda item: item.pin)
         ],
     }
+
+
+def _should_replace_existing_pinout(ordered_pins: list[PinoutPin], existing: dict[int, PinoutPin]) -> bool:
+    if len(ordered_pins) < 4:
+        return False
+    if len(ordered_pins) > len(existing):
+        return True
+    ordered_score = _pinout_evidence_score(ordered_pins)
+    existing_score = _pinout_evidence_score(list(existing.values()))
+    return ordered_score > existing_score
+
+
+def _pinout_evidence_score(pins: list[PinoutPin]) -> int:
+    labels = [pin.label.upper() for pin in pins]
+    score = len(pins) * 2
+    score += sum(3 for label in labels if label in {"GND", "VCC", "VDD", "VSS", "VEE", "V+"})
+    score += sum(1 for label in labels if label not in {"NC", "N/C"})
+    score -= sum(2 for label in labels if label in {"NC", "N/C"})
+    return score
 
 
 def _optional_int(value) -> int | None:
@@ -311,22 +348,26 @@ def extract_ordered_pin_function_sequence(
     if not _looks_like_pin_function_page(combined):
         return []
 
-    lines_with_index: list[tuple[int, str]] = []
-    for chunk_index, text in page_items:
-        for line in str(text or "").splitlines():
-            cleaned = _clean_signal_label(line)
-            if cleaned:
-                lines_with_index.append((chunk_index, cleaned))
+    diagram_items = _page_items_before_pin_table_marker(page_items)
+    if not diagram_items:
+        return []
+    lines_with_index = _signal_lines_with_index(diagram_items)
 
     run = _best_ordered_signal_run(lines_with_index)
     if len(run) < 4:
         return []
 
-    later_text = "\n".join(label for _idx, label in lines_with_index)
+    support_text = _pin_support_text(combined)
+    if not support_text:
+        return []
+    run = _trim_to_plausible_pin_sequence(
+        [(chunk_index, label) for chunk_index, label in run if _label_has_support(label, support_text)]
+    )
+    if len(run) < 4:
+        return []
+
     pins = []
     for pin_number, (chunk_index, label) in enumerate(run, start=1):
-        if not _label_has_support(label, later_text):
-            return []
         pins.append(
             PinoutPin(
                 pin=pin_number,
@@ -338,6 +379,42 @@ def extract_ordered_pin_function_sequence(
             )
         )
     return pins
+
+
+def _page_items_before_pin_table_marker(page_items: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    result: list[tuple[int, str]] = []
+    for chunk_index, text in page_items:
+        raw = str(text or "")
+        marker_positions = [raw.upper().find(marker) for marker in PIN_TABLE_PAGE_MARKERS if raw.upper().find(marker) >= 0]
+        if marker_positions:
+            before_marker = raw[: min(marker_positions)]
+            if before_marker.strip():
+                result.append((chunk_index, before_marker))
+            break
+        result.append((chunk_index, raw))
+    return result
+
+
+def _signal_lines_with_index(page_items: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    raw: list[tuple[int, str]] = []
+    for chunk_index, text in page_items:
+        for line in str(text or "").splitlines():
+            raw.append((chunk_index, line))
+
+    result: list[tuple[int, str]] = []
+    index = 0
+    while index < len(raw):
+        chunk_index, line = raw[index]
+        cleaned = _clean_signal_label(line)
+        next_cleaned = _clean_signal_label(raw[index + 1][1]) if index + 1 < len(raw) else ""
+        if cleaned == "CONTROL" and next_cleaned == "VOLTAGE":
+            result.append((chunk_index, "CONTROL VOLTAGE"))
+            index += 2
+            continue
+        if cleaned:
+            result.append((chunk_index, cleaned))
+        index += 1
+    return result
 
 
 def _looks_like_pin_function_page(text: str) -> bool:
@@ -366,6 +443,29 @@ def _best_ordered_signal_run(lines: list[tuple[int, str]]) -> list[tuple[int, st
 
     best = _choose_better_run(best, current)
     return best
+
+
+def _trim_to_plausible_pin_sequence(run: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    if len(run) < 4:
+        return []
+    common_counts = (4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64)
+    if len(run) in common_counts:
+        return run
+
+    candidates = [run[:count] for count in common_counts if 4 <= count <= len(run)]
+    if not candidates:
+        return run
+    return max(candidates, key=_pin_sequence_score)
+
+
+def _pin_sequence_score(run: list[tuple[int, str]]) -> int:
+    labels = [label for _idx, label in run]
+    score = 0
+    score += sum(4 for label in labels if label in {"GND", "VCC", "+VCC", "VDD", "VSS", "VEE", "V+"})
+    score += sum(2 for label in labels if label in {"OUT", "OUTPUT", "RESET", "SCL", "SDA", "TRIG", "TRIGGER", "THRES", "THRESHOLD"})
+    score += sum(1 for label in labels if label not in {"NC", "N/C"})
+    score -= sum(3 for label in labels if label in {"NC", "N/C"})
+    return score
 
 
 def _choose_better_run(best: list[tuple[int, str]], current: list[tuple[int, str]]) -> list[tuple[int, str]]:
@@ -397,15 +497,48 @@ def _dedupe_preserve_order(run: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 
 def _label_has_support(label: str, page_text: str) -> bool:
-    return len(re.findall(rf"\b{re.escape(label)}\b", page_text)) >= 2
+    support_labels = {support_label for _idx, support_label in _signal_lines_with_index([(0, page_text)])}
+    support_compact = _compact_header(page_text)
+    for alias in _label_support_aliases(label):
+        if alias in support_labels:
+            return True
+        if len(alias) >= 2 and alias in support_compact:
+            return True
+    return False
+
+
+def _label_support_aliases(label: str) -> set[str]:
+    compact = _compact_header(label)
+    aliases = {compact}
+    if compact in {"VCC", "V"}:
+        aliases.update({"VCC", "V+"})
+    if compact in {"TRIG", "TRIGGER"}:
+        aliases.update({"TRIG", "TRIGGER"})
+    if compact in {"THRES", "THRESHOLD"}:
+        aliases.update({"THRES", "THRESHOLD"})
+    if compact in {"DISCH", "DISCHARGE"}:
+        aliases.update({"DISCH", "DISCHARGE"})
+    if compact in {"CONT", "CONTROL", "CONTROLVOLTAGE"}:
+        aliases.update({"CONT", "CONTROL", "CONTROLVOLTAGE"})
+    if compact in {"OUT", "OUTPUT"}:
+        aliases.update({"OUT", "OUTPUT"})
+    return aliases
 
 
 def _is_signal_label(value: str) -> bool:
     if not value or value in PIN_LABEL_STOPWORDS:
+        if value != "OUTPUT":
+            return False
+    if value == "CONTROL VOLTAGE":
+        return True
+    compact = _compact_header(value)
+    if "TOPVIEW" in compact or "PACKAGE" in compact or re.search(r"\bPIN\b", value):
         return False
     if value == "NC":
         return True
-    if len(value) > 12:
+    if len(value) > 16:
+        return False
+    if " " in value:
         return False
     if not re.search(r"[A-Z]", value):
         return False
@@ -413,15 +546,26 @@ def _is_signal_label(value: str) -> bool:
         return False
     if re.fullmatch(r"[A-Z]", value) and value not in {"A", "B", "C", "D", "E", "K"}:
         return False
-    return bool(re.fullmatch(r"[A-Z][A-Z0-9/+_-]*", value))
+    return bool(re.fullmatch(r"[A-Z0-9][A-Z0-9/+_-]*", value))
 
 
 def _clean_signal_label(value: str) -> str:
     cleaned = re.sub(r"\(\d+\)", "", str(value or "").strip())
     cleaned = cleaned.replace("#", "")
-    cleaned = re.sub(r"[^A-Za-z0-9/+_-]", "", cleaned).upper()
+    cleaned = re.sub(r"[^A-Za-z0-9/+_ -]", "", cleaned).upper()
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if cleaned in {"+VCC", "VCC+", "VCC"}:
+        return "VCC"
     return cleaned
 
 
 def _compact_header(text: str) -> str:
     return re.sub(r"[^A-Z0-9/#]+", "", str(text or "").upper())
+
+
+def _pin_support_text(text: str) -> str:
+    upper = str(text or "").upper()
+    marker_positions = [upper.find(marker) for marker in PIN_TABLE_PAGE_MARKERS if upper.find(marker) >= 0]
+    if not marker_positions:
+        return ""
+    return upper[min(marker_positions) :]

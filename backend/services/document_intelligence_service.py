@@ -74,6 +74,8 @@ class DocumentIntelligenceService:
     def stored_is_usable(stored: dict | None) -> bool:
         if not stored:
             return False
+        if int(stored.get("extractorVersion") or 0) < 2:
+            return False
         document_type = str(stored.get("documentType") or "").strip()
         if document_type and document_type != "component_datasheet":
             return False

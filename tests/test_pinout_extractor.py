@@ -196,6 +196,180 @@ Input supply voltage, 4.5 V to 16 V.""",
 
         self.assertEqual(pinout["pins"], [])
 
+    def test_extracts_logic_ic_top_view_sequence_with_split_table(self):
+        chunks = [
+            """1A
+1Y
+2A
+2Y
+3A
+3Y
+GND
+6A
+6Y
+5A
+5Y
+4A
+VCC
+4Y
+ph Top View
+2A
+NC
+2Y
+NC
+3A
+20-Pin LCCC
+Top View
+Pin Functions
+PIN
+I/O""",
+            """NAME
+D, DB, N,
+NS, PW, J,
+or W
+FK
+1A
+Input
+Channel 1, Input A
+1Y
+Output
+Channel 1, Output Y
+2A
+Input
+Channel 2, Input A
+2Y
+Output
+Channel 2, Output Y
+3A
+Input
+Channel 3, Input A
+3Y
+Output
+Channel 3, Output Y
+GND
+Ground
+4Y
+Output
+Channel 4, Output Y
+4A
+Input
+Channel 4, Input A
+5Y
+Output
+Channel 5, Output Y
+5A
+Input
+Channel 5, Input A
+6Y
+Output
+Channel 6, Output Y
+6A
+Input
+Channel 6, Input A
+VCC
+Positive Supply
+NC
+Not internally connected""",
+        ]
+        metadata = [
+            {"source": "sn74hc04.pdf", "page": 3},
+            {"source": "sn74hc04.pdf", "page": 3},
+        ]
+
+        pinout = extract_pinout_map(chunks, metadata, "sn74hc04.pdf")
+
+        self.assertEqual(
+            [(pin["pin"], pin["function"]) for pin in pinout["pins"]],
+            [
+                (1, "1A"),
+                (2, "1Y"),
+                (3, "2A"),
+                (4, "2Y"),
+                (5, "3A"),
+                (6, "3Y"),
+                (7, "Ground"),
+                (8, "6A"),
+                (9, "6Y"),
+                (10, "5A"),
+                (11, "5Y"),
+                (12, "4A"),
+                (13, "VCC"),
+                (14, "4Y"),
+            ],
+        )
+
+    def test_extracts_timer_top_view_when_pin_table_uses_full_names(self):
+        chunks = [
+            """R
+R
+R
+GND
+TRIGGER
+OUTPUT
+RESET
++VCC
+DISCHARGE
+THRESHOLD
+CONTROL
+VOLTAGE
+COMPARATOR
+COMPARATOR""",
+            """D, P, and DGK Packages
+8-Pin PDIP, SOIC, and VSSOP
+Top View
+Pin Functions
+PIN
+I/O""",
+            """NO.
+NAME
+Control
+Voltage
+I
+Controls the threshold and trigger levels.
+Discharge
+I
+Open collector output which discharges a capacitor between intervals.
+GND
+O
+Ground reference voltage
+Output
+O
+Output driven waveform
+Reset
+I
+Negative pulse applied to this pin to disable or reset the timer.
+Threshold
+I
+Compares the voltage applied to the terminal.
+Trigger
+I
+Responsible for transition of the flip-flop.
+V+
+I
+Supply voltage with respect to GND""",
+        ]
+        metadata = [
+            {"source": "lm555.pdf", "page": 3},
+            {"source": "lm555.pdf", "page": 3},
+            {"source": "lm555.pdf", "page": 3},
+        ]
+
+        pinout = extract_pinout_map(chunks, metadata, "lm555.pdf")
+
+        self.assertEqual(
+            [(pin["pin"], pin["function"]) for pin in pinout["pins"]],
+            [
+                (1, "Ground"),
+                (2, "Trigger input"),
+                (3, "Output"),
+                (4, "Reset"),
+                (5, "VCC"),
+                (6, "Discharge"),
+                (7, "Threshold input"),
+                (8, "Control voltage"),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

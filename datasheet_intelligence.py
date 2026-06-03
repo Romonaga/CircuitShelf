@@ -12,14 +12,15 @@ from backend.ingestion.models import ExtractedPage
 from pinout_extractor import extract_pinout_map
 
 
+DATASHEET_INTELLIGENCE_VERSION = 2
 PACKAGE_PATTERN = re.compile(r"\b(?:DIP|PDIP|SOIC|SOP|SOT-23|TO-92|TO-220|DIP-\d+|SO-\d+|DIP\d+)\b", re.IGNORECASE)
 VOLTAGE_RANGE_PATTERN = re.compile(
     r"\b(?P<label>VCC|VDD|supply voltage|operating voltage|input voltage|output voltage)"
-    r"[^.\n]{0,90}?(?P<low>-?\d+(?:\.\d+)?)\s*(?:to|-|–)\s*(?P<high>-?\d+(?:\.\d+)?)\s*V\b",
+    r"[^.\n]{0,90}?(?P<low>-?\d+(?:\.\d+)?)\s*V?\s*(?:to|-|–)\s*(?P<high>-?\d+(?:\.\d+)?)\s*V\b",
     re.IGNORECASE,
 )
 SINGLE_VOLTAGE_PATTERN = re.compile(
-    r"\b(?P<label>VCC|VDD|supply voltage|operating voltage|collector-emitter voltage|forward voltage)"
+    r"\b(?P<label>supply voltage|operating voltage|collector-emitter voltage|forward voltage)"
     r"[^.\n]{0,90}?(?P<value>-?\d+(?:\.\d+)?)\s*V\b",
     re.IGNORECASE,
 )
@@ -68,6 +69,7 @@ def build_datasheet_intelligence(chunks: list[str], metadata: list[dict], source
         "pinout": pinout,
         "documentType": profile.document_type,
         "profileReasons": list(profile.reasons),
+        "extractorVersion": DATASHEET_INTELLIGENCE_VERSION,
     }
 
 
@@ -128,6 +130,7 @@ def _non_component_payload(source: str, display_name: str | None, profile) -> di
         "pinout": {"source": source, "displayName": display_name or os.path.basename(source), "pins": []},
         "documentType": profile.document_type,
         "profileReasons": list(profile.reasons),
+        "extractorVersion": DATASHEET_INTELLIGENCE_VERSION,
     }
 
 
@@ -159,6 +162,8 @@ def _extract_voltage_facts(items: Iterable[TextItem]) -> list[dict]:
         for match in SINGLE_VOLTAGE_PATTERN.finditer(item.text):
             if any(start <= match.start() <= end for start, end in range_spans):
                 continue
+            if _looks_like_plot_axis_or_test_condition(match.group(0)):
+                continue
             facts.append(_fact("voltage", _clean_label(match.group("label")), match.group("value"), "V", item, match.group(0)))
     return facts
 
@@ -173,10 +178,10 @@ def _extract_current_facts(items: Iterable[TextItem]) -> list[dict]:
 
 def _extract_warnings(items: Iterable[TextItem]) -> list[dict]:
     facts = []
-    keywords = ("do not exceed", "damage", "current limiting", "derate")
+    keywords = ("do not exceed", "damage", "electrostatic", "esd", "derate")
     for item in items:
         snippet = _warning_snippet(item.text, keywords)
-        if snippet:
+        if snippet and not _looks_like_legal_or_ordering_note(snippet):
             facts.append(_fact("warning", "Caution", snippet[:180], "", item, snippet))
     return facts
 
@@ -196,6 +201,8 @@ def _fact(fact_type: str, label: str, value: str, unit: str, item: TextItem, evi
 
 def _dedupe_facts(facts: list[dict]) -> list[dict]:
     seen = set()
+    facts = sorted(facts, key=lambda fact: 0 if " to " in str(fact.get("value", "")) else 1)
+    has_voltage_range = any(fact["type"] == "voltage" and " to " in str(fact.get("value", "")) for fact in facts)
     per_type_limits = {
         "package": 6,
         "voltage": 5,
@@ -206,9 +213,11 @@ def _dedupe_facts(facts: list[dict]) -> list[dict]:
     result = []
     for fact in facts:
         fact_type = fact["type"]
+        if has_voltage_range and _is_redundant_single_supply_voltage(fact):
+            continue
         if per_type_counts.get(fact_type, 0) >= per_type_limits.get(fact_type, 4):
             continue
-        key = (fact["type"], fact["label"].lower(), fact["value"].lower(), fact.get("page"))
+        key = (fact["type"], fact["label"].lower(), fact["value"].lower())
         if key in seen:
             continue
         seen.add(key)
@@ -217,6 +226,15 @@ def _dedupe_facts(facts: list[dict]) -> list[dict]:
         if len(result) >= 24:
             break
     return result
+
+
+def _is_redundant_single_supply_voltage(fact: dict) -> bool:
+    if fact.get("type") != "voltage":
+        return False
+    if " to " in str(fact.get("value", "")):
+        return False
+    label = str(fact.get("label") or "").upper()
+    return label in {"SUPPLY VOLTAGE", "OPERATING VOLTAGE", "VCC", "VDD"}
 
 
 def _summary(component_name: str, component_type: str, facts: list[dict], pinout: dict) -> str:
@@ -254,6 +272,38 @@ def _warning_snippet(text: str, keywords: Iterable[str]) -> str:
     if stress_match:
         return stress_match.group(0).strip()
     return _sentence_with_keywords(normalized, keywords)
+
+
+def _looks_like_plot_axis_or_test_condition(text: str) -> bool:
+    lowered = str(text or "").lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "pulse duration",
+            "relative to",
+            "propagation delay",
+            "voltage drop",
+            "output low",
+            "output high",
+            "no load",
+        )
+    )
+
+
+def _looks_like_legal_or_ordering_note(text: str) -> bool:
+    lowered = str(text or "").lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "rohs",
+            "disclaims responsibility",
+            "warranty",
+            "intellectual property",
+            "orderable",
+            "package option addendum",
+            "value unit",
+        )
+    )
 
 
 def _clean_label(value: str) -> str:
