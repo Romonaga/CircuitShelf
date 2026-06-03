@@ -3485,13 +3485,15 @@ nav {
 .upload-selection-list li {
   display: grid;
   gap: 2px;
+  align-content: center;
   min-width: 0;
+  min-height: 32px;
   overflow: hidden;
   padding: 7px 8px;
   color: var(--text);
   border: 1px solid rgba(22, 119, 129, 0.22);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.52);
+  background: var(--panel-soft);
   font-size: 0.78rem;
   line-height: 1.25;
 }
@@ -3513,6 +3515,25 @@ nav {
   color: var(--muted);
   font-size: 0.7rem;
   font-weight: 750;
+}
+
+:root[data-theme="dark"] .upload-selection-card {
+  border-color: rgba(54, 204, 176, 0.24);
+  background: #0c1823;
+}
+
+:root[data-theme="dark"] .upload-selection-list li {
+  color: #f2fdff;
+  border-color: rgba(54, 204, 176, 0.24);
+  background: #122637;
+}
+
+:root[data-theme="dark"] .upload-selection-name {
+  color: #f8feff;
+}
+
+:root[data-theme="dark"] .upload-selection-path {
+  color: #a9c0d6;
 }
 
 .upload-selection-list li.muted {
