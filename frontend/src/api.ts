@@ -633,8 +633,8 @@ export function approveReviewDocument(source: string, includeImages = true): Pro
   });
 }
 
-export function reindexReviewDocument(source: string): Promise<{ ok: boolean; chunks: number; droppedChunks: number; images: number }> {
-  return requestJson<{ ok: boolean; chunks: number; droppedChunks: number; images: number }>("/api/review/document/reindex", {
+export function reindexReviewDocument(source: string): Promise<{ ok: boolean; queued?: boolean; source?: string; indexing?: { jobId?: number; reason?: string } }> {
+  return requestJson<{ ok: boolean; queued?: boolean; source?: string; indexing?: { jobId?: number; reason?: string } }>("/api/review/document/reindex", {
     method: "POST",
     body: JSON.stringify({ source })
   });

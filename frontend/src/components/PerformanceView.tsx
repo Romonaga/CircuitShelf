@@ -13,7 +13,7 @@ import { SectionHeader } from "./SectionHeader";
 import { Stat } from "./Stat";
 import { WorkDurationChart } from "./WorkDurationChart";
 import { BatchEfficiencyGraph } from "./performanceCharts/BatchEfficiencyGraph";
-import { CatalogGrowthGraph } from "./performanceCharts/CatalogGrowthGraph";
+import { DocumentOutputGraph } from "./performanceCharts/DocumentOutputGraph";
 import { GpuEnvelopeGraph } from "./performanceCharts/GpuEnvelopeGraph";
 import { IngestionOutcomeGraph } from "./performanceCharts/IngestionOutcomeGraph";
 import { PowerGraph } from "./performanceCharts/PowerGraph";
@@ -26,7 +26,7 @@ type ChartChoice =
   | "gpuEnvelope"
   | "thermals"
   | "power"
-  | "catalog"
+  | "documentOutput"
   | "workers"
   | "ingestionWork"
   | "all";
@@ -55,7 +55,11 @@ export function PerformanceView({
     () => (report.report?.samples ?? []).map(pointFromPerformanceSample),
     [report.report?.samples]
   );
-  const history = useMemo(() => mergeHistory(persistedHistory, liveHistory), [liveHistory, persistedHistory]);
+  const workerCapacity = Math.max(1, status?.ingestWorkerBudget?.usableCores ?? status?.ingestWorkerBudget?.activeDocumentWorkers ?? 1);
+  const history = useMemo(
+    () => normalizeHistoryWorkerLoad(mergeHistory(persistedHistory, liveHistory), workerCapacity),
+    [liveHistory, persistedHistory, workerCapacity]
+  );
   const peaks = useMemo(() => ({
     cpu: maxHistoryValue(history, "cpu"),
     processCpu: maxHistoryValue(history, "processCpu"),
@@ -75,7 +79,7 @@ export function PerformanceView({
     <section className="performance-page">
       <SectionHeader
         title="Performance"
-        description="Runtime load, ingestion progress, GPU sizing, and catalog growth."
+        description="Runtime load, ingestion progress, GPU sizing, and completed work output."
       />
       {report.error ? <p className="error">{report.error}</p> : null}
       {report.loading ? (
@@ -101,15 +105,15 @@ export function PerformanceView({
         <Stat label="VRAM" value={gpu?.available ? `${formatNumber(gpu.memoryUsedMiB)} MiB` : "n/a"} />
         <Stat label="Window peak CPU" value={formatPercent(peaks.cpu)} />
         <Stat label="Window peak GPU" value={formatPercent(peaks.gpu)} />
-        <Stat label="Runtime peak CPU" value={formatPercent(runtimePeaks?.cpuPercent)} />
-        <Stat label="Runtime peak CPU temp" value={typeof runtimePeaks?.cpuTemperatureC === "number" ? `${formatNumber(runtimePeaks.cpuTemperatureC)} C` : "n/a"} />
-        <Stat label="Runtime peak CPU power" value={typeof runtimePeaks?.cpuPowerW === "number" ? `${formatNumber(runtimePeaks.cpuPowerW)} W` : "n/a"} />
-        <Stat label="Runtime peak process" value={formatPercent(runtimePeaks?.processCpuPercent)} />
-        <Stat label="Runtime peak GPU" value={formatPercent(runtimePeaks?.gpuPercent)} />
-        <Stat label="Runtime peak GPU temp" value={typeof runtimePeaks?.gpuTemperatureC === "number" ? `${formatNumber(runtimePeaks.gpuTemperatureC)} C` : "n/a"} />
-        <Stat label="Runtime peak VRAM" value={formatPercent(runtimePeaks?.gpuMemoryUsedPercent)} />
-        <Stat label="Peak doc workers" value={formatInteger(peakWorkers)} />
-        <Stat label="Runtime peak RAM" value={formatPercent(runtimePeaks?.memoryUsedPercent)} />
+        <Stat label="Today peak CPU" value={formatPercent(runtimePeaks?.cpuPercent)} />
+        <Stat label="Today peak CPU temp" value={typeof runtimePeaks?.cpuTemperatureC === "number" ? `${formatNumber(runtimePeaks.cpuTemperatureC)} C` : "n/a"} />
+        <Stat label="Today peak CPU power" value={typeof runtimePeaks?.cpuPowerW === "number" ? `${formatNumber(runtimePeaks.cpuPowerW)} W` : "n/a"} />
+        <Stat label="Today peak process" value={formatPercent(runtimePeaks?.processCpuPercent)} />
+        <Stat label="Today peak GPU" value={formatPercent(runtimePeaks?.gpuPercent)} />
+        <Stat label="Today peak GPU temp" value={typeof runtimePeaks?.gpuTemperatureC === "number" ? `${formatNumber(runtimePeaks.gpuTemperatureC)} C` : "n/a"} />
+        <Stat label="Today peak VRAM" value={formatPercent(runtimePeaks?.gpuMemoryUsedPercent)} />
+        <Stat label="Today peak doc workers" value={formatInteger(peakWorkers)} />
+        <Stat label="Today peak RAM" value={formatPercent(runtimePeaks?.memoryUsedPercent)} />
       </div>
 
       <section className="resource-panel">
@@ -139,7 +143,7 @@ export function PerformanceView({
                 <option value="gpuEnvelope">GPU envelope</option>
                 <option value="thermals">Thermals</option>
                 <option value="power">Power</option>
-                <option value="catalog">Catalog growth</option>
+                <option value="documentOutput">Document output</option>
                 <option value="workers">Workers and CUDA batches</option>
                 <option value="ingestionWork">Ingestion work health</option>
                 <option value="all">All charts</option>
@@ -159,7 +163,7 @@ export function PerformanceView({
           {showChart("gpuEnvelope") ? <GpuEnvelopeGraph history={history} /> : null}
           {showChart("thermals") ? <ThermalGraph history={history} /> : null}
           {showChart("power") ? <PowerGraph history={history} /> : null}
-          {showChart("catalog") ? <CatalogGrowthGraph history={history} /> : null}
+          {showChart("documentOutput") ? <DocumentOutputGraph rows={visibleRecentWork} /> : null}
           {showChart("workers") ? <WorkerBatchGraph history={history} /> : null}
           {showChart("workers") ? <BatchEfficiencyGraph history={history} /> : null}
           {showChart("ingestionWork") ? (
@@ -206,4 +210,19 @@ function mergeHistory(
   return Array.from(bySampleTime.values())
     .sort((left, right) => left.sampledAt - right.sampledAt)
     .slice(-500);
+}
+
+function normalizeHistoryWorkerLoad(
+  history: ReturnType<typeof pointFromPerformanceSample>[],
+  workerCapacity: number
+) {
+  return history.map((point) => {
+    if (typeof point.workerLoad === "number") {
+      return point;
+    }
+    return {
+      ...point,
+      workerLoad: point.workers ? Math.min(100, (point.workers / workerCapacity) * 100) : 0,
+    };
+  });
 }

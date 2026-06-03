@@ -92,7 +92,9 @@ class IngestProgressTracker:
             if stage is not None:
                 self.status["stage"] = stage
             if details is not None:
-                self.status["details"] = details
+                current_details = dict(self.status.get("details") or {})
+                current_details.update({key: value for key, value in details.items() if value is not None})
+                self.status["details"] = current_details
             if current_file and current_file not in active_files:
                 active_files.append(current_file)
                 file_progress.setdefault(current_file, {})
@@ -126,12 +128,16 @@ class IngestProgressTracker:
     def begin_document_worker(self) -> int:
         with self._worker_lock:
             self._active_workers += 1
-            return self._active_workers
+            active_workers = self._active_workers
+        self.update_detail(activeDocumentWorkers=active_workers)
+        return active_workers
 
     def finish_document_worker(self) -> int:
         with self._worker_lock:
             self._active_workers = max(0, self._active_workers - 1)
-            return self._active_workers
+            active_workers = self._active_workers
+        self.update_detail(activeDocumentWorkers=active_workers)
+        return active_workers
 
     def current_document_workers(self) -> int:
         with self._worker_lock:

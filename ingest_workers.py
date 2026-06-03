@@ -15,7 +15,7 @@ def reserved_core_count(cpu_count: int | None = None) -> int:
         return 1
     if cpus <= 16:
         return 2
-    return max(4, min(8, cpus // 4))
+    return max(2, min(4, cpus // 16))
 
 
 def usable_core_count(cpu_count: int | None = None) -> int:
@@ -29,8 +29,8 @@ def document_worker_count(file_count: int, cpu_count: int | None = None) -> int:
         return 0
     if files == 1:
         return 1
-    workers = max(1, usable_core_count(cpu_count) // 4)
-    return max(1, min(files, workers, 6))
+    workers = max(1, usable_core_count(cpu_count) // 2)
+    return max(1, min(files, workers, 16))
 
 
 def ocr_worker_count(item_count: int, active_document_workers: int = 1, cpu_count: int | None = None) -> int:
@@ -38,6 +38,6 @@ def ocr_worker_count(item_count: int, active_document_workers: int = 1, cpu_coun
     if items <= 0:
         return 0
     active_workers = max(1, int(active_document_workers or 1))
-    ocr_budget = max(1, usable_core_count(cpu_count) // 2)
+    ocr_budget = max(1, usable_core_count(cpu_count))
     workers = max(1, ocr_budget // active_workers)
-    return max(1, min(items, workers))
+    return max(1, min(items, workers, 8))

@@ -8,6 +8,7 @@ from PIL import Image
 
 from pdf_visuals import (
     link_chunks_to_rendered_pages,
+    page_image_coverage,
     render_pdf_visual_pages,
     rendered_page_image_key,
     should_render_visual_page,
@@ -124,6 +125,26 @@ class PdfVisualTests(unittest.TestCase):
         self.assertEqual(rendered[0].page_number, 1)
         self.assertIn("Circuit diagram", rendered[0].searchable_text)
         self.assertTrue(rendered[0].image_bytes.startswith(b"\x89PNG"))
+
+    def test_page_image_coverage_dedupes_repeated_xrefs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "repeated-image.pdf")
+            image = Image.new("RGB", (100, 100), color="white")
+            image_bytes = BytesIO()
+            image.save(image_bytes, format="PNG")
+
+            doc = fitz.open()
+            page = doc.new_page(width=200, height=200)
+            page.insert_image(fitz.Rect(0, 0, 100, 100), stream=image_bytes.getvalue())
+            xref = page.get_images(full=True)[0][0]
+            page.insert_image(fitz.Rect(100, 100, 200, 200), xref=xref)
+            doc.save(path)
+            doc.close()
+
+            with fitz.open(path) as pdf:
+                coverage = page_image_coverage(pdf[0])
+
+        self.assertAlmostEqual(coverage, 0.5, delta=0.05)
 
     def test_visual_references_detects_figure_and_package_terms(self):
         references = visual_references("See Fig. 3 for the graph and Package Dimensions for pin layout.")

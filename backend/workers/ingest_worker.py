@@ -82,7 +82,13 @@ class IngestWorkerRunner:
         self.trace_logger.info(f"▶️ Ingest worker claimed job {job_id}: {reason}")
         started = time.time()
         try:
-            self.runtime.index_lifecycle_service.check_for_training_changes(reason=reason)
+            if str(reason).startswith("reindex:"):
+                source = str(reason).split(":", 1)[1].strip()
+                if not source:
+                    raise ValueError("Reindex job is missing a source path.")
+                self.runtime.incremental_ingest_service.reindex_review_source(source)
+            else:
+                self.runtime.index_lifecycle_service.check_for_training_changes(reason=reason)
             snapshot = self.runtime.ingest_progress.snapshot()
             result = snapshot.get("lastResult") or "completed"
             status = "skipped" if result in {"no_changes", "already_running"} else "completed"

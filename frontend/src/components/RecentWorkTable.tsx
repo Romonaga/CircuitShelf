@@ -22,6 +22,20 @@ function formatDate(value?: string | null): string {
   return new Date(value).toLocaleString();
 }
 
+function formatMoney(value?: number | null): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "n/a";
+  }
+  return `$${value.toFixed(value < 0.01 ? 4 : 2)}`;
+}
+
+function formatRounds(row: PerformanceWorkRun): string {
+  if (!row.roundNumber && !row.roundCount) {
+    return "n/a";
+  }
+  return `${row.roundNumber ?? 1} / ${row.roundCount ?? 1}`;
+}
+
 export function RecentWorkTable({
   rows,
   showIndexChecks,
@@ -61,6 +75,9 @@ export function RecentWorkTable({
               <th>Duration</th>
               <th>Chunks</th>
               <th>Images</th>
+              <th>Tokens</th>
+              <th>Cost</th>
+              <th>Rounds</th>
             </tr>
           </thead>
           <tbody>
@@ -72,14 +89,21 @@ export function RecentWorkTable({
                   {row.label ? <small>{row.label}</small> : null}
                 </td>
                 <td>{row.status}</td>
-                <td>{row.triggerReason || "n/a"}</td>
+                <td>
+                  {row.triggerReason || "n/a"}
+                  {row.modelName ? <small>{row.modelName}</small> : null}
+                  {row.paidBy ? <small>Paid by {row.paidBy}</small> : null}
+                </td>
                 <td>{formatDuration(row.durationMs)}</td>
                 <td>{formatInteger(row.chunks)}</td>
                 <td>{formatInteger(row.images)}</td>
+                <td>{row.tokens ? formatInteger(row.tokens) : "n/a"}</td>
+                <td>{formatMoney(row.estimatedCost)}</td>
+                <td>{formatRounds(row)}</td>
               </tr>
             )) : (
               <tr>
-                <td colSpan={7}>No persisted work history yet.</td>
+                <td colSpan={10}>No persisted work history yet.</td>
               </tr>
             )}
           </tbody>

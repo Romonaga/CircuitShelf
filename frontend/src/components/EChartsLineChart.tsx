@@ -20,6 +20,7 @@ import type {
 import type { LineSeriesOption } from "echarts/charts";
 import type { StatusHistoryPoint } from "../hooks/useStatusHistory";
 import { formatNumber } from "../lib/format";
+import { readChartTheme } from "../lib/chartTheme";
 import type { ChartSeries } from "./PerformanceChart";
 
 echarts.use([
@@ -43,29 +44,6 @@ type ChartOption = ComposeOption<
 
 function formatTime(value: number) {
   return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function readChartTheme() {
-  if (typeof window === "undefined") {
-    return {
-      accent: "#41c7b2",
-      line: "#35516a",
-      muted: "#9fb3c8",
-      panelSoft: "#13293a",
-      text: "#e6f0f8",
-      splitLine: "rgba(148, 163, 184, 0.28)"
-    };
-  }
-  const styles = getComputedStyle(document.documentElement);
-  const read = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
-  return {
-    accent: read("--accent", "#41c7b2"),
-    line: read("--line", "#35516a"),
-    muted: read("--muted", "#9fb3c8"),
-    panelSoft: read("--panel-soft", "#13293a"),
-    text: read("--text", "#e6f0f8"),
-    splitLine: "rgba(148, 163, 184, 0.28)"
-  };
 }
 
 export function EChartsLineChart({
@@ -138,9 +116,13 @@ export function EChartsLineChart({
     },
     xAxis: {
       type: "time",
+      min: "dataMin",
+      max: "dataMax",
       axisLabel: {
         color: theme.muted,
-        formatter: (value: number) => formatTime(value)
+        formatter: (value: number) => formatTime(value),
+        hideOverlap: true,
+        showMaxLabel: false
       },
       axisLine: { show: true, lineStyle: { color: theme.line, width: 1 } },
       axisTick: { show: true, lineStyle: { color: theme.line } },
@@ -190,8 +172,8 @@ export function EChartsLineChart({
     series: series.map((item, index) => ({
       name: item.label,
       type: "line",
-      showSymbol: history.length <= 80,
-      symbolSize: 5,
+      showSymbol: history.length <= 30,
+      symbolSize: 4,
       smooth: false,
       sampling: "lttb",
       connectNulls: false,

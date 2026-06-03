@@ -101,6 +101,101 @@ Serial clock input"""
             ],
         )
 
+    def test_extracts_ordered_pin_function_sequence_when_numbers_are_split_out(self):
+        chunks = [
+            """GND
+TRIG
+OUT
+RESET
+VCC
+DISCH
+THRES
+CONT
+NC
+DISCH
+NC
+THRES
+NC
+NC
+TRIG
+NC
+OUT
+NC
+NC
+GND
+NC
+CONT
+NC
+VCC
+NC
+NC
+RESET
+NC
+NC - No internal connection""",
+            """Pin Functions
+PIN
+D, P, PS,
+FK
+I/O""",
+            """PW, JG
+NAME
+NO.
+Controls comparator thresholds, Outputs 2/3 VCC, allows bypass capacitor
+CONT
+I/O
+connection
+DISCH
+O
+Open collector output to discharge timing capacitor
+GND
+Ground
+NC
+No internal connection
+OUT
+O
+High current timer output signal
+RESET
+I
+Active low reset input forces output and discharge low.
+THRES
+I
+End of timing input. THRES > CONT sets output low and discharge low
+TRIG
+I
+Start of timing input. TRIG < 1/2 CONT sets output high and discharge open
+VCC
+Input supply voltage, 4.5 V to 16 V.""",
+        ]
+        metadata = [
+            {"source": "timer.pdf", "page": 3},
+            {"source": "timer.pdf", "page": 3},
+            {"source": "timer.pdf", "page": 3},
+        ]
+
+        pinout = extract_pinout_map(chunks, metadata, "timer.pdf")
+
+        self.assertEqual(
+            [(pin["pin"], pin["function"], pin["page"]) for pin in pinout["pins"]],
+            [
+                (1, "Ground", 3),
+                (2, "Trigger input", 3),
+                (3, "Output", 3),
+                (4, "Reset", 3),
+                (5, "VCC", 3),
+                (6, "Discharge", 3),
+                (7, "Threshold input", 3),
+                (8, "Control voltage", 3),
+            ],
+        )
+
+    def test_ordered_sequence_requires_pin_function_page_context(self):
+        chunks = ["GND\nTRIG\nOUT\nRESET\nVCC\nDISCH\nTHRES\nCONT"]
+        metadata = [{"source": "timer.pdf", "page": 1}]
+
+        pinout = extract_pinout_map(chunks, metadata, "timer.pdf")
+
+        self.assertEqual(pinout["pins"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -113,6 +113,7 @@ def should_render_visual_page(
     raster_coverage: float = 0.0,
     render_raster_pages: bool = False,
     min_raster_coverage: float = 0.8,
+    sparse_native_text: bool = False,
     keywords: Iterable[str] = VISUAL_PAGE_KEYWORDS,
 ) -> tuple[bool, list[str]]:
     hits = visual_keyword_hits(text, keywords)
@@ -120,7 +121,7 @@ def should_render_visual_page(
         return True, hits
     if drawing_count >= min_drawings * 2:
         return True, hits
-    if render_raster_pages and image_count > 0 and raster_coverage >= min_raster_coverage and hits:
+    if render_raster_pages and image_count > 0 and raster_coverage >= min_raster_coverage and (hits or sparse_native_text):
         return True, hits
     return False, hits
 
@@ -131,8 +132,12 @@ def page_image_coverage(page: fitz.Page) -> float:
         return 0.0
 
     covered = 0.0
+    seen_xrefs = set()
     for image in page.get_images(full=True):
         xref = image[0]
+        if xref in seen_xrefs:
+            continue
+        seen_xrefs.add(xref)
         try:
             for rect in page.get_image_rects(xref):
                 clipped = rect & page.rect
@@ -145,16 +150,13 @@ def page_image_coverage(page: fitz.Page) -> float:
 def render_pdf_visual_pages(
     path: str,
     *,
-    max_pages: int = 8,
+    max_pages: int | None = 8,
     min_drawings: int = 100,
     zoom: float = 1.5,
     render_raster_pages: bool = False,
     min_raster_coverage: float = 0.8,
     keywords: Iterable[str] = VISUAL_PAGE_KEYWORDS,
 ) -> list[RenderedPdfPage]:
-    if max_pages <= 0:
-        return []
-
     base_name = os.path.basename(path)
     candidates = []
     with fitz.open(path) as pdf:
@@ -172,6 +174,7 @@ def render_pdf_visual_pages(
                 raster_coverage=raster_coverage,
                 render_raster_pages=render_raster_pages,
                 min_raster_coverage=min_raster_coverage,
+                sparse_native_text=len(text) < 80,
                 keywords=keywords,
             )
             if not render:
@@ -180,7 +183,9 @@ def render_pdf_visual_pages(
             score = drawing_count + raster_score + (len(hits) * min_drawings)
             candidates.append((score, page_number, page_index, text, drawing_count, raster_coverage, hits))
 
-        selected = sorted(candidates, key=lambda item: (-item[0], item[1]))[:max_pages]
+        selected = sorted(candidates, key=lambda item: (-item[0], item[1]))
+        if max_pages and max_pages > 0:
+            selected = selected[:max_pages]
         selected.sort(key=lambda item: item[1])
 
         rendered_pages = []

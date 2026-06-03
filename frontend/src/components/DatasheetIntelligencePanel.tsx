@@ -27,6 +27,9 @@ export function DatasheetIntelligencePanel({ intelligence }: { intelligence?: Da
 
   const groups = groupFacts(intelligence.facts ?? []);
   const pins = intelligence.pinout?.pins ?? [];
+  if (!intelligence.componentName && !groups.length && !pins.length) {
+    return null;
+  }
 
   return (
     <div className="intelligence-panel">
@@ -40,8 +43,8 @@ export function DatasheetIntelligencePanel({ intelligence }: { intelligence?: Da
       </div>
       {intelligence.summary ? <p className="intelligence-summary">{intelligence.summary}</p> : null}
       {pins.length ? (
-        <section className="intelligence-pinout">
-          <h4>Detected pinout ({formatInteger(pins.length)})</h4>
+        <details className="intelligence-details intelligence-pinout" open>
+          <summary>Detected pinout ({formatInteger(pins.length)})</summary>
           <div className="document-pinout-grid">
             {pins.map((pin) => (
               <div key={`${pin.pin}-${pin.function}`} className="document-pin-card">
@@ -52,27 +55,32 @@ export function DatasheetIntelligencePanel({ intelligence }: { intelligence?: Da
               </div>
             ))}
           </div>
-        </section>
+        </details>
       ) : null}
-      <div className="intelligence-facts">
-        {groups.map((group) => (
-          <section key={group.type}>
-            <h4>{FACT_LABELS[group.type] ?? group.type}</h4>
-            <div className="fact-list">
-              {group.facts.slice(0, 6).map((fact) => (
-                <div key={`${fact.type}-${fact.label}-${fact.value}-${fact.page}`} className="fact-row">
-                  <span>{fact.label}</span>
-                  <strong>
-                    {fact.value}
-                    {fact.unit ? ` ${fact.unit}` : ""}
-                  </strong>
-                  {fact.page ? <small>Page {fact.page}</small> : null}
+      {groups.length ? (
+        <details className="intelligence-details" open>
+          <summary>Facts ({formatInteger(groups.reduce((total, group) => total + group.facts.length, 0))})</summary>
+          <div className="intelligence-facts">
+            {groups.map((group) => (
+              <section key={group.type}>
+                <h4>{FACT_LABELS[group.type] ?? group.type}</h4>
+                <div className="fact-list">
+                  {group.facts.slice(0, 6).map((fact) => (
+                    <div key={`${fact.type}-${fact.label}-${fact.value}-${fact.page}`} className="fact-row">
+                      <span>{fact.label}</span>
+                      <strong>
+                        {fact.value}
+                        {fact.unit ? ` ${fact.unit}` : ""}
+                      </strong>
+                      {fact.page ? <small>Page {fact.page}</small> : null}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+              </section>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

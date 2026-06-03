@@ -13,9 +13,9 @@ export function UtilizationGraph({ history }: { history: StatusHistoryPoint[] })
       unit="%"
       series={[
         { key: "cpu", label: "System CPU", color: chartColors.blue },
-        { key: "processCpuLoad", label: "Process CPU share", color: chartColors.cyan },
+        { key: "processCpuLoad", label: "App CPU share", color: chartColors.cyan },
         { key: "ram", label: "RAM", color: chartColors.green },
-        { key: "processRam", label: "Process RAM share", color: chartColors.navy },
+        { key: "processRam", label: "App RAM share", color: chartColors.navy },
         { key: "gpu", label: "GPU", color: chartColors.orange },
         { key: "vram", label: "VRAM", color: chartColors.purple },
         { key: "workerLoad", label: "Doc workers", color: chartColors.vermillion },

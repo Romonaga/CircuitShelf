@@ -204,7 +204,8 @@ h3 {
 .sidebar {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto auto;
+  align-content: start;
   gap: 28px;
   padding: 22px 18px;
   color: var(--sidebar-text);
@@ -215,7 +216,7 @@ h3 {
 }
 
 .sidebar-monitor-mode .sidebar {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   align-content: start;
   gap: 16px;
   overflow: auto;
@@ -1600,6 +1601,22 @@ nav {
   color: var(--muted);
 }
 
+.data-table td {
+  color: var(--text);
+}
+
+.data-table td strong {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .data-table td {
+  color: #e6f0f8;
+}
+
+:root[data-theme="dark"] .data-table td small {
+  color: #a9c4dc;
+}
+
 .inventory-table {
   width: 100%;
   min-width: 940px;
@@ -2274,17 +2291,24 @@ nav {
   padding: 0 10px 10px;
 }
 
-.review-image-details {
+.review-image-details,
+.intelligence-details {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--panel-raised);
 }
 
-.review-image-details summary {
+.review-image-details summary,
+.intelligence-details summary {
   cursor: pointer;
   padding: 10px;
   color: var(--text);
   font-weight: 750;
+}
+
+.intelligence-details .document-pinout-grid,
+.intelligence-details .intelligence-facts {
+  padding: 0 10px 10px;
 }
 
 .review-image-card {
@@ -2540,7 +2564,13 @@ nav {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--panel-raised);
+}
+
+:root[data-theme="dark"] .build-wiring-row,
+:root[data-theme="dark"] .fact-row {
+  background: var(--input-bg);
+  color: var(--text);
 }
 
 .build-wiring-row small,

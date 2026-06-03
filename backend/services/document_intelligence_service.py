@@ -3,6 +3,7 @@ import re
 from collections import OrderedDict
 from typing import Callable
 
+from backend.ingestion.document_classifier import is_plausible_component
 from datasheet_intelligence import build_datasheet_intelligence
 
 
@@ -73,8 +74,13 @@ class DocumentIntelligenceService:
     def stored_is_usable(stored: dict | None) -> bool:
         if not stored:
             return False
+        document_type = str(stored.get("documentType") or "").strip()
+        if document_type and document_type != "component_datasheet":
+            return False
         component_name = str(stored.get("componentName") or "").strip().upper()
         if component_name in {"", "LOGIC", "INPUT", "OUTPUT", "COMMON", "ABSOLUTE", "MAXIMUM"}:
+            return False
+        if not is_plausible_component(component_name):
             return False
         return bool(stored.get("facts") or stored.get("pinout", {}).get("pins"))
 
@@ -85,12 +91,18 @@ class DocumentIntelligenceService:
             if not stored.get("pinout", {}).get("pins"):
                 refreshed = self.build_from_payload(doc_name, chunks, metadata or []) if chunks is not None else self.build_for_document(doc_name)
                 if refreshed.get("pinout", {}).get("pins"):
-                    self.intelligence_store.upsert(rel_path, refreshed)
-                    return refreshed
+                    replaced = self.intelligence_store.replace_for_source(rel_path, refreshed)
+                    return replaced or refreshed
             return stored
 
         intelligence = self.build_from_payload(doc_name, chunks, metadata or []) if chunks is not None else self.build_for_document(doc_name)
-        stored = self.intelligence_store.replace_for_source(rel_path, intelligence)
+        if self.stored_is_usable(intelligence):
+            stored = self.intelligence_store.replace_for_source(rel_path, intelligence)
+            if stored:
+                return stored
+        else:
+            self.trace_logger.debug(f"Skipping datasheet intelligence persistence for non-component document {doc_name}.")
+            return intelligence
         if stored:
             return stored
         return intelligence

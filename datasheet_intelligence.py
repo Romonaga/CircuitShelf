@@ -7,16 +7,10 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
+from backend.ingestion.document_classifier import classify_document, detect_component_candidates, detect_component_type
+from backend.ingestion.models import ExtractedPage
 from pinout_extractor import extract_pinout_map
 
-
-PART_PATTERNS = [
-    re.compile(r"\bADS\d{3,5}[A-Z0-9]*\b", re.IGNORECASE),
-    re.compile(r"\b(?:NE|LM|TL|SN|ATmega|ATtiny|PC|TLP|CD|74HC|74LS|2N|BC|IRF|IRL)\s?-?[A-Z0-9]{2,8}\b", re.IGNORECASE),
-    re.compile(r"\bL\d{2,5}[A-Z0-9]*\b", re.IGNORECASE),
-    re.compile(r"\b4N(?:25|26|27|28|32|33|35|36|37)\b", re.IGNORECASE),
-    re.compile(r"\b(?:555|556)\s*(?:timer)?\b", re.IGNORECASE),
-]
 
 PACKAGE_PATTERN = re.compile(r"\b(?:DIP|PDIP|SOIC|SOP|SOT-23|TO-92|TO-220|DIP-\d+|SO-\d+|DIP\d+)\b", re.IGNORECASE)
 VOLTAGE_RANGE_PATTERN = re.compile(
@@ -47,13 +41,16 @@ class TextItem:
 def build_datasheet_intelligence(chunks: list[str], metadata: list[dict], source: str, display_name: str | None = None) -> dict:
     items = _text_items(chunks, metadata, source)
     combined_text = "\n".join(item.text for item in items[:40])
-    component_name = _detect_component_name(display_name or source, combined_text)
-    component_type = _detect_component_type(combined_text, component_name)
+    profile = _profile_for_items(source, display_name, items)
+    if not profile.is_component_datasheet:
+        return _non_component_payload(source, display_name, profile)
+
+    component_name = profile.component_name
+    component_type = profile.component_type or detect_component_type(component_name, combined_text)
     facts = _dedupe_facts(
         _extract_packages(items)
         + _extract_voltage_facts(items)
         + _extract_current_facts(items)
-        + _extract_applications(items)
         + _extract_warnings(items)
     )
     pinout = extract_pinout_map(chunks, metadata, source)
@@ -66,9 +63,11 @@ def build_datasheet_intelligence(chunks: list[str], metadata: list[dict], source
         "componentName": component_name,
         "componentType": component_type,
         "summary": summary,
-        "confidence": confidence,
+        "confidence": max(confidence, profile.confidence),
         "facts": facts,
         "pinout": pinout,
+        "documentType": profile.document_type,
+        "profileReasons": list(profile.reasons),
     }
 
 
@@ -93,33 +92,52 @@ def _text_items(chunks: list[str], metadata: list[dict], source: str) -> list[Te
     return items
 
 
-def _detect_component_name(display_name: str, text: str) -> str:
-    base = os.path.splitext(os.path.basename(display_name))[0]
-    candidates = []
-    for pattern in PART_PATTERNS:
-        candidates.extend(match.group(0).replace(" ", "").upper() for match in pattern.finditer(f"{base}\n{text[:4000]}"))
-    for candidate in candidates:
-        if candidate not in {"DIP", "SOIC"}:
-            return candidate
-    return base
+def _profile_for_items(source: str, display_name: str | None, items: list[TextItem]):
+    pages = [ExtractedPage(page_number=item.page or index + 1, text=item.text) for index, item in enumerate(items[:80])]
+    profile = classify_document(display_name or source, pages)
+    if profile.is_component_datasheet:
+        return profile
+
+    # Some reviews only pass the first page of a short datasheet. A strong filename
+    # candidate plus pin evidence is still enough to build intelligence.
+    combined_text = "\n".join(item.text for item in items[:12])
+    candidates = detect_component_candidates(display_name or source, combined_text)
+    pinout = extract_pinout_map([item.text for item in items], [_item_meta(item) for item in items], source)
+    if candidates and pinout.get("pins"):
+        candidate = candidates[0]
+        return type(profile)(
+            document_type="component_datasheet",
+            confidence=max(profile.confidence, 0.78),
+            component_name=candidate.value,
+            component_type=detect_component_type(candidate.value, combined_text),
+            reasons=tuple(list(profile.reasons) + [f"pinout:{len(pinout['pins'])}"]),
+            negative_signals=profile.negative_signals,
+        )
+    return profile
 
 
-def _detect_component_type(text: str, component_name: str) -> str:
-    haystack = f"{component_name} {text[:8000]}".lower()
-    rules = [
-        ("optocoupler", ("optocoupler", "opto-coupler", "phototransistor", "isolation")),
-        ("timer", ("555", "timer", "monostable", "astable")),
-        ("analog-to-digital converter", ("adc", "analog-to-digital", "a/d converter", "converter", "conversion register")),
-        ("microcontroller", ("microcontroller", "gpio", "pwm", "arduino")),
-        ("voltage regulator", ("voltage regulator", "linear regulator", "ldo")),
-        ("op amp", ("operational amplifier", "op amp", "op-amp")),
-        ("transistor", ("transistor", "collector", "emitter", "base")),
-        ("mosfet", ("mosfet", "gate", "drain", "source")),
-    ]
-    for component_type, keywords in rules:
-        if any(keyword in haystack for keyword in keywords):
-            return component_type
-    return "component"
+def _non_component_payload(source: str, display_name: str | None, profile) -> dict:
+    return {
+        "source": source,
+        "displayName": display_name or os.path.basename(source),
+        "componentName": "",
+        "componentType": profile.document_type,
+        "summary": "",
+        "confidence": profile.confidence,
+        "facts": [],
+        "pinout": {"source": source, "displayName": display_name or os.path.basename(source), "pins": []},
+        "documentType": profile.document_type,
+        "profileReasons": list(profile.reasons),
+    }
+
+
+def _item_meta(item: TextItem) -> dict:
+    return {
+        "source": item.source,
+        "parent_source": item.source,
+        "page": item.page,
+        "db_chunk_index": item.chunk_index,
+    }
 
 
 def _extract_packages(items: Iterable[TextItem]) -> list[dict]:
@@ -133,10 +151,14 @@ def _extract_packages(items: Iterable[TextItem]) -> list[dict]:
 def _extract_voltage_facts(items: Iterable[TextItem]) -> list[dict]:
     facts = []
     for item in items:
+        range_spans = []
         for match in VOLTAGE_RANGE_PATTERN.finditer(item.text):
             value = f"{match.group('low')} to {match.group('high')}"
             facts.append(_fact("voltage", _clean_label(match.group("label")), value, "V", item, match.group(0)))
+            range_spans.append(match.span())
         for match in SINGLE_VOLTAGE_PATTERN.finditer(item.text):
+            if any(start <= match.start() <= end for start, end in range_spans):
+                continue
             facts.append(_fact("voltage", _clean_label(match.group("label")), match.group("value"), "V", item, match.group(0)))
     return facts
 
@@ -149,26 +171,13 @@ def _extract_current_facts(items: Iterable[TextItem]) -> list[dict]:
     return facts
 
 
-def _extract_applications(items: Iterable[TextItem]) -> list[dict]:
-    facts = []
-    for item in items:
-        lower = item.text.lower()
-        if "application" not in lower and "typical" not in lower:
-            continue
-        snippet = _sentence_with_keywords(item.text, ("application", "typical", "circuit"))
-        if snippet:
-            facts.append(_fact("application", "Application", snippet[:160], "", item, snippet))
-    return facts
-
-
 def _extract_warnings(items: Iterable[TextItem]) -> list[dict]:
     facts = []
-    keywords = ("absolute maximum", "do not exceed", "damage", "isolation", "current limiting", "derate")
+    keywords = ("do not exceed", "damage", "current limiting", "derate")
     for item in items:
-        snippet = _sentence_with_keywords(item.text, keywords)
+        snippet = _warning_snippet(item.text, keywords)
         if snippet:
-            fact_type = "absolute_maximum" if "absolute maximum" in snippet.lower() else "warning"
-            facts.append(_fact(fact_type, "Caution", snippet[:180], "", item, snippet))
+            facts.append(_fact("warning", "Caution", snippet[:180], "", item, snippet))
     return facts
 
 
@@ -187,12 +196,23 @@ def _fact(fact_type: str, label: str, value: str, unit: str, item: TextItem, evi
 
 def _dedupe_facts(facts: list[dict]) -> list[dict]:
     seen = set()
+    per_type_limits = {
+        "package": 6,
+        "voltage": 5,
+        "current": 4,
+        "warning": 4,
+    }
+    per_type_counts: dict[str, int] = {}
     result = []
     for fact in facts:
+        fact_type = fact["type"]
+        if per_type_counts.get(fact_type, 0) >= per_type_limits.get(fact_type, 4):
+            continue
         key = (fact["type"], fact["label"].lower(), fact["value"].lower(), fact.get("page"))
         if key in seen:
             continue
         seen.add(key)
+        per_type_counts[fact_type] = per_type_counts.get(fact_type, 0) + 1
         result.append(fact)
         if len(result) >= 24:
             break
@@ -226,6 +246,14 @@ def _sentence_with_keywords(text: str, keywords: Iterable[str]) -> str:
         if any(keyword in lower for keyword in keywords):
             return sentence.strip()
     return ""
+
+
+def _warning_snippet(text: str, keywords: Iterable[str]) -> str:
+    normalized = re.sub(r"\s+", " ", text or "").strip()
+    stress_match = re.search(r"\bStresses beyond[^.]{0,220}\.", normalized, re.IGNORECASE)
+    if stress_match:
+        return stress_match.group(0).strip()
+    return _sentence_with_keywords(normalized, keywords)
 
 
 def _clean_label(value: str) -> str:

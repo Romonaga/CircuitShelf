@@ -3,7 +3,7 @@ import { formatNumber } from "../lib/format";
 import { chartColors } from "../lib/chartColors";
 
 interface ThroughputRow {
-  id: number;
+  id: number | string;
   label: string;
   chunksPerMinute: number;
   imagesPerMinute: number;

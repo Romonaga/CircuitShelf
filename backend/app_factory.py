@@ -50,7 +50,6 @@ def register_api_routes(
     vector_store: Any,
     image_store: Any,
     refresh_active_state_from_db: Any,
-    reindex_review_source: Any,
     remove_document_from_store: Any,
     assembly_plan_store: Any,
     bench_tools: Any,
@@ -116,7 +115,7 @@ def register_api_routes(
         vector_store=vector_store,
         image_store=image_store,
         refresh_active_state_from_db=refresh_active_state_from_db,
-        reindex_review_source=reindex_review_source,
+        start_index_check=start_index_check,
         remove_document_from_store=remove_document_from_store,
         get_or_build_datasheet_intelligence=get_or_build_datasheet_intelligence,
     ))

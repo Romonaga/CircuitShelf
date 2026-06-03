@@ -140,7 +140,7 @@ class PerformanceStore:
             if self.logger:
                 self.logger.warning(f"Performance work-run write failed: {exc}")
 
-    def report(self, *, hours: int = 24, sample_limit: int = 300, work_limit: int = 80) -> dict[str, Any]:
+    def report(self, *, hours: int = 24, sample_limit: int = 300, work_limit: int = 80, entity_id: int | None = None) -> dict[str, Any]:
         if not self.database.configured:
             return {"samples": [], "recentWork": [], "available": False}
         try:
@@ -154,8 +154,14 @@ class PerformanceStore:
                     load_query("performance_work_runs_recent.sql"),
                     (max(1, int(hours)), max(1, int(work_limit))),
                 ).fetchall()
+                ai_rows = conn.execute(
+                    load_query("performance_ai_work_recent.sql"),
+                    (max(1, int(hours)), entity_id, entity_id, max(1, int(work_limit))),
+                ).fetchall()
             samples = [self._sample_row(row) for row in reversed(sample_rows)]
-            recent_work = [self._work_row(row) for row in work_rows]
+            recent_work = [self._work_row(row) for row in work_rows] + [self._ai_work_row(row) for row in ai_rows]
+            recent_work.sort(key=lambda row: row.get("startedAt") or "", reverse=True)
+            recent_work = recent_work[: max(1, int(work_limit))]
             return {"samples": samples, "recentWork": recent_work, "available": True}
         except UndefinedTable:
             return {"samples": [], "recentWork": [], "available": False}
@@ -216,6 +222,54 @@ class PerformanceStore:
             "droppedChunks": PerformanceStore._optional_int(row.get("dropped_chunks")) or 0,
             "details": row.get("details") or {},
             "errorMessage": row.get("error_message"),
+            "estimatedCost": 0.0,
+            "roundNumber": None,
+            "roundCount": None,
+            "tokens": 0,
+            "modelName": "",
+            "paidBy": "",
+        }
+
+    @staticmethod
+    def _ai_work_row(row: dict[str, Any]) -> dict[str, Any]:
+        tokens = (
+            PerformanceStore._optional_int(row.get("input_tokens")) or 0
+        ) + (
+            PerformanceStore._optional_int(row.get("cached_input_tokens")) or 0
+        ) + (
+            PerformanceStore._optional_int(row.get("output_tokens")) or 0
+        )
+        return {
+            "id": f"ai-{row.get('id')}",
+            "workType": "ai_assist",
+            "workTypeLabel": "AI assist",
+            "entityId": row.get("entity_id"),
+            "entityName": row.get("entity_name"),
+            "userId": row.get("user_id"),
+            "username": row.get("username"),
+            "label": row.get("task_label") or row.get("task_type") or "AI assist",
+            "triggerReason": row.get("context_type") or "",
+            "status": "completed" if row.get("success") else "failed",
+            "sourcePath": "",
+            "startedAt": row["created_at"].isoformat() if row.get("created_at") else None,
+            "finishedAt": row["created_at"].isoformat() if row.get("created_at") else None,
+            "durationMs": 0,
+            "chunks": 0,
+            "images": 0,
+            "droppedChunks": 0,
+            "details": {
+                "contextId": str(row.get("context_id")) if row.get("context_id") else "",
+                "inputTokens": PerformanceStore._optional_int(row.get("input_tokens")) or 0,
+                "cachedInputTokens": PerformanceStore._optional_int(row.get("cached_input_tokens")) or 0,
+                "outputTokens": PerformanceStore._optional_int(row.get("output_tokens")) or 0,
+            },
+            "errorMessage": row.get("error_message"),
+            "estimatedCost": PerformanceStore._optional_float(row.get("estimated_cost")) or 0.0,
+            "roundNumber": PerformanceStore._optional_int(row.get("round_number")) or 1,
+            "roundCount": PerformanceStore._optional_int(row.get("round_count")) or 1,
+            "tokens": tokens,
+            "modelName": row.get("model_name") or "",
+            "paidBy": row.get("paid_by") or "",
         }
 
     @staticmethod

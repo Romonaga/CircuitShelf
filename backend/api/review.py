@@ -90,7 +90,10 @@ def review_intelligence_payload(rows: list[dict], source: str, get_or_build_data
         })
     if not chunks:
         return None
-    return get_or_build_datasheet_intelligence(source, chunks, metadata)
+    intelligence = get_or_build_datasheet_intelligence(source, chunks, metadata)
+    if not intelligence or not intelligence.get("componentName"):
+        return None
+    return intelligence
 
 
 def scope_audit_payload(row: Any) -> dict:
@@ -116,7 +119,7 @@ def create_router(
     vector_store: Any,
     image_store: Any,
     refresh_active_state_from_db: Callable[[], int],
-    reindex_review_source: Callable[[str], Any],
+    start_index_check: Callable[..., dict],
     remove_document_from_store: Callable[..., tuple[dict, int]],
     get_or_build_datasheet_intelligence: Callable[..., dict],
 ) -> APIRouter:
@@ -193,16 +196,14 @@ def create_router(
 
     @router.post("/api/review/document/reindex")
     async def review_document_reindex(req: Request, payload: DocumentActionRequest):
-        _, _, error = authorize_review_read(req, payload.source)
+        user, _, error = authorize_review_read(req, payload.source)
         if error:
             return error
-        try:
-            result = reindex_review_source(payload.source)
-        except FileNotFoundError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=404)
-        except ValueError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-        return {"ok": True, "chunks": result.chunks, "droppedChunks": result.dropped_chunks, "images": result.images}
+        result = start_index_check(
+            f"reindex:{payload.source}",
+            requested_by_user_id=deps.user_id_for_user(user),
+        )
+        return {"ok": True, "queued": True, "source": payload.source, "indexing": result}
 
     @router.post("/api/review/document/remove")
     async def review_document_remove(req: Request, payload: DocumentActionRequest):

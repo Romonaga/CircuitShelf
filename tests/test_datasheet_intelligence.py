@@ -2,9 +2,66 @@ import unittest
 
 from circuit_build_cards import build_circuit_build_card, should_build_card
 from datasheet_intelligence import build_datasheet_intelligence
+from backend.ingestion.document_classifier import classify_document
+from backend.ingestion.models import ExtractedPage
 
 
 class DatasheetIntelligenceTests(unittest.TestCase):
+    def test_reference_book_does_not_become_fake_component(self):
+        chunks = [
+            "FreeCAD for Makers EDITOR Andrew Gregory FreeCAD is not playing catch-up with some paid-for application.",
+            "Create 3D prints, laser cuts, folded sheets, and more with free design software.",
+            "CHAPTER 1 Introduction to modelling and practical workshop projects.",
+        ]
+        metadata = [
+            {"source": "FreeCAD for Makers.pdf", "parent_source": "FreeCAD for Makers.pdf", "page": 1},
+            {"source": "FreeCAD for Makers.pdf", "parent_source": "FreeCAD for Makers.pdf", "page": 3},
+            {"source": "FreeCAD for Makers.pdf", "parent_source": "FreeCAD for Makers.pdf", "page": 4},
+        ]
+
+        intelligence = build_datasheet_intelligence(chunks, metadata, "FreeCAD for Makers.pdf", "FreeCAD for Makers.pdf")
+
+        self.assertEqual(intelligence["componentName"], "")
+        self.assertEqual(intelligence["facts"], [])
+        self.assertEqual(intelligence["pinout"]["pins"], [])
+
+    def test_classifier_detects_component_datasheet(self):
+        profile = classify_document(
+            "ESP32 datasheet.pdf",
+            [
+                ExtractedPage(
+                    page_number=1,
+                    text=(
+                        "ESP32 Series Datasheet Features Pin Definitions Electrical Characteristics "
+                        "Absolute Maximum Ratings Recommended Operating Conditions."
+                    ),
+                )
+            ],
+        )
+
+        self.assertEqual(profile.document_type, "component_datasheet")
+        self.assertEqual(profile.component_name, "ESP32")
+        self.assertEqual(profile.component_type, "microcontroller")
+
+    def test_classifier_prefers_driver_part_over_datasheet_order_code(self):
+        profile = classify_document(
+            "ST L298 dual full-bridge driver datasheet.pdf",
+            [
+                ExtractedPage(
+                    page_number=1,
+                    text=(
+                        "L298 dual full-bridge driver datasheet. Pin connection, electrical "
+                        "characteristics, absolute maximum ratings, Multiwatt15, PowerSO20. "
+                        "STMicroelectronics order code DS0218."
+                    ),
+                )
+            ],
+        )
+
+        self.assertEqual(profile.document_type, "component_datasheet")
+        self.assertEqual(profile.component_name, "L298")
+        self.assertEqual(profile.component_type, "motor driver")
+
     def test_beginner_project_recommendation_does_not_trigger_build_card(self):
         self.assertFalse(should_build_card("what is a good beginer project."))
 
@@ -225,6 +282,100 @@ Serial clock input"""
             [(pin["pin"], pin["function"]) for pin in intelligence["pinout"]["pins"]],
             [(1, "ADDR"), (8, "VDD"), (10, "SCL")],
         )
+
+    def test_timer_datasheet_uses_generic_pin_function_sequence_without_application_noise(self):
+        chunks = [
+            "NE555 Precision Timer Datasheet Pin Functions Electrical Characteristics Recommended Operating Conditions",
+            """GND
+TRIG
+OUT
+RESET
+VCC
+DISCH
+THRES
+CONT
+NC
+DISCH
+NC
+THRES
+NC
+NC
+TRIG
+NC
+OUT
+NC
+NC
+GND
+NC
+CONT
+NC
+VCC
+NC
+NC
+RESET
+NC
+NC - No internal connection""",
+            """Pin Functions
+PIN
+D, P, PS,
+FK
+I/O""",
+            """PW, JG
+NAME
+NO.
+Controls comparator thresholds, Outputs 2/3 VCC, allows bypass capacitor
+CONT
+I/O
+connection
+DISCH
+O
+Open collector output to discharge timing capacitor
+GND
+Ground
+NC
+No internal connection
+OUT
+O
+High current timer output signal
+RESET
+I
+Active low reset input forces output and discharge low.
+THRES
+I
+End of timing input. THRES > CONT sets output low and discharge low
+TRIG
+I
+Start of timing input. TRIG < 1/2 CONT sets output high and discharge open
+VCC
+Input supply voltage, 4.5 V to 16 V.""",
+            "Applications Simplified schematic information is not part of the TI component specification.",
+        ]
+        metadata = [
+            {"source": "ne555.pdf", "parent_source": "ne555.pdf", "page": 1},
+            {"source": "ne555.pdf", "parent_source": "ne555.pdf", "page": 3},
+            {"source": "ne555.pdf", "parent_source": "ne555.pdf", "page": 3},
+            {"source": "ne555.pdf", "parent_source": "ne555.pdf", "page": 3},
+            {"source": "ne555.pdf", "parent_source": "ne555.pdf", "page": 13},
+        ]
+
+        intelligence = build_datasheet_intelligence(chunks, metadata, "ne555.pdf", "ne555.pdf")
+
+        self.assertEqual(intelligence["componentName"], "NE555")
+        self.assertEqual(len(intelligence["pinout"]["pins"]), 8)
+        self.assertEqual(
+            [(pin["pin"], pin["function"]) for pin in intelligence["pinout"]["pins"]],
+            [
+                (1, "Ground"),
+                (2, "Trigger input"),
+                (3, "Output"),
+                (4, "Reset"),
+                (5, "VCC"),
+                (6, "Discharge"),
+                (7, "Threshold input"),
+                (8, "Control voltage"),
+            ],
+        )
+        self.assertNotIn("application", {fact["type"] for fact in intelligence["facts"]})
 
 
 if __name__ == "__main__":

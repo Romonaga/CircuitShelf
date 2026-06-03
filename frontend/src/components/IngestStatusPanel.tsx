@@ -28,16 +28,6 @@ function batchBrief(batch?: RuntimeBatchStatus): string {
   return `${device}${formatInteger(batch.active)} active`;
 }
 
-function compactInteger(value: string | number | boolean | null | undefined): string {
-  if (typeof value !== "number") {
-    return formatDetailValue(value);
-  }
-  return new Intl.NumberFormat(undefined, {
-    notation: "compact",
-    maximumFractionDigits: value >= 10_000 ? 1 : 0
-  }).format(value);
-}
-
 function formatDateTime(value?: string | null): string {
   if (!value) {
     return "n/a";
@@ -141,24 +131,11 @@ function pageProgress(progress: Record<string, string | number | boolean | null 
 
 function imageProgress(progress: Record<string, string | number | boolean | null | undefined>): string {
   const saved = progress.savedImages;
-  const total = progress.totalImagesToSave;
-  if (saved !== undefined && total !== undefined) {
-    return `${formatDetailValue(saved)} / ${formatDetailValue(total)}`;
+  const total = progress.totalImagesToSave ?? progress.extractedImages ?? progress.imageCandidates;
+  if (total !== undefined) {
+    return `${formatDetailValue(saved ?? 0)} / ${formatDetailValue(total)}`;
   }
-  const queued = progress.imageCandidates;
-  const skipped = progress.skippedImageCandidates;
-  const duplicates = progress.duplicateImageCandidates;
-  if (queued !== undefined && (skipped !== undefined || duplicates !== undefined)) {
-    const parts = [`Q ${compactInteger(queued)}`];
-    if (skipped !== undefined) {
-      parts.push(`tiny ${compactInteger(skipped)}`);
-    }
-    if (duplicates !== undefined) {
-      parts.push(`dup ${compactInteger(duplicates)}`);
-    }
-    return parts.join(" | ");
-  }
-  return formatDetailValue(queued);
+  return "n/a";
 }
 
 function chunkProgress(progress: Record<string, string | number | boolean | null | undefined>): string {

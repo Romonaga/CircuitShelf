@@ -6,7 +6,7 @@ import bench_tools
 from backend.services.app_runtime_helpers import conversation_title_from_question, sanitize_for_json
 from backend.services.document_intelligence_service import DocumentIntelligenceService
 from backend.services.document_management_service import DocumentManagementService
-from backend.services.document_processing_service import DocumentProcessingService
+from backend.ingestion import IngestionPipeline
 from backend.services.image_retrieval_service import ImageRetrievalService
 from backend.services.image_state_service import ImageStateService
 from backend.services.incremental_ingest_service import IncrementalIngestService
@@ -53,7 +53,6 @@ from inventory_import import parse_inventory_import
 from log_retention import cleanup_old_logs
 from log_tail import tail_text_file
 from ocr_utils import run_ocr
-from pdf_visuals import link_chunks_to_rendered_pages, render_pdf_visual_pages
 from pinout_extractor import extract_pinout_map
 from reranker_module import Reranker
 from response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT
@@ -193,15 +192,10 @@ class CircuitShelfRuntime:
             openai_assist_service=stores.openai_assist_service,
             training_dir=self.training_dir,
         )
-        self.document_processing_service = DocumentProcessingService(
+        self.document_processing_service = IngestionPipeline(
             config=self.config,
             trace_logger=self.trace_logger,
-            state=self.state,
-            chunker=self.chunker,
-            token_utils=self.token_utils,
             run_ocr=run_ocr,
-            render_pdf_visual_pages=render_pdf_visual_pages,
-            link_chunks_to_rendered_pages=link_chunks_to_rendered_pages,
             detected_cpu_count=detected_cpu_count,
             reserved_core_count=reserved_core_count,
             usable_core_count=usable_core_count,

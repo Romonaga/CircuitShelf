@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -36,8 +37,10 @@ RUNTIME_TABLES = [
     "ai_assist_events",
     "performance_resource_samples",
     "performance_work_runs",
+    "ingest_jobs",
     "ingest_run_documents",
     "ingest_runs",
+    "ingest_runtime_status",
     "document_ingest_ai_reviews",
     "document_ingest_scope_overrides",
     "document_scope_audit",
@@ -124,6 +127,45 @@ def truncate_tables(conn: psycopg.Connection, table_names: list[str]) -> None:
     conn.execute(query)
 
 
+def reset_ingest_runtime_status(conn: psycopg.Connection) -> None:
+    if "ingest_runtime_status" not in existing_tables(conn, ["ingest_runtime_status"]):
+        return
+    status = {
+        "enabled": True,
+        "running": False,
+        "stage": "idle",
+        "currentFiles": [],
+        "processedFiles": 0,
+        "totalFiles": 0,
+        "lastStartedAt": None,
+        "lastFinishedAt": None,
+        "lastReason": None,
+        "lastResult": "purged",
+        "lastError": None,
+        "lastChanges": {
+            "added": 0,
+            "modified": 0,
+            "removed": 0,
+            "unchanged": 0,
+            "addedFiles": [],
+            "modifiedFiles": [],
+            "removedFiles": [],
+        },
+        "nextCheckAt": None,
+        "details": {},
+    }
+    conn.execute(
+        """
+        insert into ingest_runtime_status (id, status, updated_at)
+        values (1, %s::jsonb, now())
+        on conflict (id) do update
+        set status = excluded.status,
+            updated_at = now()
+        """,
+        (json.dumps(status),),
+    )
+
+
 def assert_safe_training_dir(training_dir: Path) -> Path:
     resolved = training_dir.resolve()
     project_root = PROJECT_ROOT.resolve()
@@ -206,6 +248,7 @@ def main() -> int:
                     print(f"  {table}: {counts[table]} rows")
             else:
                 truncate_tables(conn, tables)
+                reset_ingest_runtime_status(conn)
                 conn.commit()
                 print(f"Purged {sum(nonempty.values())} rows from {len(tables)} database tables.")
 

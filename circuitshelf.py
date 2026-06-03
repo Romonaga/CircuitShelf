@@ -68,7 +68,6 @@ register_api_routes(
     vector_store=stores.vector_store,
     image_store=stores.image_store,
     refresh_active_state_from_db=runtime.image_state_service.refresh_active_state_from_db,
-    reindex_review_source=runtime.incremental_ingest_service.reindex_review_source,
     remove_document_from_store=runtime.document_management_service.remove_document_from_store,
     assembly_plan_store=stores.assembly_plan_store,
     bench_tools=runtime.bench_tools,

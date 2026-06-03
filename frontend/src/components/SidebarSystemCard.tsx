@@ -12,7 +12,7 @@ function batchDetail(batch: RuntimeBatchStatus | undefined): string {
 
 function currentAndPeak(current?: number | null, peak?: number | null) {
   const currentText = formatPercent(current);
-  return peak == null ? currentText : `${currentText} / peak ${formatPercent(peak)}`;
+  return peak == null ? currentText : `${currentText} / today ${formatPercent(peak)}`;
 }
 
 function formatShortTime(value?: string | null) {
@@ -59,7 +59,7 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
       <MetricBar
         label="RAM"
         value={memory?.usedPercent}
-        detail={peaks?.memoryUsedPercent == null ? formatBytes(memory?.usedBytes) : `${formatPercent(memory?.usedPercent)} / peak ${formatPercent(peaks.memoryUsedPercent)}`}
+        detail={peaks?.memoryUsedPercent == null ? formatBytes(memory?.usedBytes) : `${formatPercent(memory?.usedPercent)} / today ${formatPercent(peaks.memoryUsedPercent)}`}
         tone="teal"
       />
       <MetricBar
@@ -71,7 +71,7 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
       <MetricBar
         label="VRAM"
         value={gpu?.available ? gpu.memoryUsedPercent : null}
-        detail={gpu?.available ? `${formatNumber(gpu.memoryUsedMiB)} MiB / peak ${formatPercent(peaks?.gpuMemoryUsedPercent)}` : "n/a"}
+        detail={gpu?.available ? `${formatNumber(gpu.memoryUsedMiB)} MiB / today ${formatPercent(peaks?.gpuMemoryUsedPercent)}` : "n/a"}
         tone="teal"
       />
       <div className="sidebar-system-pills">
@@ -98,8 +98,8 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
             <span><small>Threads</small><strong>{formatInteger(process?.threads)}</strong></span>
             <span><small>Proc RAM</small><strong>{formatBytes(process?.memoryBytes)}</strong></span>
             <span><small>Usable cores</small><strong>{formatInteger(workers?.usableCores)}</strong></span>
-            <span><small>Peak workers</small><strong>{formatInteger(peaks?.activeDocumentWorkers)}</strong></span>
-            <span><small>Peak GPU temp</small><strong>{peaks?.gpuTemperatureC == null ? "n/a" : `${formatNumber(peaks.gpuTemperatureC)} C`}</strong></span>
+            <span><small>Today workers</small><strong>{formatInteger(peaks?.activeDocumentWorkers)}</strong></span>
+            <span><small>Today GPU temp</small><strong>{peaks?.gpuTemperatureC == null ? "n/a" : `${formatNumber(peaks.gpuTemperatureC)} C`}</strong></span>
           </div>
           <div className="system-batch-detail">
             <div>

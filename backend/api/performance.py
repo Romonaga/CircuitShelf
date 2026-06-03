@@ -19,9 +19,14 @@ def create_router(
         samples: int = Query(300, ge=10, le=2000),
         work: int = Query(80, ge=0, le=500),
     ):
-        _, _, error = deps.require_entity_member(req)
+        _, entity, error = deps.require_entity_member(req)
         if error:
             return error
-        return performance_store.report(hours=hours, sample_limit=samples, work_limit=work)
+        return performance_store.report(
+            hours=hours,
+            sample_limit=samples,
+            work_limit=work,
+            entity_id=entity.entity_id if entity else None,
+        )
 
     return router

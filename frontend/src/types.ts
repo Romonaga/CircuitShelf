@@ -668,6 +668,8 @@ export interface SystemResources {
     error?: string | null;
   };
   peaks?: {
+    windowDate?: string | null;
+    windowStartedAt?: string | null;
     cpuPercent?: number | null;
     cpuTemperatureC?: number | null;
     cpuPowerW?: number | null;
@@ -708,7 +710,7 @@ export interface PerformanceSample {
 }
 
 export interface PerformanceWorkRun {
-  id: number;
+  id: number | string;
   workType: string;
   workTypeLabel: string;
   entityId?: number | null;
@@ -727,6 +729,12 @@ export interface PerformanceWorkRun {
   droppedChunks: number;
   details: Record<string, unknown>;
   errorMessage?: string | null;
+  estimatedCost?: number;
+  roundNumber?: number | null;
+  roundCount?: number | null;
+  tokens?: number;
+  modelName?: string;
+  paidBy?: string;
 }
 
 export interface PerformanceReport {

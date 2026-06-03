@@ -154,7 +154,7 @@ export function useReviewQueue({
     }
     await runDocumentAction("Could not re-index document", async () => {
       const result = await reindexReviewDocument(selectedDocument.source);
-      setMessage(`${selectedDocument.displayName} re-indexed: ${formatInteger(result.chunks)} chunks, ${formatInteger(result.images)} images.`);
+      setMessage(`${selectedDocument.displayName} queued for re-index${result.indexing?.jobId ? ` as job ${formatInteger(result.indexing.jobId)}` : ""}.`);
     });
   }
 
