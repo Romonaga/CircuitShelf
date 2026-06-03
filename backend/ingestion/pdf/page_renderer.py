@@ -16,14 +16,20 @@ class PdfiumPageRenderer:
         if not page_numbers:
             return {}
         rendered: dict[int, bytes] = {}
-        pdf = pdfium.PdfDocument(path)
+        try:
+            pdf = pdfium.PdfDocument(path)
+        except Exception as exc:
+            if self.trace_logger:
+                self.trace_logger.warning(f"PDFium could not open {path}; continuing with text-only extraction: {exc}")
+            return rendered
         try:
             page_count = len(pdf)
             for page_number in page_numbers:
                 if page_number < 1 or page_number > page_count:
                     continue
-                page = pdf[page_number - 1]
+                page = None
                 try:
+                    page = pdf[page_number - 1]
                     bitmap = page.render(scale=self.scale)
                     image = bitmap.to_pil()
                     output = BytesIO()
@@ -34,7 +40,8 @@ class PdfiumPageRenderer:
                         self.trace_logger.warning(f"PDFium render failed on page {page_number}: {exc}")
                 finally:
                     try:
-                        page.close()
+                        if page is not None:
+                            page.close()
                     except Exception:
                         pass
         finally:

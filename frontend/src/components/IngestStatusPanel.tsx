@@ -96,7 +96,16 @@ function formatDetailLabel(key: string): string {
     imageEmbeddingTexts: "Embedded image texts",
     imageEmbeddingTotal: "Image texts to embed",
     ocrImageTexts: "OCR image texts",
-    currentImage: "Image"
+    currentImage: "Image",
+    completedDocuments: "Indexed documents",
+    failedDocuments: "Failed documents",
+    failedFiles: "Failed files",
+    queuedSaveDocuments: "Queued for save",
+    activeWorkers: "Configured doc workers",
+    activeDocumentWorkers: "Active doc workers",
+    persistWorkers: "Save workers",
+    queuedJobs: "Queued jobs",
+    lastCompletedDocument: "Last indexed document"
   };
   return labels[key] ?? formatStage(key);
 }
@@ -227,6 +236,9 @@ export function IngestStatusPanel({
   const processedFiles = ingest.processedFiles ?? 0;
   const fileRows = activeFileRows(ingest);
   const trackedFiles = fileRows.length;
+  const indexedDocuments = Number(ingest.details?.completedDocuments ?? 0);
+  const failedDocuments = Number(ingest.details?.failedDocuments ?? 0);
+  const queuedSaveDocuments = Number(ingest.details?.queuedSaveDocuments ?? 0);
   const notStartedFiles = Math.max(totalFiles - processedFiles - trackedFiles, 0);
   const details = Object.entries(ingest.details ?? {}).filter(([, value]) => value !== undefined);
 
@@ -267,8 +279,11 @@ export function IngestStatusPanel({
       ) : null}
       {isRunning && totalFiles ? (
         <div className="ingest-queue-summary">
-          <span><small>Done</small><strong>{formatInteger(processedFiles)}</strong></span>
-          <span><small>Tracked</small><strong>{formatInteger(trackedFiles)}</strong></span>
+          <span><small>Processed</small><strong>{formatInteger(processedFiles)}</strong></span>
+          <span><small>Indexed</small><strong>{formatInteger(indexedDocuments)}</strong></span>
+          <span><small>Failed</small><strong>{formatInteger(failedDocuments)}</strong></span>
+          <span><small>Saving</small><strong>{formatInteger(queuedSaveDocuments)}</strong></span>
+          <span><small>Active</small><strong>{formatInteger(trackedFiles)}</strong></span>
           <span><small>Not started</small><strong>{formatInteger(notStartedFiles)}</strong></span>
           <span><small>Total</small><strong>{formatInteger(totalFiles)}</strong></span>
         </div>
