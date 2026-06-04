@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import base64
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from typing import Any
 
 from PIL import Image
+
+
+_PNG_NORMALIZE_LOCK = threading.Lock()
 
 
 class OcrAssetProcessor:
@@ -63,7 +67,8 @@ class OcrAssetProcessor:
                 if image.mode not in ("RGB", "RGBA"):
                     image = image.convert("RGBA" if "transparency" in image.info else "RGB")
                 output = BytesIO()
-                image.save(output, format="PNG")
+                with _PNG_NORMALIZE_LOCK:
+                    image.save(output, format="PNG")
                 return output.getvalue()
         except Exception as exc:
             self.trace_logger.warning(f"Could not normalize {image_id} to PNG for web display: {exc}")

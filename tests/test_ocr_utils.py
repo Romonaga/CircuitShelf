@@ -9,7 +9,7 @@ from backend.ingestion import IngestionPipeline
 from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsset
 from backend.ingestion.ocr_assets import OcrAssetProcessor
 from backend.ingestion.pdf.embedded_image_extractor import EmbeddedPdfImageExtractor
-from backend.ingestion.ocr_utils import should_skip_image, should_skip_image_dimensions
+from backend.ingestion.ocr_utils import parse_tesseract_tsv, should_skip_image, should_skip_image_dimensions
 
 
 class ConfigWrapper:
@@ -85,6 +85,17 @@ class FakeTokenUtils:
 
 
 class OcrUtilsTests(unittest.TestCase):
+    def test_parse_tesseract_tsv_extracts_text_and_confidence(self):
+        text, confidence = parse_tesseract_tsv(
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n"
+            "5\t1\t1\t1\t1\t1\t0\t0\t10\t10\t92.5\tVCC\n"
+            "5\t1\t1\t1\t1\t2\t12\t0\t10\t10\t88\tGND\n"
+            "5\t1\t1\t1\t1\t3\t24\t0\t10\t10\t-1\t\n"
+        )
+
+        self.assertEqual(text, "VCC GND")
+        self.assertAlmostEqual(confidence, 90.25)
+
     def test_should_skip_tiny_image(self):
         image = Image.new("RGB", (10, 10), "white")
 
