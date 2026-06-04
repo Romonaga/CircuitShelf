@@ -18,7 +18,12 @@ export function IngestWorkerBudgetPanel({
       <span><small>Cores</small><strong>{formatInteger(workerBudget.cpuCores)}</strong></span>
       <span><small>Reserved</small><strong>{formatInteger(workerBudget.reservedCores)}</strong></span>
       <span><small>Usable</small><strong>{formatInteger(workerBudget.usableCores)}</strong></span>
-      <span><small>Doc workers</small><strong>{formatInteger(workerBudget.activeDocumentWorkers)}</strong></span>
+      <span>
+        <small>Worker slots</small>
+        <strong>
+          {formatInteger(workerBudget.activeDocumentWorkers)} / {formatInteger(workerBudget.documentWorkerCapacity ?? workerBudget.activeDocumentWorkers)}
+        </strong>
+      </span>
       <span><small>Embed CUDA</small><strong title={batchSummary(runtimeBatches?.embedding)}>{batchBrief(runtimeBatches?.embedding)}</strong></span>
       <span><small>Rerank CUDA</small><strong title={batchSummary(runtimeBatches?.reranker)}>{batchBrief(runtimeBatches?.reranker)}</strong></span>
     </div>

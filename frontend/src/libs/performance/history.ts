@@ -26,6 +26,7 @@ export interface StatusHistoryPoint {
   sources: number;
   images: number;
   workers: number;
+  workerCapacity: number;
 }
 
 export function pointFromPerformanceSample(sample: PerformanceSample): StatusHistoryPoint {
@@ -56,6 +57,7 @@ export function pointFromPerformanceSample(sample: PerformanceSample): StatusHis
     sources: sample.sources ?? 0,
     images: sample.images ?? 0,
     workers: sample.workers ?? 0,
+    workerCapacity: sample.workerCapacity ?? 0,
   };
 }
 
@@ -64,7 +66,11 @@ export function pointFromStatus(status: StatusPayload): StatusHistoryPoint {
   const processRamMiB = status.systemResources?.process?.memoryBytes ? status.systemResources.process.memoryBytes / (1024 * 1024) : null;
   const totalRamMiB = status.systemResources?.memory?.totalBytes ? status.systemResources.memory.totalBytes / (1024 * 1024) : null;
   const processCpuMax = Math.max(100, (status.systemResources?.cpu?.cores ?? 1) * 100);
-  const workerCapacity = Math.max(1, status.ingestWorkerBudget?.usableCores ?? status.ingestWorkerBudget?.activeDocumentWorkers ?? 1);
+  const activeDocumentWorkers = status.ingestWorkerBudget?.activeDocumentWorkers ?? 0;
+  const workerCapacity = Math.max(
+    0,
+    status.ingestWorkerBudget?.documentWorkerCapacity ?? activeDocumentWorkers
+  );
   return {
     sampledAt: Number.isFinite(sampled) ? sampled : Date.now(),
     cpu: status.systemResources?.cpu?.utilizationPercent ?? null,
@@ -87,8 +93,8 @@ export function pointFromStatus(status: StatusPayload): StatusHistoryPoint {
     cpuTempLoad: typeof status.systemResources?.cpu?.temperatureC === "number"
       ? Math.min(100, (status.systemResources.cpu.temperatureC / 95) * 100)
       : null,
-    workerLoad: status.ingestWorkerBudget?.activeDocumentWorkers
-      ? Math.min(100, (status.ingestWorkerBudget.activeDocumentWorkers / workerCapacity) * 100)
+    workerLoad: activeDocumentWorkers && workerCapacity
+      ? Math.min(100, (activeDocumentWorkers / workerCapacity) * 100)
       : 0,
     gpuTempLoad: status.systemResources?.gpu?.available && typeof status.systemResources.gpu.temperatureC === "number"
       ? Math.min(100, (status.systemResources.gpu.temperatureC / 90) * 100)
@@ -101,7 +107,8 @@ export function pointFromStatus(status: StatusPayload): StatusHistoryPoint {
     chunks: status.chunks ?? 0,
     sources: status.sources ?? 0,
     images: status.imageIds ?? 0,
-    workers: status.ingestWorkerBudget?.activeDocumentWorkers ?? 0,
+    workers: activeDocumentWorkers,
+    workerCapacity,
   };
 }
 
@@ -137,7 +144,7 @@ export function normalizeHistoryWorkerLoad(
     }
     return {
       ...point,
-      workerLoad: point.workers ? Math.min(100, (point.workers / workerCapacity) * 100) : 0,
+      workerLoad: point.workers ? Math.min(100, (point.workers / Math.max(1, point.workerCapacity || workerCapacity)) * 100) : 0,
     };
   });
 }

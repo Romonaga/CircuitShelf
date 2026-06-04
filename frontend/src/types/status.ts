@@ -28,6 +28,7 @@ export interface IngestWorkerBudget {
   reservedCores: number;
   usableCores: number;
   activeDocumentWorkers: number;
+  documentWorkerCapacity?: number;
 }
 
 export interface RuntimeBatchStatus {
@@ -113,6 +114,7 @@ export interface PerformanceSample {
   gpuTemperatureC?: number | null;
   gpuPowerW?: number | null;
   workers: number;
+  workerCapacity?: number | null;
   embeddingBatch: number;
   rerankerBatch: number;
   chunks: number;

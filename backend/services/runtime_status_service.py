@@ -66,6 +66,7 @@ class RuntimeStatusReporter:
         system_resources = build_resource_status(cpu_count)
         ingest_status = self._current_ingest_status()
         active_document_workers = self._active_document_workers_from_status(ingest_status)
+        document_worker_capacity = self._document_worker_capacity_from_status(ingest_status, active_document_workers)
         system_resources["peaks"] = build_resource_peaks(system_resources, active_document_workers)
         payload = {
             "chunks": vector_counts.get("chunks", 0),
@@ -83,6 +84,7 @@ class RuntimeStatusReporter:
                 "reservedCores": self.reserved_core_count_fn(cpu_count),
                 "usableCores": self.usable_core_count_fn(cpu_count),
                 "activeDocumentWorkers": active_document_workers,
+                "documentWorkerCapacity": document_worker_capacity,
             },
             "runtimeBatches": build_runtime_batch_status(
                 config=self.config,
@@ -127,6 +129,22 @@ class RuntimeStatusReporter:
                 return int(details.get("activeWorkers") or 0)
             except (TypeError, ValueError):
                 pass
+        return 0
+
+    def _document_worker_capacity_from_status(self, ingest_status: dict[str, Any], active_document_workers: int) -> int:
+        if not ingest_status.get("running"):
+            return 0
+        details = ingest_status.get("details") or {}
+        for key in ("activeWorkers", "documentWorkerCapacity", "configuredDocumentWorkers"):
+            if details.get(key) is not None:
+                try:
+                    value = int(details.get(key) or 0)
+                    if value > 0:
+                        return value
+                except (TypeError, ValueError):
+                    pass
+        if active_document_workers > 0:
+            return active_document_workers
         return 0
 
     def start_resource_sampler(self):

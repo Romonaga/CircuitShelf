@@ -14,6 +14,7 @@ INSERT INTO performance_resource_samples (
     gpu_temperature_c,
     gpu_power_w,
     active_document_workers,
+    active_document_worker_capacity,
     embedding_batch_active,
     reranker_batch_active,
     chunks,
@@ -24,5 +25,5 @@ VALUES (
     now(),
     %s, %s, %s, %s, %s, %s, %s,
     %s, %s, %s, %s, %s, %s,
-    %s, %s, %s, %s, %s, %s
+    %s, %s, %s, %s, %s, %s, %s
 );

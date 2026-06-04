@@ -30,6 +30,7 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
   const peaks = resources?.peaks;
   const batches = status?.runtimeBatches;
   const workers = status?.ingestWorkerBudget;
+  const workerCapacity = workers?.documentWorkerCapacity ?? workers?.activeDocumentWorkers;
   const ingest = status?.ingest;
   const ingestProgress = ingest?.totalFiles
     ? `${formatInteger(ingest.processedFiles)} / ${formatInteger(ingest.totalFiles)} files`
@@ -75,7 +76,7 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
         tone="teal"
       />
       <div className="sidebar-system-pills">
-        <span><small>Workers</small><strong>{formatInteger(workers?.activeDocumentWorkers)}</strong></span>
+        <span><small>Workers</small><strong>{formatInteger(workers?.activeDocumentWorkers)} / {formatInteger(workerCapacity)}</strong></span>
         <span><small>Emb</small><strong>{formatInteger(batches?.embedding?.active)}</strong></span>
         <span><small>Rank</small><strong>{formatInteger(batches?.reranker?.active)}</strong></span>
       </div>
@@ -98,6 +99,7 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
             <span><small>Threads</small><strong>{formatInteger(process?.threads)}</strong></span>
             <span><small>Proc RAM</small><strong>{formatBytes(process?.memoryBytes)}</strong></span>
             <span><small>Usable cores</small><strong>{formatInteger(workers?.usableCores)}</strong></span>
+            <span><small>Worker slots</small><strong>{formatInteger(workerCapacity)}</strong></span>
             <span><small>Today workers</small><strong>{formatInteger(peaks?.activeDocumentWorkers)}</strong></span>
             <span><small>Today GPU temp</small><strong>{peaks?.gpuTemperatureC == null ? "n/a" : `${formatNumber(peaks.gpuTemperatureC)} C`}</strong></span>
           </div>

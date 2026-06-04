@@ -22,7 +22,12 @@ export function usePerformanceHistory({
     () => (reportSamples ?? []).map(pointFromPerformanceSample),
     [reportSamples]
   );
-  const workerCapacity = Math.max(1, status?.ingestWorkerBudget?.usableCores ?? status?.ingestWorkerBudget?.activeDocumentWorkers ?? 1);
+  const workerCapacity = Math.max(
+    1,
+    status?.ingestWorkerBudget?.documentWorkerCapacity
+      ?? status?.ingestWorkerBudget?.activeDocumentWorkers
+      ?? 1
+  );
   const history = useMemo(
     () => normalizeHistoryWorkerLoad(mergeHistory(persistedHistory, liveHistory), workerCapacity),
     [liveHistory, persistedHistory, workerCapacity]

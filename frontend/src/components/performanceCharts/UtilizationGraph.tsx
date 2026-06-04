@@ -6,7 +6,7 @@ export function UtilizationGraph({ history }: { history: StatusHistoryPoint[] })
   return (
     <PerformanceChart
       title="Operational pressure over time"
-      subtitle="Seven normalized pressure signals on one scale: host, process, memory, GPU, VRAM, and active document workers."
+      subtitle="Seven normalized pressure signals on one scale: host, process, memory, GPU, VRAM, and document worker slot utilization."
       fixedMin={0}
       fixedMax={100}
       history={history}
@@ -18,7 +18,7 @@ export function UtilizationGraph({ history }: { history: StatusHistoryPoint[] })
         { key: "processRam", label: "App RAM share", color: chartColors.navy },
         { key: "gpu", label: "GPU", color: chartColors.orange },
         { key: "vram", label: "VRAM", color: chartColors.purple },
-        { key: "workerLoad", label: "Doc workers", color: chartColors.vermillion },
+        { key: "workerLoad", label: "Worker slots", color: chartColors.vermillion },
       ]}
     />
   );
