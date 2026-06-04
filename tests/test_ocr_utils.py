@@ -5,9 +5,11 @@ from types import SimpleNamespace
 
 from PIL import Image
 
-from backend.services.document_processing_service import DocumentProcessingService
+from backend.ingestion import IngestionPipeline
+from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsset
+from backend.ingestion.ocr_assets import OcrAssetProcessor
+from backend.ingestion.pdf.embedded_image_extractor import EmbeddedPdfImageExtractor
 from backend.ingestion.ocr_utils import should_skip_image, should_skip_image_dimensions
-from backend.ingestion.pdf_visuals import RenderedPdfPage
 
 
 class ConfigWrapper:
@@ -44,12 +46,19 @@ class FakeChunker:
             "quality_flags": [],
         }
 
+    def smart_chunk_pages(self, _page_texts, _source_file):
+        return [], []
+
 
 class FakeState:
     def __init__(self):
         self.image_store = {}
         self.image_captions = {}
+        self.image_mime_types = {}
         self.image_page_text = {}
+        self.chunks = []
+        self.sources = []
+        self.metadata = []
 
     def add_image_store(self, key, value):
         self.image_store[key] = value
@@ -57,8 +66,22 @@ class FakeState:
     def add_image_caption(self, key, value):
         self.image_captions[key] = value
 
+    def add_image_mime_type(self, key, value):
+        self.image_mime_types[key] = value
+
     def add_image_page_text(self, key, value):
         self.image_page_text[key] = value
+
+    def extend_chunks(self, chunks, sources, metadata):
+        self.chunks.extend(chunks)
+        self.sources.extend(sources)
+        self.metadata.extend(metadata)
+
+
+class FakeTokenUtils:
+    @staticmethod
+    def estimate_token_density(_text):
+        return 1.0
 
 
 class OcrUtilsTests(unittest.TestCase):
@@ -121,7 +144,7 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertEqual(reason, "")
 
     def test_pdf_embedded_image_config_accepts_config_wrapper(self):
-        service = DocumentProcessingService(
+        extractor = EmbeddedPdfImageExtractor(
             config=ConfigWrapper({
                 "OCR_MIN_IMAGE_WIDTH": 20,
                 "OCR_MIN_IMAGE_HEIGHT": 20,
@@ -130,25 +153,9 @@ class OcrUtilsTests(unittest.TestCase):
                 "PDF_EMBEDDED_IMAGE_OCR_MIN_HEIGHT": 80,
                 "PDF_EMBEDDED_IMAGE_OCR_MIN_AREA": 6400,
             }),
-            trace_logger=None,
-            state=None,
-            chunker=None,
-            token_utils=None,
-            run_ocr=None,
-            render_pdf_visual_pages=None,
-            link_chunks_to_rendered_pages=None,
-            detected_cpu_count=lambda: 32,
-            reserved_core_count=lambda: 2,
-            usable_core_count=lambda: 30,
-            document_worker_count=lambda *_args, **_kwargs: 1,
-            ocr_worker_count=lambda *_args, **_kwargs: 1,
-            current_document_workers=lambda: 0,
-            begin_document_worker=lambda *_args, **_kwargs: None,
-            finish_document_worker=lambda *_args, **_kwargs: None,
-            pdf_ext=".pdf",
         )
 
-        config = service.pdf_embedded_image_ocr_config()
+        config = extractor._embedded_image_config()
 
         self.assertEqual(config["OCR_MIN_IMAGE_WIDTH"], 80)
         self.assertEqual(config["OCR_MIN_IMAGE_HEIGHT"], 80)
@@ -163,80 +170,36 @@ class OcrUtilsTests(unittest.TestCase):
                 text="noise",
             )
 
-        service = DocumentProcessingService(
+        ocr_assets = OcrAssetProcessor(
             config=ConfigWrapper({"OCR_TXT_DROP_SCORE": 0.4}),
             trace_logger=None,
-            state=None,
             chunker=FakeChunker(),
-            token_utils=None,
             run_ocr=fake_run_ocr,
-            render_pdf_visual_pages=None,
-            link_chunks_to_rendered_pages=None,
             detected_cpu_count=lambda: 32,
             reserved_core_count=lambda: 2,
-            usable_core_count=lambda: 30,
-            document_worker_count=lambda *_args, **_kwargs: 1,
             ocr_worker_count=lambda *_args, **_kwargs: 1,
             current_document_workers=lambda: 0,
-            begin_document_worker=lambda *_args, **_kwargs: None,
-            finish_document_worker=lambda *_args, **_kwargs: None,
-            pdf_ext=".pdf",
         )
         image = Image.new("RGB", (120, 80), "white")
         raw = BytesIO()
         image.save(raw, format="PNG")
 
-        result = service.ocr_pdf_image_job((0, 2, 1, raw.getvalue(), "demo.pdf_page3_img2"))
+        result = ocr_assets.run_jobs([(0, 3, raw.getvalue(), "demo.pdf_page3_img2", "embedded")])[0]
 
         self.assertFalse(result["ocr_result"]["accepted"])
-        self.assertGreater(len(result["web_image_bytes"]), 0)
+        self.assertGreater(len(result["image_bytes"]), 0)
 
     def test_rendered_pdf_page_with_sparse_text_is_ocr_indexed(self):
-        def fake_run_ocr(_image, _config):
-            return SimpleNamespace(
-                skipped=False,
-                skip_reason="",
-                confidence=88.0,
-                text="555 timer pin 1 goes to ground and pin 8 connects to VCC for the astable circuit.",
-            )
-
-        def fake_render_pdf_visual_pages(_path, **_kwargs):
-            image = Image.new("RGB", (180, 120), "white")
-            raw = BytesIO()
-            image.save(raw, format="PNG")
-            return [
-                RenderedPdfPage(
-                    image_key="timer.pdf_page1_render",
-                    page_number=1,
-                    caption="Rendered page 1 from timer.pdf (raster page coverage 100%)",
-                    searchable_text="Rendered page 1 from timer.pdf (raster page coverage 100%)",
-                    image_bytes=raw.getvalue(),
-                )
-            ]
-
         logger = logging.getLogger("test-rendered-page-ocr")
         logger.addHandler(logging.NullHandler())
         state = FakeState()
-        service = DocumentProcessingService(
+        pipeline = IngestionPipeline(
             config=ConfigWrapper({
-                "PDF_RENDER_VECTOR_PAGES": True,
-                "PDF_RENDER_OCR_PAGES": True,
-                "PDF_RENDER_MAX_PAGES_PER_DOC": 8,
-                "PDF_RENDER_MIN_DRAWINGS": 100,
-                "PDF_RENDER_ZOOM": 1.5,
-                "PDF_RENDER_RASTER_PAGES": True,
-                "PDF_RENDER_MIN_RASTER_COVERAGE": 0.8,
-                "OCR_TXT_DROP_SCORE": 0.4,
                 "OCR_INDEX_TEXT_MIN_CHARS": 20,
                 "INDEX_IMAGE_OCR_AS_TEXT": True,
             }),
             trace_logger=logger,
-            state=state,
-            chunker=FakeChunker(),
-            token_utils=None,
-            run_ocr=fake_run_ocr,
-            render_pdf_visual_pages=fake_render_pdf_visual_pages,
-            link_chunks_to_rendered_pages=None,
+            run_ocr=None,
             detected_cpu_count=lambda: 32,
             reserved_core_count=lambda: 2,
             usable_core_count=lambda: 30,
@@ -247,23 +210,35 @@ class OcrUtilsTests(unittest.TestCase):
             finish_document_worker=lambda *_args, **_kwargs: None,
             pdf_ext=".pdf",
         )
-        extra_chunks, extra_sources, extra_meta = [], [], []
-
-        rendered_count = service.add_pdf_rendered_pages(
-            "training/timer.pdf",
-            state,
-            extra_chunks=extra_chunks,
-            extra_sources=extra_sources,
-            extra_meta=extra_meta,
+        image = Image.new("RGB", (180, 120), "white")
+        raw = BytesIO()
+        image.save(raw, format="PNG")
+        document = ExtractedDocument(
+            source_path="training/timer.pdf",
+            pages=[ExtractedPage(page_number=1, text="Rendered page 1 from timer.pdf")],
+            assets=[
+                ImageAsset(
+                    image_key="timer.pdf_page1_render",
+                    page_number=1,
+                    caption="Rendered page 1 from timer.pdf",
+                    image_bytes=raw.getvalue(),
+                    searchable_text="Rendered page 1 from timer.pdf\n555 timer pin 1 goes to ground and pin 8 connects to VCC.",
+                    ocr_text="555 timer pin 1 goes to ground and pin 8 connects to VCC.",
+                    ocr_score=0.9,
+                    ocr_confidence=88.0,
+                    source_kind="rendered",
+                )
+            ],
         )
 
-        self.assertEqual(rendered_count, 1)
+        pipeline._store_extracted_document(document, state, FakeChunker(), FakeTokenUtils())
+
         self.assertIn("timer.pdf_page1_render", state.image_store)
         self.assertIn("pin 1 goes to ground", state.image_page_text["timer.pdf_page1_render"])
-        self.assertEqual(extra_chunks, ["555 timer pin 1 goes to ground and pin 8 connects to VCC for the astable circuit."])
-        self.assertEqual(extra_sources, ["training/timer.pdf"])
-        self.assertEqual(extra_meta[0]["source_image_id"], "timer.pdf_page1_render")
-        self.assertEqual(extra_meta[0]["page"], 1)
+        self.assertEqual(state.chunks, ["555 timer pin 1 goes to ground and pin 8 connects to VCC."])
+        self.assertEqual(state.sources, ["training/timer.pdf"])
+        self.assertEqual(state.metadata[0]["source_image_id"], "timer.pdf_page1_render")
+        self.assertEqual(state.metadata[0]["page"], 1)
 
 
 if __name__ == "__main__":

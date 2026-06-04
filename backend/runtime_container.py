@@ -193,7 +193,7 @@ class CircuitShelfRuntime:
             openai_assist_service=stores.openai_assist_service,
             training_dir=self.training_dir,
         )
-        self.document_processing_service = IngestionPipeline(
+        self.ingestion_pipeline = IngestionPipeline(
             config=self.config,
             trace_logger=self.trace_logger,
             run_ocr=run_ocr,
@@ -218,8 +218,8 @@ class CircuitShelfRuntime:
             embedder=self.embedder,
             build_ingest_manifest=self.build_ingest_manifest,
             build_ingest_context=self.ingest_context_service.build_ingest_context,
-            process_file_by_type=self.document_processing_service.process_file_by_type,
-            load_documents_parallel=self.document_processing_service.load_documents_parallel,
+            process_file_by_type=self.ingestion_pipeline.process_file_by_type,
+            load_documents_parallel=self.ingestion_pipeline.load_documents_parallel,
             prune_training_files_from_state=self.ingest_context_service.prune_training_files_from_state,
             persist_db_image_state=self.image_state_service.persist_db_image_state,
             maybe_review_ingestion_with_openai=self.ingest_context_service.maybe_review_ingestion_with_openai,
@@ -285,7 +285,7 @@ class CircuitShelfRuntime:
             display_source_name=display_source_name,
             document_source_from_metadata=document_source_from_metadata,
             image_asset_belongs_to_document=image_asset_belongs_to_document,
-            extract_page_number=self.document_processing_service.extract_page_number,
+            extract_page_number=self.ingestion_pipeline.extract_page_number,
             config=self.config,
             openai_assist_service=stores.openai_assist_service,
         )

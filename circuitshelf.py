@@ -86,7 +86,7 @@ register_api_routes(
     supported_training_extensions=runtime.supported_training_extensions,
     state=state,
     image_asset_belongs_to_document=runtime.image_asset_belongs_to_document,
-    extract_page_number=runtime.document_processing_service.extract_page_number,
+    extract_page_number=runtime.ingestion_pipeline.extract_page_number,
     document_source_from_metadata=runtime.document_source_from_metadata,
     source_image_id_from_metadata=runtime.source_image_id_from_metadata,
     extract_pinout_map=runtime.extract_pinout_map,
