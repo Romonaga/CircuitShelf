@@ -7,6 +7,7 @@ import { InventoryPartList } from "./InventoryPartList";
 import { SectionHeader } from "./SectionHeader";
 import { useInventory } from "../hooks/useInventory";
 import { formatNumber } from "../libs/format";
+import { InventoryMetric } from "./inventory/InventoryMetric";
 
 export function InventoryView({ isActive }: { isActive: boolean }) {
   const {
@@ -129,14 +130,5 @@ export function InventoryView({ isActive }: { isActive: boolean }) {
         </section>
       </div>
     </section>
-  );
-}
-
-function InventoryMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="inventory-metric">
-      <span>{label}</span>
-      <strong>{formatNumber(value)}</strong>
-    </div>
   );
 }
