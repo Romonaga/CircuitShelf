@@ -4194,7 +4194,7 @@ nav {
 
 .performance-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 430px;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
   gap: 18px;
   align-items: start;
 }
@@ -4209,6 +4209,7 @@ nav {
 .performance-chart-card {
   display: grid;
   gap: 14px;
+  padding: 18px;
 }
 
 .performance-chart-card.compact {
@@ -4273,7 +4274,7 @@ nav {
 
 .performance-echart {
   width: 100%;
-  min-height: 340px;
+  min-height: clamp(430px, 48vh, 640px);
 }
 
 .performance-echart.loading-chart {
