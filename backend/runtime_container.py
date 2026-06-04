@@ -39,10 +39,10 @@ from backend.services.source_metadata import (
     normalize_sources_for_api,
     source_image_id_from_metadata,
 )
-from chunking_util import ChunkingUtils
+from backend.ingestion.chunking_util import ChunkingUtils
 from circuit_build_cards import RECOVERY_SYSTEM_PROMPT, build_recovery_prompt, parse_recovered_build_card
 from ingest_manifest import IngestManifest
-from ingest_workers import (
+from backend.ingestion.worker_sizing import (
     detected_cpu_count,
     document_worker_count,
     ocr_worker_count,
@@ -55,7 +55,7 @@ from log_retention import cleanup_old_logs
 from log_tail import tail_text_file
 from ocr_utils import run_ocr
 from pinout_extractor import extract_pinout_map
-from reranker_module import Reranker
+from backend.services.reranker import Reranker
 from response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT
 from tokenize_util import TokenUtils
 from system_init import SystemInit

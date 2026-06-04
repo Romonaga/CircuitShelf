@@ -3,8 +3,8 @@ import unittest
 
 import numpy as np
 
-from index_builder import IndexBuilder
-from state_manager import StateManager
+from backend.ingestion.index_builder import IndexBuilder
+from backend.services.state_manager import StateManager
 
 
 class FakeChunker:

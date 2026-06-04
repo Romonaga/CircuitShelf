@@ -1,6 +1,6 @@
 import unittest
 
-from reranker_module import Reranker
+from backend.services.reranker import Reranker
 
 
 class RerankerProfileTests(unittest.TestCase):

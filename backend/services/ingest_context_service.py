@@ -1,7 +1,7 @@
 import os
 
-from chunking_util import ChunkingUtils
-from state_manager import StateManager
+from backend.ingestion.chunking_util import ChunkingUtils
+from backend.services.state_manager import StateManager
 from tokenize_util import TokenUtils
 
 

@@ -1,6 +1,6 @@
 import unittest
 
-from ingest_workers import document_worker_count, ocr_worker_count, persist_worker_count, reserved_core_count, usable_core_count
+from backend.ingestion.worker_sizing import document_worker_count, ocr_worker_count, persist_worker_count, reserved_core_count, usable_core_count
 
 
 class IngestWorkerTests(unittest.TestCase):

@@ -1,7 +1,7 @@
 import logging
 import unittest
 
-from chunking_util import ChunkingUtils
+from backend.ingestion.chunking_util import ChunkingUtils
 
 
 class FakeTokenUtils:

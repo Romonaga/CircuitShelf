@@ -5,7 +5,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed
 
 import numpy as np
 
-from index_builder import IndexBuildResult, IndexBuilder
+from backend.ingestion.index_builder import IndexBuildResult, IndexBuilder
 
 
 class IncrementalIngestService:

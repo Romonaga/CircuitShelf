@@ -1,6 +1,6 @@
 import numpy as np
 
-from index_builder import IndexBuilder
+from backend.ingestion.index_builder import IndexBuilder
 
 
 class ImageStateService:

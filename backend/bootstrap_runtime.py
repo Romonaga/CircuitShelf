@@ -12,7 +12,7 @@ from backend.services.app_runtime_helpers import TraceLogHelper
 from backend.store_container import StoreContainer, create_store_container
 from db.connection import Database, database_url_from_config
 from settings_runtime import RuntimeSettingsManager
-from state_manager import StateManager
+from backend.services.state_manager import StateManager
 from system_init import SystemInit
 
 
