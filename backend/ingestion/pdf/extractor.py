@@ -4,6 +4,7 @@ import os
 from typing import Any
 
 from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsset
+from backend.ingestion.pdf.embedded_image_extractor import EmbeddedPdfImageExtractor
 from backend.ingestion.pdf.layout_extractor import PdfLayoutExtractor
 from backend.ingestion.pdf.page_renderer import PdfiumPageRenderer
 from backend.ingestion.pdf.render_planner import PdfRenderPlanner
@@ -29,12 +30,15 @@ class PdfDocumentExtractor:
         ]
 
         render_requests = PdfRenderPlanner(config=self.config, trace_logger=self.trace_logger).plan(path, layout_pages)
+        embedded_images = EmbeddedPdfImageExtractor(config=self.config, trace_logger=self.trace_logger).extract(path)
         if progress_callback:
             progress_callback(
                 currentDocument=base_name,
                 documentPhase="Rendering visual pages",
                 pdfPages=len(layout_pages),
-                imageCandidates=len(render_requests),
+                imageCandidates=len(render_requests) + len(embedded_images.images),
+                skippedImageCandidates=embedded_images.skipped_tiny,
+                duplicateImageCandidates=embedded_images.skipped_duplicates,
             )
 
         rendered = PdfiumPageRenderer(
@@ -43,12 +47,16 @@ class PdfDocumentExtractor:
         ).render_pages(path, [request.page_number for request in render_requests])
 
         page_text_by_number = {page.page_number: page.text for page in pages}
-        image_jobs = []
+        image_jobs = [
+            (image.order, image.page_number, image.image_bytes, image.image_key, "embedded")
+            for image in embedded_images.images
+        ]
+        rendered_order_offset = len(image_jobs)
         for request in render_requests:
             image_bytes = rendered.get(request.page_number)
             if not image_bytes:
                 continue
-            image_jobs.append((request.order, request.page_number, image_bytes, request.image_key, "rendered"))
+            image_jobs.append((rendered_order_offset + request.order, request.page_number, image_bytes, request.image_key, "rendered"))
 
         if progress_callback:
             progress_callback(
@@ -62,7 +70,7 @@ class PdfDocumentExtractor:
             self.trace_logger.info(
                 f"PDF extraction for {base_name}: {len(layout_pages)} pages, "
                 f"{sum(1 for page in layout_pages if page.tables)} pages with tables, "
-                f"{len(image_jobs)} rendered pages queued for OCR."
+                f"{len(embedded_images.images)} embedded images and {len(render_requests)} rendered pages queued for OCR."
             )
 
         assets = [
