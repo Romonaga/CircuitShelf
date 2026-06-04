@@ -1,19 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  approveReviewDocument,
-  getReviewDocument,
-  getReviewDocumentImages,
-  getReviewDocuments,
-  reindexReviewDocument,
-  removeReviewDocument,
-  updateReviewDocumentScope
-} from "../libs/api";
-import type { DatasheetIntelligence, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../types";
-import { errorMessage } from "../libs/errors";
-import { formatInteger } from "../libs/format";
+  initialChunkPreviewLimit,
+  reviewChunkPreviewCap
+} from "../libs/review/reviewQueue";
+import { useReviewActions } from "./review/useReviewActions";
+import { useReviewDocumentDetail } from "./review/useReviewDocumentDetail";
+import { useReviewDocuments } from "./review/useReviewDocuments";
 
-export const initialChunkPreviewLimit = 50;
-export const maxChunkPreviewLimit = 500;
+export { initialChunkPreviewLimit, maxChunkPreviewLimit } from "../libs/review/reviewQueue";
 
 export function useReviewQueue({
   isActive,
@@ -24,192 +18,65 @@ export function useReviewQueue({
   refreshSignal: number;
   onStatusChange: () => void;
 }) {
-  const [documents, setDocuments] = useState<ReviewDocument[]>([]);
-  const [selected, setSelected] = useState("");
-  const [chunks, setChunks] = useState<ReviewChunk[]>([]);
   const [chunkLimit, setChunkLimit] = useState(initialChunkPreviewLimit);
-  const [images, setImages] = useState<ReviewImage[]>([]);
-  const [intelligence, setIntelligence] = useState<DatasheetIntelligence | null>(null);
-  const [scopeAudit, setScopeAudit] = useState<ReviewScopeAudit[]>([]);
-  const [filter, setFilter] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [detailBusy, setDetailBusy] = useState(false);
-  const [actionBusy, setActionBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const selectedRef = useRef("");
-
-  const filteredDocuments = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (!needle) {
-      return documents;
-    }
-    return documents.filter((doc) => `${doc.displayName} ${doc.source} ${doc.status} ${doc.scopeLabel ?? ""}`.toLowerCase().includes(needle));
-  }, [documents, filter]);
-
-  const selectedDocument = useMemo(
-    () => documents.find((doc) => doc.source === selected) || null,
-    [documents, selected]
+  const documents = useReviewDocuments();
+  const detail = useReviewDocumentDetail({
+    selected: documents.selected,
+    chunkLimit,
+    onError: documents.setError
+  });
+  const totalChunkCount = documents.selectedDocument?.chunkCount ?? detail.chunks.length;
+  const chunkPreviewCap = reviewChunkPreviewCap(totalChunkCount);
+  const canLoadMoreChunks = Boolean(
+    documents.selectedDocument
+      && detail.chunks.length < totalChunkCount
+      && chunkLimit < chunkPreviewCap
   );
-  const totalChunkCount = selectedDocument?.chunkCount ?? chunks.length;
-  const chunkPreviewCap = Math.min(totalChunkCount || maxChunkPreviewLimit, maxChunkPreviewLimit);
-  const canLoadMoreChunks = Boolean(selectedDocument && chunks.length < totalChunkCount && chunkLimit < chunkPreviewCap);
+  const actions = useReviewActions({
+    selectedDocument: documents.selectedDocument,
+    clearDetails: detail.clearDetails,
+    loadDocuments: documents.loadDocuments,
+    onStatusChange,
+    onScopeAuditChange: detail.setScopeAudit,
+    setError: documents.setError
+  });
 
-  useEffect(() => {
-    selectedRef.current = selected;
-  }, [selected]);
-
-  const loadDocuments = useCallback(async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const response = await getReviewDocuments();
-      setDocuments(response.documents);
-      const nextSelected = response.documents.find((doc) => doc.source === selectedRef.current) || response.documents[0];
-      setSelected(nextSelected?.source || "");
-    } catch (err) {
-      setError(errorMessage(err, "Could not load review queue"));
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+  const setSelected = useCallback((source: string) => {
+    setChunkLimit(initialChunkPreviewLimit);
+    documents.setSelected(source);
+  }, [documents.setSelected]);
 
   useEffect(() => {
     if (isActive) {
-      void loadDocuments();
+      void documents.loadDocuments();
     }
-  }, [isActive, loadDocuments, refreshSignal]);
-
-  useEffect(() => {
-    if (!selected) {
-      setChunks([]);
-      setImages([]);
-      setIntelligence(null);
-      setScopeAudit([]);
-      setDetailBusy(false);
-      return;
-    }
-    let active = true;
-    setDetailBusy(true);
-    setChunks([]);
-    setImages([]);
-    setIntelligence(null);
-    setScopeAudit([]);
-    setError("");
-    Promise.all([getReviewDocument(selected, chunkLimit), getReviewDocumentImages(selected)])
-      .then(([documentResponse, imageResponse]) => {
-        if (active) {
-          setChunks(documentResponse.chunks);
-          setIntelligence(documentResponse.intelligence ?? null);
-          setScopeAudit(documentResponse.scopeAudit || []);
-          setImages(imageResponse.images);
-        }
-      })
-      .catch((err) => {
-        if (active) {
-          setError(errorMessage(err, "Could not load review details"));
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setDetailBusy(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [selected, chunkLimit]);
-
-  async function approveSelected(includeImages: boolean) {
-    if (!selectedDocument) {
-      return;
-    }
-    await runDocumentAction("Could not approve document", async () => {
-      await approveReviewDocument(selectedDocument.source, includeImages);
-      setMessage(
-        includeImages
-          ? `${selectedDocument.displayName} approved for retrieval with images.`
-          : `${selectedDocument.displayName} approved for retrieval without images.`
-      );
-      setChunks([]);
-      setImages([]);
-      setIntelligence(null);
-      setScopeAudit([]);
-    });
-  }
-
-  async function removeSelected() {
-    if (!selectedDocument) {
-      return;
-    }
-    await runDocumentAction("Could not remove document", async () => {
-      await removeReviewDocument(selectedDocument.source);
-      setMessage(`${selectedDocument.displayName} removed.`);
-    });
-  }
-
-  async function reindexSelected() {
-    if (!selectedDocument) {
-      return;
-    }
-    await runDocumentAction("Could not re-index document", async () => {
-      const result = await reindexReviewDocument(selectedDocument.source);
-      setMessage(`${selectedDocument.displayName} queued for re-index${result.indexing?.jobId ? ` as job ${formatInteger(result.indexing.jobId)}` : ""}.`);
-    });
-  }
-
-  async function changeSelectedScope(scope: "global" | "entity") {
-    if (!selectedDocument) {
-      return;
-    }
-    await runDocumentAction("Could not change document scope", async () => {
-      const label = scope === "global" ? "global corpus" : "entity private";
-      const result = await updateReviewDocumentScope(selectedDocument.source, scope, `Review screen changed scope to ${label}`);
-      setScopeAudit(result.scopeAudit || []);
-      setMessage(`${selectedDocument.displayName} changed to ${label}.`);
-    });
-  }
-
-  async function runDocumentAction(errorPrefix: string, action: () => Promise<void>) {
-    setActionBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      await action();
-      await loadDocuments();
-      onStatusChange();
-    } catch (err) {
-      setError(errorMessage(err, errorPrefix));
-    } finally {
-      setActionBusy(false);
-    }
-  }
+  }, [documents.loadDocuments, isActive, refreshSignal]);
 
   return {
-    actionBusy,
-    approveSelected,
-    busy,
+    actionBusy: actions.actionBusy,
+    approveSelected: actions.approveSelected,
+    busy: documents.busy,
     canLoadMoreChunks,
-    changeSelectedScope,
+    changeSelectedScope: actions.changeSelectedScope,
     chunkLimit,
     chunkPreviewCap,
-    chunks,
-    detailBusy,
-    documents,
-    error,
-    filter,
-    filteredDocuments,
-    images,
-    intelligence,
-    loadDocuments,
-    message,
-    reindexSelected,
-    removeSelected,
-    scopeAudit,
-    selected,
-    selectedDocument,
+    chunks: detail.chunks,
+    detailBusy: detail.detailBusy,
+    documents: documents.documents,
+    error: documents.error,
+    filter: documents.filter,
+    filteredDocuments: documents.filteredDocuments,
+    images: detail.images,
+    intelligence: detail.intelligence,
+    loadDocuments: documents.loadDocuments,
+    message: actions.message,
+    reindexSelected: actions.reindexSelected,
+    removeSelected: actions.removeSelected,
+    scopeAudit: detail.scopeAudit,
+    selected: documents.selected,
+    selectedDocument: documents.selectedDocument,
     setChunkLimit,
-    setFilter,
+    setFilter: documents.setFilter,
     setSelected,
     totalChunkCount
   };
