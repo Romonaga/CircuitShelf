@@ -1,5 +1,5 @@
 import type { StatusPayload } from "../../types";
-import type { StatusHistoryPoint } from "../../hooks/useStatusHistory";
+import type { StatusHistoryPoint } from "../../libs/performance/history";
 import { formatBytes, formatInteger, formatNumber, formatPercent } from "../../libs/format";
 import { Stat } from "../Stat";
 

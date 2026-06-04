@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { StatusPayload } from "../types";
-import { pointFromPerformanceSample, useStatusHistory } from "../hooks/useStatusHistory";
 import { usePerformanceReport } from "../hooks/usePerformanceReport";
+import { usePerformanceHistory } from "../hooks/charts/usePerformanceHistory";
 import { IngestStatusPanel } from "./IngestStatusPanel";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { RecentWorkTable } from "./RecentWorkTable";
@@ -22,31 +22,16 @@ export function PerformanceView({
   isActive: boolean;
   onOpenReview: () => void;
 }) {
-  const liveHistory = useStatusHistory(isActive ? status : null);
   const report = usePerformanceReport(isActive, 24, status?.ingest?.lastFinishedAt ?? "");
   const [chartChoice, setChartChoice] = useState<PerformanceChartChoice>("utilization");
   const [showIndexChecks, setShowIndexChecks] = useState(false);
   const resources = status?.systemResources;
   const runtimePeaks = resources?.peaks;
-  const persistedHistory = useMemo(
-    () => (report.report?.samples ?? []).map(pointFromPerformanceSample),
-    [report.report?.samples]
-  );
-  const workerCapacity = Math.max(1, status?.ingestWorkerBudget?.usableCores ?? status?.ingestWorkerBudget?.activeDocumentWorkers ?? 1);
-  const history = useMemo(
-    () => normalizeHistoryWorkerLoad(mergeHistory(persistedHistory, liveHistory), workerCapacity),
-    [liveHistory, persistedHistory, workerCapacity]
-  );
-  const peaks = useMemo(() => ({
-    cpu: maxHistoryValue(history, "cpu"),
-    processCpu: maxHistoryValue(history, "processCpu"),
-    gpu: maxHistoryValue(history, "gpu"),
-    cpuTemp: maxHistoryValue(history, "cpuTemp"),
-    gpuTemp: maxHistoryValue(history, "gpuTemp"),
-    vram: maxHistoryValue(history, "vram"),
-    workers: maxHistoryValue(history, "workers"),
-    processRamMiB: maxHistoryValue(history, "processRamMiB"),
-  }), [history]);
+  const { history, peaks } = usePerformanceHistory({
+    isActive,
+    status,
+    reportSamples: report.report?.samples,
+  });
   const peakWorkers = Math.max(runtimePeaks?.activeDocumentWorkers ?? 0, peaks.workers ?? 0);
   const recentWork = report.report?.recentWork ?? [];
   const visibleRecentWork = showIndexChecks ? recentWork : recentWork.filter((row) => row.workType !== "index_check");
@@ -96,41 +81,4 @@ export function PerformanceView({
       <RecentWorkTable rows={visibleRecentWork} showIndexChecks={showIndexChecks} onShowIndexChecksChange={setShowIndexChecks} />
     </section>
   );
-}
-
-function maxHistoryValue<K extends keyof ReturnType<typeof pointFromPerformanceSample>>(
-  history: ReturnType<typeof pointFromPerformanceSample>[],
-  key: K
-): number | null {
-  const values = history
-    .map((point) => point[key])
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-  return values.length ? Math.max(...values) : null;
-}
-
-function mergeHistory(
-  persistedHistory: ReturnType<typeof pointFromPerformanceSample>[],
-  liveHistory: ReturnType<typeof pointFromPerformanceSample>[]
-) {
-  const bySampleTime = new Map<number, ReturnType<typeof pointFromPerformanceSample>>();
-  persistedHistory.forEach((point) => bySampleTime.set(point.sampledAt, point));
-  liveHistory.forEach((point) => bySampleTime.set(point.sampledAt, point));
-  return Array.from(bySampleTime.values())
-    .sort((left, right) => left.sampledAt - right.sampledAt)
-    .slice(-500);
-}
-
-function normalizeHistoryWorkerLoad(
-  history: ReturnType<typeof pointFromPerformanceSample>[],
-  workerCapacity: number
-) {
-  return history.map((point) => {
-    if (typeof point.workerLoad === "number") {
-      return point;
-    }
-    return {
-      ...point,
-      workerLoad: point.workers ? Math.min(100, (point.workers / workerCapacity) * 100) : 0,
-    };
-  });
 }

@@ -1,4 +1,4 @@
-import type { StatusHistoryPoint } from "../../hooks/useStatusHistory";
+import type { StatusHistoryPoint } from "../../libs/performance/history";
 import { chartColors } from "../../libs/chartColors";
 import { PerformanceChart } from "../PerformanceChart";
 

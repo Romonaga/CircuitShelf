@@ -1,4 +1,4 @@
-import type { StatusHistoryPoint } from "../../hooks/useStatusHistory";
+import type { StatusHistoryPoint } from "../../libs/performance/history";
 import type { PerformanceWorkRun } from "../../types";
 import { IngestionThroughputChart } from "../IngestionThroughputChart";
 import { LoadingSpinner } from "../LoadingSpinner";

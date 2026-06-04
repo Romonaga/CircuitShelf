@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import type { StatusHistoryPoint } from "../hooks/useStatusHistory";
+import type { StatusHistoryPoint } from "../libs/performance/history";
 import type { ChartSeries } from "./PerformanceChart";
 import { useEChart } from "../hooks/charts/useEChart";
 import { buildLineChartOption, type LineChartOption } from "../libs/performanceCharts/lineChartOption";

@@ -17,7 +17,7 @@ import type {
   TooltipComponentOption
 } from "echarts/components";
 import type { LineSeriesOption } from "echarts/charts";
-import type { StatusHistoryPoint } from "../../hooks/useStatusHistory";
+import type { StatusHistoryPoint } from "../../libs/performance/history";
 import { formatNumber } from "../format";
 import type { ChartSeries } from "../../components/PerformanceChart";
 import type { ChartTheme } from "../chartTheme";

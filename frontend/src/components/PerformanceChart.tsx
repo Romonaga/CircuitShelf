@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import type { StatusHistoryPoint } from "../hooks/useStatusHistory";
+import type { StatusHistoryPoint } from "../libs/performance/history";
 import { formatNumber } from "../libs/format";
 
 const EChartsLineChart = lazy(() => import("./EChartsLineChart").then((module) => ({ default: module.EChartsLineChart })));
