@@ -1,10 +1,21 @@
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
-from backend.services.openai_assist_utils import compact_intelligence_for_prompt, parse_json_object
+from backend.services.openai_assist_accounting import OpenAIAssistAccountingMixin
+from backend.services.openai_assist_prompts import (
+    ANSWER_VALIDATION_INSTRUCTIONS,
+    DATASHEET_REPAIR_INSTRUCTIONS,
+    FALLBACK_ANSWER_INSTRUCTIONS,
+    INGESTION_REVIEW_INSTRUCTIONS,
+    INVENTORY_PHOTO_INSTRUCTIONS,
+    build_datasheet_repair_prompt,
+    build_fallback_answer_prompt,
+    build_ingestion_review_prompt,
+    build_inventory_photo_prompt,
+)
+from backend.services.openai_assist_utils import parse_json_object
 from backend.services.openai_response_client import (
     OpenAIResponseClient,
     extract_response_text,
@@ -20,7 +31,7 @@ from backend.services.response_finalizer import (
 )
 
 
-class OpenAIAssistService:
+class OpenAIAssistService(OpenAIAssistAccountingMixin):
     def __init__(self, ai_provider_store: Any, logger: Any = None, *, timeout_seconds: int = 90):
         self.ai_provider_store = ai_provider_store
         self.logger = logger
@@ -73,62 +84,29 @@ class OpenAIAssistService:
             max_context_chars=max_context_chars,
         )
         started_at = time.time()
-        event_base = {
-            "entity_id": entity_id,
-            "user_id": user_id,
-            "provider": "openai",
-            "task_type": "answer_validation",
-            "model_name": settings["modelName"],
-            "context_type": context_type,
-            "context_id": context_id,
-            "round_number": 1,
-            "round_count": 1,
-            "paid_by": settings["paidBy"],
-            "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
-        }
-        budget_block = self._budget_block_message(settings)
+        event_base = self._assist_event_base(
+            settings=settings,
+            entity_id=entity_id,
+            user_id=user_id,
+            task_type="answer_validation",
+            context_type=context_type,
+            context_id=context_id,
+        )
+        budget_block = self._record_budget_block_if_needed(event_base, settings)
         if budget_block:
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=0,
-                cached_input_tokens=0,
-                output_tokens=0,
-                estimated_cost=0,
-                success=False,
-                error_message=budget_block,
-            )
             return None
         try:
             data = self._create_response(
                 api_key=settings["apiKey"],
                 model=settings["modelName"],
-                instructions=(
-                    "You are CircuitShelf's OpenAI answer validator. Return only the requested JSON. "
-                    "Do not add unsupported electronics facts or component values."
-                ),
+                instructions=ANSWER_VALIDATION_INSTRUCTIONS,
                 input_text=prompt,
                 max_output_tokens=1600,
             )
             text = extract_response_text(data)
             usage = extract_usage(data)
-            estimated_cost = self.ai_provider_store.estimate_cost(
-                provider="openai",
-                model_name=settings["modelName"],
-                input_tokens=usage["inputTokens"],
-                cached_input_tokens=usage["cachedInputTokens"],
-                output_tokens=usage["outputTokens"],
-                billing_scope=settings["pricingScope"],
-                entity_id=settings.get("pricingEntityId"),
-                user_id=settings.get("pricingUserId"),
-            )
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=usage["inputTokens"],
-                cached_input_tokens=usage["cachedInputTokens"],
-                output_tokens=usage["outputTokens"],
-                estimated_cost=estimated_cost,
-                success=True,
-            )
+            estimated_cost = self._estimate_openai_cost(settings, usage)
+            self._record_ai_success(event_base, usage, estimated_cost)
             revised, result = parse_response_finalizer_output(text, fallback_answer=answer, deterministic_issues=issues)
             result.elapsed_ms = int((time.time() - started_at) * 1000)
             result.model = f"openai:{settings['modelName']}"
@@ -136,15 +114,7 @@ class OpenAIAssistService:
             return revised, result
         except Exception as exc:
             message = safe_error_message(exc)
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=0,
-                cached_input_tokens=0,
-                output_tokens=0,
-                estimated_cost=0,
-                success=False,
-                error_message=message,
-            )
+            self._record_ai_failure(event_base, message)
             if self.logger:
                 self.logger.warning(f"OpenAI assist finalizer failed: {message}")
             return None
@@ -161,66 +131,30 @@ class OpenAIAssistService:
         settings = self.ai_provider_store.resolve_openai_assist(entity_id=entity_id, user_id=user_id)
         if not settings or not settings.get("apiKey") or settings.get("assistMode") == "off":
             return None
-        prompt = (
-            "CircuitShelf could not find matching indexed documents for this electronics question.\n"
-            "Answer from general electronics knowledge only if you can do so safely. Begin by saying "
-            "that no indexed source matched. If the request needs a datasheet, exact pinout, mains wiring, "
-            "or safety-critical values, say what must be verified instead of guessing.\n\n"
-            f"Question: {question}"
+        prompt = build_fallback_answer_prompt(question)
+        event_base = self._assist_event_base(
+            settings=settings,
+            entity_id=entity_id,
+            user_id=user_id,
+            task_type="answer_validation",
+            context_type=context_type,
+            context_id=context_id,
         )
-        event_base = {
-            "entity_id": entity_id,
-            "user_id": user_id,
-            "provider": "openai",
-            "task_type": "answer_validation",
-            "model_name": settings["modelName"],
-            "context_type": context_type,
-            "context_id": context_id,
-            "round_number": 1,
-            "round_count": 1,
-            "paid_by": settings["paidBy"],
-            "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
-        }
-        budget_block = self._budget_block_message(settings)
+        budget_block = self._record_budget_block_if_needed(event_base, settings)
         if budget_block:
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=0,
-                cached_input_tokens=0,
-                output_tokens=0,
-                estimated_cost=0,
-                success=False,
-                error_message=budget_block,
-            )
             return None
         started_at = time.time()
         try:
             data = self._create_response(
                 api_key=settings["apiKey"],
                 model=settings["modelName"],
-                instructions="You are CircuitShelf's electronics fallback assistant. Be concise, practical, and explicit about missing source grounding.",
+                instructions=FALLBACK_ANSWER_INSTRUCTIONS,
                 input_text=prompt,
                 max_output_tokens=1200,
             )
             usage = extract_usage(data)
-            estimated_cost = self.ai_provider_store.estimate_cost(
-                provider="openai",
-                model_name=settings["modelName"],
-                input_tokens=usage["inputTokens"],
-                cached_input_tokens=usage["cachedInputTokens"],
-                output_tokens=usage["outputTokens"],
-                billing_scope=settings["pricingScope"],
-                entity_id=settings.get("pricingEntityId"),
-                user_id=settings.get("pricingUserId"),
-            )
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=usage["inputTokens"],
-                cached_input_tokens=usage["cachedInputTokens"],
-                output_tokens=usage["outputTokens"],
-                estimated_cost=estimated_cost,
-                success=True,
-            )
+            estimated_cost = self._estimate_openai_cost(settings, usage)
+            self._record_ai_success(event_base, usage, estimated_cost)
             return extract_response_text(data), {
                 "enabled": True,
                 "ran": True,
@@ -234,15 +168,7 @@ class OpenAIAssistService:
             }
         except Exception as exc:
             message = safe_error_message(exc)
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=0,
-                cached_input_tokens=0,
-                output_tokens=0,
-                estimated_cost=0,
-                success=False,
-                error_message=message,
-            )
+            self._record_ai_failure(event_base, message)
             if self.logger:
                 self.logger.warning(f"OpenAI fallback answer failed: {message}")
             return None
@@ -268,72 +194,36 @@ class OpenAIAssistService:
         if not settings or not settings.get("apiKey") or settings.get("assistMode") == "off":
             return None
 
-        prompt = (
-            "Review this CircuitShelf document ingestion result. Return compact JSON with keys: "
-            "quality, useful, warnings, suggestedReviewFocus. Do not infer facts not present in the sample.\n\n"
-            f"Source: {source_path}\n"
-            f"Scope: {'global corpus' if is_global else 'entity private'}\n"
-            f"Stats: {json.dumps(stats, sort_keys=True)}\n\n"
-            f"Sample extracted text:\n{sample_text[:6000]}"
+        prompt = build_ingestion_review_prompt(
+            source_path=source_path,
+            is_global=is_global,
+            stats=stats,
+            sample_text=sample_text,
         )
-        event_base = {
-            "entity_id": None if is_global else entity_id,
-            "user_id": user_id,
-            "provider": "openai",
-            "task_type": "ingestion_assist",
-            "model_name": settings["modelName"],
-            "context_type": "document_ingest",
-            "context_id": None,
-            "round_number": 1,
-            "round_count": 1,
-            "paid_by": settings["paidBy"],
-            "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
-        }
-        budget_block = self._budget_block_message(settings)
+        event_base = self._assist_event_base(
+            settings=settings,
+            entity_id=None if is_global else entity_id,
+            user_id=user_id,
+            task_type="ingestion_assist",
+            context_type="document_ingest",
+        )
+        budget_block = self._record_budget_block_if_needed(event_base, settings)
         if budget_block:
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=0,
-                cached_input_tokens=0,
-                output_tokens=0,
-                estimated_cost=0,
-                success=False,
-                error_message=budget_block,
-            )
             return None
 
         try:
             data = self._create_response(
                 api_key=settings["apiKey"],
                 model=settings["modelName"],
-                instructions=(
-                    "You are CircuitShelf's ingestion QA assistant. Return only compact JSON. "
-                    "Focus on extraction quality, not circuit design advice."
-                ),
+                instructions=INGESTION_REVIEW_INSTRUCTIONS,
                 input_text=prompt,
                 max_output_tokens=700,
             )
             usage = extract_usage(data)
-            estimated_cost = self.ai_provider_store.estimate_cost(
-                provider="openai",
-                model_name=settings["modelName"],
-                input_tokens=usage["inputTokens"],
-                cached_input_tokens=usage["cachedInputTokens"],
-                output_tokens=usage["outputTokens"],
-                billing_scope=settings["pricingScope"],
-                entity_id=settings.get("pricingEntityId"),
-                user_id=settings.get("pricingUserId"),
-            )
+            estimated_cost = self._estimate_openai_cost(settings, usage)
             text = extract_response_text(data)
             parsed = parse_json_object(text)
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=usage["inputTokens"],
-                cached_input_tokens=usage["cachedInputTokens"],
-                output_tokens=usage["outputTokens"],
-                estimated_cost=estimated_cost,
-                success=True,
-            )
+            self._record_ai_success(event_base, usage, estimated_cost)
             self.ai_provider_store.record_document_ingest_ai_review(
                 source_path=source_path,
                 provider="openai",
@@ -352,15 +242,7 @@ class OpenAIAssistService:
             }
         except Exception as exc:
             message = safe_error_message(exc)
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=0,
-                cached_input_tokens=0,
-                output_tokens=0,
-                estimated_cost=0,
-                success=False,
-                error_message=message,
-            )
+            self._record_ai_failure(event_base, message)
             if self.logger:
                 self.logger.warning(f"OpenAI ingestion assist failed for {source_path}: {message}")
             return None
@@ -386,76 +268,36 @@ class OpenAIAssistService:
         if not settings or not settings.get("apiKey") or settings.get("assistMode") == "off":
             return None
 
-        prompt = (
-            "Repair this CircuitShelf datasheet intelligence record using only the provided extracted text. "
-            "Return compact JSON only with keys: componentName, componentType, summary, confidence, facts, pinout, notes. "
-            "facts must be a list of objects with type, label, value, unit, page, evidence. "
-            "pinout must be an object with pins, where pins is a list of objects with pin, label, function, page, evidence. "
-            "Do not guess missing pins, voltages, current limits, or packages. If evidence is absent, leave the field empty.\n\n"
-            f"Source: {source_path}\n"
-            f"Scope: {'global corpus' if is_global else 'entity private'}\n"
-            f"Local intelligence: {json.dumps(compact_intelligence_for_prompt(local_intelligence), sort_keys=True)}\n\n"
-            f"Extracted text excerpts:\n{sample_text[:9000]}"
+        prompt = build_datasheet_repair_prompt(
+            source_path=source_path,
+            is_global=is_global,
+            local_intelligence=local_intelligence,
+            sample_text=sample_text,
         )
-        event_base = {
-            "entity_id": None if is_global else entity_id,
-            "user_id": user_id,
-            "provider": "openai",
-            "task_type": "ingestion_assist",
-            "model_name": settings["modelName"],
-            "context_type": "datasheet_intelligence",
-            "context_id": None,
-            "round_number": 1,
-            "round_count": 1,
-            "paid_by": settings["paidBy"],
-            "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
-        }
-        budget_block = self._budget_block_message(settings)
+        event_base = self._assist_event_base(
+            settings=settings,
+            entity_id=None if is_global else entity_id,
+            user_id=user_id,
+            task_type="ingestion_assist",
+            context_type="datasheet_intelligence",
+        )
+        budget_block = self._record_budget_block_if_needed(event_base, settings)
         if budget_block:
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=0,
-                cached_input_tokens=0,
-                output_tokens=0,
-                estimated_cost=0,
-                success=False,
-                error_message=budget_block,
-            )
             return None
 
         try:
             data = self._create_response(
                 api_key=settings["apiKey"],
                 model=settings["modelName"],
-                instructions=(
-                    "You are CircuitShelf's deterministic datasheet intelligence repair assistant. "
-                    "Return only compact JSON. Prefer explicit pin-function tables and pin diagrams. "
-                    "Never invent unsupported component data."
-                ),
+                instructions=DATASHEET_REPAIR_INSTRUCTIONS,
                 input_text=prompt,
                 max_output_tokens=1800,
             )
             usage = extract_usage(data)
-            estimated_cost = self.ai_provider_store.estimate_cost(
-                provider="openai",
-                model_name=settings["modelName"],
-                input_tokens=usage["inputTokens"],
-                cached_input_tokens=usage["cachedInputTokens"],
-                output_tokens=usage["outputTokens"],
-                billing_scope=settings["pricingScope"],
-                entity_id=settings.get("pricingEntityId"),
-                user_id=settings.get("pricingUserId"),
-            )
+            estimated_cost = self._estimate_openai_cost(settings, usage)
             text = extract_response_text(data)
             parsed = parse_json_object(text)
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=usage["inputTokens"],
-                cached_input_tokens=usage["cachedInputTokens"],
-                output_tokens=usage["outputTokens"],
-                estimated_cost=estimated_cost,
-                success=True,
-            )
+            self._record_ai_success(event_base, usage, estimated_cost)
             self.ai_provider_store.record_document_ingest_ai_review(
                 source_path=source_path,
                 provider="openai",
@@ -478,15 +320,7 @@ class OpenAIAssistService:
             }
         except Exception as exc:
             message = safe_error_message(exc)
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=0,
-                cached_input_tokens=0,
-                output_tokens=0,
-                estimated_cost=0,
-                success=False,
-                error_message=message,
-            )
+            self._record_ai_failure(event_base, message)
             if self.logger:
                 self.logger.warning(f"OpenAI datasheet intelligence repair failed for {source_path}: {message}")
             return None
@@ -503,72 +337,31 @@ class OpenAIAssistService:
         settings = self.ai_provider_store.resolve_openai_assist(entity_id=entity_id, user_id=user_id)
         if not settings or not settings.get("apiKey") or settings.get("assistMode") == "off":
             return None
-        event_base = {
-            "entity_id": entity_id,
-            "user_id": user_id,
-            "provider": "openai",
-            "task_type": "inventory_photo_import",
-            "model_name": settings["modelName"],
-            "context_type": "inventory_import",
-            "context_id": None,
-            "round_number": 1,
-            "round_count": 1,
-            "paid_by": settings["paidBy"],
-            "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
-        }
-        budget_block = self._budget_block_message(settings)
+        event_base = self._assist_event_base(
+            settings=settings,
+            entity_id=entity_id,
+            user_id=user_id,
+            task_type="inventory_photo_import",
+            context_type="inventory_import",
+        )
+        budget_block = self._record_budget_block_if_needed(event_base, settings)
         if budget_block:
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=0,
-                cached_input_tokens=0,
-                output_tokens=0,
-                estimated_cost=0,
-                success=False,
-                error_message=budget_block,
-            )
             raise ValueError(budget_block)
 
-        prompt = (
-            "Identify electronics inventory visible in this photo. Return only compact JSON with key items. "
-            "items must be an array of objects with displayName, partType, quantity, aliases, notes, confidence, warnings. "
-            "Use conservative quantities: if you cannot count items, use 1 and add a warning. "
-            "Prefer useful inventory names such as 'Red LED', 'NE555 timer IC', '10 kOhm resistor assortment'. "
-            "Do not invent exact part numbers unless markings are visible.\n\n"
-            f"User note: {note[:1000]}"
-        )
+        prompt = build_inventory_photo_prompt(note)
         try:
             data = self._create_multimodal_response(
                 api_key=settings["apiKey"],
                 model=settings["modelName"],
-                instructions=(
-                    "You are CircuitShelf's inventory photo assistant. "
-                    "Return JSON only and keep uncertain observations marked with warnings."
-                ),
+                instructions=INVENTORY_PHOTO_INSTRUCTIONS,
                 input_text=prompt,
                 image_bytes=image_bytes,
                 mime_type=mime_type,
                 max_output_tokens=1400,
             )
             usage = extract_usage(data)
-            estimated_cost = self.ai_provider_store.estimate_cost(
-                provider="openai",
-                model_name=settings["modelName"],
-                input_tokens=usage["inputTokens"],
-                cached_input_tokens=usage["cachedInputTokens"],
-                output_tokens=usage["outputTokens"],
-                billing_scope=settings["pricingScope"],
-                entity_id=settings.get("pricingEntityId"),
-                user_id=settings.get("pricingUserId"),
-            )
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=usage["inputTokens"],
-                cached_input_tokens=usage["cachedInputTokens"],
-                output_tokens=usage["outputTokens"],
-                estimated_cost=estimated_cost,
-                success=True,
-            )
+            estimated_cost = self._estimate_openai_cost(settings, usage)
+            self._record_ai_success(event_base, usage, estimated_cost)
             parsed = parse_json_object(extract_response_text(data))
             parsed["estimatedCost"] = estimated_cost
             parsed["model"] = settings["modelName"]
@@ -578,15 +371,7 @@ class OpenAIAssistService:
             raise
         except Exception as exc:
             message = safe_error_message(exc)
-            self.ai_provider_store.record_ai_assist_event(
-                **event_base,
-                input_tokens=0,
-                cached_input_tokens=0,
-                output_tokens=0,
-                estimated_cost=0,
-                success=False,
-                error_message=message,
-            )
+            self._record_ai_failure(event_base, message)
             if self.logger:
                 self.logger.warning(f"OpenAI inventory photo import failed: {message}")
             raise ValueError(f"Inventory photo analysis failed: {message}") from exc
@@ -627,14 +412,4 @@ class OpenAIAssistService:
             image_bytes=image_bytes,
             mime_type=mime_type,
             max_output_tokens=max_output_tokens,
-        )
-
-    def _budget_block_message(self, settings: dict[str, Any]) -> str:
-        status = self.ai_provider_store.budget_status_for_settings(settings)
-        if not status.get("blocked"):
-            return ""
-        return (
-            f"OpenAI assist budget exceeded for {settings.get('paidBy') or 'unknown'} payer: "
-            f"${status.get('monthSpend', 0):.4f} spent this month, "
-            f"stop threshold ${status.get('stopAt', 0):.4f}."
         )
