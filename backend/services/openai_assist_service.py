@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
-import base64
 import time
 from typing import Any
 
-import requests
-
+from backend.services.openai_assist_utils import compact_intelligence_for_prompt, parse_json_object
+from backend.services.openai_response_client import (
+    OpenAIResponseClient,
+    extract_response_text,
+    extract_usage,
+    safe_error_message,
+)
 from backend.services.response_finalizer import (
     ResponseValidationResult,
     build_response_finalizer_prompt,
@@ -21,6 +25,7 @@ class OpenAIAssistService:
         self.ai_provider_store = ai_provider_store
         self.logger = logger
         self.timeout_seconds = timeout_seconds
+        self.response_client = OpenAIResponseClient(timeout_seconds=timeout_seconds)
 
     def finalize_response(
         self,
@@ -595,23 +600,13 @@ class OpenAIAssistService:
         input_text: str,
         max_output_tokens: int,
     ) -> dict[str, Any]:
-        response = requests.post(
-            "https://api.openai.com/v1/responses",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "instructions": instructions,
-                "input": input_text,
-                "max_output_tokens": max_output_tokens,
-                "store": False,
-            },
-            timeout=self.timeout_seconds,
+        return self.response_client.create_response(
+            api_key=api_key,
+            model=model,
+            instructions=instructions,
+            input_text=input_text,
+            max_output_tokens=max_output_tokens,
         )
-        response.raise_for_status()
-        return response.json()
 
     def _create_multimodal_response(
         self,
@@ -624,32 +619,15 @@ class OpenAIAssistService:
         mime_type: str,
         max_output_tokens: int,
     ) -> dict[str, Any]:
-        image_url = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
-        response = requests.post(
-            "https://api.openai.com/v1/responses",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "instructions": instructions,
-                "input": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "input_text", "text": input_text},
-                            {"type": "input_image", "image_url": image_url},
-                        ],
-                    }
-                ],
-                "max_output_tokens": max_output_tokens,
-                "store": False,
-            },
-            timeout=self.timeout_seconds,
+        return self.response_client.create_multimodal_response(
+            api_key=api_key,
+            model=model,
+            instructions=instructions,
+            input_text=input_text,
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            max_output_tokens=max_output_tokens,
         )
-        response.raise_for_status()
-        return response.json()
 
     def _budget_block_message(self, settings: dict[str, Any]) -> str:
         status = self.ai_provider_store.budget_status_for_settings(settings)
@@ -660,66 +638,3 @@ class OpenAIAssistService:
             f"${status.get('monthSpend', 0):.4f} spent this month, "
             f"stop threshold ${status.get('stopAt', 0):.4f}."
         )
-
-
-def extract_response_text(data: dict[str, Any]) -> str:
-    if data.get("output_text"):
-        return str(data["output_text"])
-    parts: list[str] = []
-    for item in data.get("output") or []:
-        for content in item.get("content") or []:
-            if content.get("type") == "output_text" and content.get("text"):
-                parts.append(str(content["text"]))
-    return "\n".join(parts).strip()
-
-
-def extract_usage(data: dict[str, Any]) -> dict[str, int]:
-    usage = data.get("usage") or {}
-    input_details = usage.get("input_tokens_details") or {}
-    return {
-        "inputTokens": int(usage.get("input_tokens") or 0),
-        "cachedInputTokens": int(input_details.get("cached_tokens") or 0),
-        "outputTokens": int(usage.get("output_tokens") or 0),
-    }
-
-
-def safe_error_message(exc: Exception) -> str:
-    if isinstance(exc, requests.HTTPError) and exc.response is not None:
-        try:
-            payload = exc.response.json()
-            detail = payload.get("error", {}).get("message") or payload.get("error")
-            if detail:
-                return str(detail)[:1000]
-        except Exception:
-            pass
-        return f"OpenAI HTTP {exc.response.status_code}"
-    return str(exc)[:1000]
-
-
-def parse_json_object(text: str) -> dict[str, Any]:
-    try:
-        parsed = json.loads(text)
-        return parsed if isinstance(parsed, dict) else {"raw": parsed}
-    except Exception:
-        return {"raw": text[:4000]}
-
-
-def compact_intelligence_for_prompt(intelligence: dict[str, Any]) -> dict[str, Any]:
-    pinout = intelligence.get("pinout") or {}
-    return {
-        "componentName": intelligence.get("componentName") or "",
-        "componentType": intelligence.get("componentType") or "",
-        "summary": intelligence.get("summary") or "",
-        "confidence": intelligence.get("confidence"),
-        "factCount": len(intelligence.get("facts") or []),
-        "pinCount": len(pinout.get("pins") or []),
-        "pins": [
-            {
-                "pin": pin.get("pin"),
-                "label": pin.get("label"),
-                "function": pin.get("function"),
-                "page": pin.get("page"),
-            }
-            for pin in (pinout.get("pins") or [])[:32]
-        ],
-    }
