@@ -1,6 +1,6 @@
 import type { PerformanceWorkRun } from "../../types";
-import { formatInteger } from "../../lib/format";
-import { chartColors } from "../../lib/chartColors";
+import { formatInteger } from "../../libs/format";
+import { chartColors } from "../../libs/chartColors";
 
 function classify(row: PerformanceWorkRun) {
   if (row.status === "completed") {

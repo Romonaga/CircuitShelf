@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { InventoryPart } from "../types";
-import { formatNumber } from "../lib/format";
+import { formatNumber } from "../libs/format";
 import { LoadingSpinner } from "./LoadingSpinner";
 
 type SortKey = "displayName" | "partType" | "quantity" | "location";

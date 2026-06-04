@@ -1,6 +1,6 @@
 import type { PerformanceWorkRun } from "../types";
-import { formatNumber } from "../lib/format";
-import { chartColors } from "../lib/chartColors";
+import { formatNumber } from "../libs/format";
+import { chartColors } from "../libs/chartColors";
 
 interface ThroughputRow {
   id: number | string;

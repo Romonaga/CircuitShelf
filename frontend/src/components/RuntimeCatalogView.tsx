@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { formatInteger, formatNumber } from "../lib/format";
+import { formatInteger, formatNumber } from "../libs/format";
 import { useRuntimeCatalog } from "../hooks/useRuntimeCatalog";
 import type { RuntimeEquationPattern } from "../types";
 import { ErrorMessage } from "./ErrorMessage";

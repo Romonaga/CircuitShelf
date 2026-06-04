@@ -1,5 +1,5 @@
 import type { DatasheetFact, DatasheetIntelligence } from "../types";
-import { formatInteger, formatNumber } from "../lib/format";
+import { formatInteger, formatNumber } from "../libs/format";
 
 const FACT_LABELS: Record<string, string> = {
   voltage: "Voltage",

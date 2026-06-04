@@ -1,5 +1,5 @@
 import type { ResponseValidation } from "../types";
-import { formatNumber } from "../lib/format";
+import { formatNumber } from "../libs/format";
 
 export function ResponseValidationPanel({ validation }: { validation?: ResponseValidation | null }) {
   if (!validation?.enabled) {

@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { buildAssemblyPlan } from "../api";
-import { errorMessage } from "../lib/errors";
-import { formatElapsed } from "../lib/time";
+import { errorMessage } from "../libs/errors";
+import { formatElapsed } from "../libs/time";
 import { useElapsedSeconds } from "../hooks/useElapsedSeconds";
 import type { AppConfig, AssemblyPlan, QueryOptions } from "../types";
 import { ErrorMessage } from "./ErrorMessage";

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getAccountAIUsage, getEntityAIUsage, getSystemAIUsage } from "../api";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import type { AIUsageReport } from "../types";
 
 export type AIUsageScope = "personal" | "entity" | "system";

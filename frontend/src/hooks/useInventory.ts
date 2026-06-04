@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { deleteInventoryPart, getInventoryLocations, getInventoryParts, getProjectCandidates, saveInventoryPart } from "../api";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import type { InventoryLocation, InventoryPart, InventoryPartInput, ProjectCandidate, ProjectMissingPartSummary } from "../types";
 
 const emptyCandidates: ProjectCandidate[] = [];

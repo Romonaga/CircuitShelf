@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { buildAssemblyPlan } from "../api";
-import { errorMessage } from "../lib/errors";
-import { formatNumber } from "../lib/format";
+import { errorMessage } from "../libs/errors";
+import { formatNumber } from "../libs/format";
 import { useElapsedSeconds } from "../hooks/useElapsedSeconds";
 import { useInventory } from "../hooks/useInventory";
 import type { AppConfig, ProjectCandidate, View } from "../types";

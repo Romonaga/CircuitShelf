@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAppConfig } from "../api";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import type { AppConfig } from "../types";
 
 export function useAppConfig() {

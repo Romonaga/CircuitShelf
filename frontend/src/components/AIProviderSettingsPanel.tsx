@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { AIAvailableModel, AIModelPricing, AIProviderSettings, AIProviderSettingsPayload } from "../types";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 import { AIProviderPricingOverrides } from "./AIProviderPricingOverrides";

@@ -9,7 +9,7 @@ import {
   updateSystemPasswordPolicy
 } from "../api";
 import type { AppSetting, SettingValue } from "../types";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import { ErrorMessage } from "./ErrorMessage";
 import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";
 import { PasswordPolicyPanel } from "./PasswordPolicyPanel";

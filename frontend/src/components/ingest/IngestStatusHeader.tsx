@@ -1,5 +1,5 @@
-import { formatInteger } from "../../lib/format";
-import { formatReason } from "../../lib/ingest/format";
+import { formatInteger } from "../../libs/format";
+import { formatReason } from "../../libs/ingest/format";
 import { LoadingSpinner } from "../LoadingSpinner";
 
 export function IngestStatusHeader({

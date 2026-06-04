@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getPerformanceReport } from "../api";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import type { PerformanceReport } from "../types";
 
 export function usePerformanceReport(isActive: boolean, hours = 24, refreshKey = "") {

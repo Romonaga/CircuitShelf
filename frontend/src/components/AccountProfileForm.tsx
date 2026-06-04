@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { getMe, updateAccountProfile } from "../api";
 import type { AccountProfile } from "../types";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 

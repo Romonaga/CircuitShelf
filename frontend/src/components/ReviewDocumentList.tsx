@@ -1,5 +1,5 @@
 import type { ReviewDocument } from "../types";
-import { formatInteger } from "../lib/format";
+import { formatInteger } from "../libs/format";
 import { ErrorMessage } from "./ErrorMessage";
 import { ReviewScopeBadge } from "./ReviewScopeBadge";
 import { SectionHeader } from "./SectionHeader";

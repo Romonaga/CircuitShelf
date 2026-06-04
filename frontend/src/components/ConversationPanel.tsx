@@ -1,5 +1,5 @@
 import type { ConversationSummary } from "../types";
-import { formatInteger } from "../lib/format";
+import { formatInteger } from "../libs/format";
 
 export function ConversationPanel({
   conversations,

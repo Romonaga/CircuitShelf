@@ -19,9 +19,9 @@ import type {
 } from "echarts/components";
 import type { BarSeriesOption, LineSeriesOption } from "echarts/charts";
 import type { PerformanceWorkRun } from "../../types";
-import { chartColors } from "../../lib/chartColors";
-import { formatDurationMs, formatInteger, formatNumber } from "../../lib/format";
-import { readChartTheme } from "../../lib/chartTheme";
+import { chartColors } from "../../libs/chartColors";
+import { formatDurationMs, formatInteger, formatNumber } from "../../libs/format";
+import { readChartTheme } from "../../libs/chartTheme";
 
 echarts.use([
   BarChart,

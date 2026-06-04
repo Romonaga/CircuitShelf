@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { getAccountAIProvider, getAccountAIProviderModels, updateAccountAIProvider, updateAccountPassword } from "../api";
 import type { ThemeMode } from "../hooks/useThemePreference";
 import type { AppConfig } from "../types";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";
 import { AccountProfileForm } from "./AccountProfileForm";
 import { AskRetrievalSettingsPanel } from "./AskRetrievalSettingsPanel";

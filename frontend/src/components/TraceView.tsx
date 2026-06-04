@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getTrace } from "../api";
-import { errorMessage } from "../lib/errors";
-import { formatObject } from "../lib/format";
+import { errorMessage } from "../libs/errors";
+import { formatObject } from "../libs/format";
 import { useLogTail } from "../hooks/useLogTail";
 import { ErrorMessage } from "./ErrorMessage";
 import { LogTailPanel } from "./LogTailPanel";

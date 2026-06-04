@@ -1,6 +1,6 @@
 import type { AIUsageEvent } from "../types";
-import { formatInteger } from "../lib/format";
-import { money } from "../lib/money";
+import { formatInteger } from "../libs/format";
+import { money } from "../libs/money";
 
 function formatDate(value?: string | null): string {
   return value ? new Date(value).toLocaleString() : "n/a";

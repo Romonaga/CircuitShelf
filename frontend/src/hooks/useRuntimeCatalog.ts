@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getRuntimeCatalog } from "../api";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import type { RuntimeCatalog } from "../types";
 
 export function useRuntimeCatalog(isActive: boolean) {

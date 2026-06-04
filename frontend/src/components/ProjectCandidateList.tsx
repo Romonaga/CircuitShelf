@@ -1,6 +1,6 @@
 import type { ProjectCandidate } from "../types";
-import { formatNumber } from "../lib/format";
-import { formatElapsed } from "../lib/time";
+import { formatNumber } from "../libs/format";
+import { formatElapsed } from "../libs/time";
 import { LoadingSpinner } from "./LoadingSpinner";
 
 export function ProjectCandidateList({

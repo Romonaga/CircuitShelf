@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { downloadAIUsageCsv } from "../api";
-import { downloadBlob } from "../lib/download";
-import { errorMessage } from "../lib/errors";
-import { formatInteger } from "../lib/format";
-import { money } from "../lib/money";
+import { downloadBlob } from "../libs/download";
+import { errorMessage } from "../libs/errors";
+import { formatInteger } from "../libs/format";
+import { money } from "../libs/money";
 import { type AIUsageScope, useAIUsageReport } from "../hooks/useAIUsageReport";
 import { AIUsageBreakdownCards } from "./AIUsageBreakdownCards";
 import { AIUsageEventsTable } from "./AIUsageEventsTable";

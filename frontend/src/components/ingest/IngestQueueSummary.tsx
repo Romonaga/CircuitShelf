@@ -1,4 +1,4 @@
-import { formatInteger } from "../../lib/format";
+import { formatInteger } from "../../libs/format";
 
 export function IngestQueueSummary({
   running,

@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { login } from "../api";
 import type { SessionUser } from "../types";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import { ErrorMessage } from "./ErrorMessage";
 
 export function LoginView({ siteName, onLogin }: { siteName: string; onLogin: (session: SessionUser) => void }) {

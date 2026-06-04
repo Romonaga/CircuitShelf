@@ -1,5 +1,5 @@
 import type { StatusHistoryPoint } from "../../hooks/useStatusHistory";
-import { chartColors } from "../../lib/chartColors";
+import { chartColors } from "../../libs/chartColors";
 import { PerformanceChart } from "../PerformanceChart";
 
 function efficiencyHistory(history: StatusHistoryPoint[]): StatusHistoryPoint[] {

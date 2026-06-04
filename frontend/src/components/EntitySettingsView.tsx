@@ -14,7 +14,7 @@ import {
   updateEntityPasswordPolicy
 } from "../api";
 import type { EntityContext, EntityMember } from "../types";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import { ErrorMessage } from "./ErrorMessage";
 import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";
 import { PasswordPolicyPanel } from "./PasswordPolicyPanel";

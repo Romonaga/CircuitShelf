@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { formatNumber } from "../lib/format";
+import { formatNumber } from "../libs/format";
 import type { AssemblyPlanSummary } from "../types";
 
 export function AssemblyPlanList({

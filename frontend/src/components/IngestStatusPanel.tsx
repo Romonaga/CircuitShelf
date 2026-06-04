@@ -1,5 +1,5 @@
 import type { IngestStatus, IngestWorkerBudget, RuntimeBatches } from "../types";
-import { activeFileRows } from "../lib/ingest/format";
+import { activeFileRows } from "../libs/ingest/format";
 import { IngestChangeSummary } from "./ingest/IngestChangeSummary";
 import { IngestDetailGrid } from "./ingest/IngestDetailGrid";
 import { IngestFileProgressTable } from "./ingest/IngestFileProgressTable";

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatInteger } from "../lib/format";
+import { formatInteger } from "../libs/format";
 import type { LogTailPayload } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
 import { LoadingSpinner } from "./LoadingSpinner";

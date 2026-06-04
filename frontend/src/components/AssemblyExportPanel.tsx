@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { exportAssemblyPlan } from "../api";
-import { downloadBlob } from "../lib/download";
-import { errorMessage } from "../lib/errors";
+import { downloadBlob } from "../libs/download";
+import { errorMessage } from "../libs/errors";
 import type { AssemblyPlan } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
 

@@ -1,5 +1,5 @@
 import type { StatusPayload } from "../../types";
-import { formatBytes, formatNumber } from "../../lib/format";
+import { formatBytes, formatNumber } from "../../libs/format";
 import { MetricBar } from "../MetricBar";
 
 export function LiveResourcePressure({ resources }: { resources: StatusPayload["systemResources"] }) {

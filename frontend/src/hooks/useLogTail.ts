@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getStatusLogTail } from "../api";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import type { LogTailPayload } from "../types";
 
 const LOG_TAIL_LINES = 220;

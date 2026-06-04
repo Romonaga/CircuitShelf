@@ -1,5 +1,5 @@
 import type { AIModelPricing, AIModelPricingOverride } from "../types";
-import { formatNumber } from "../lib/format";
+import { formatNumber } from "../libs/format";
 
 function overrideFor(modelName: string, overrides: AIModelPricingOverride[]) {
   return overrides.find((override) => override.modelName === modelName);

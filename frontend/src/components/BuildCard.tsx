@@ -1,5 +1,5 @@
 import type { CircuitBuildCard } from "../types";
-import { formatNumber } from "../lib/format";
+import { formatNumber } from "../libs/format";
 
 export function BuildCard({ card }: { card?: CircuitBuildCard | null }) {
   if (!card) {

@@ -1,4 +1,4 @@
-import { formatPercent } from "../lib/format";
+import { formatPercent } from "../libs/format";
 
 export function MetricBar({
   label,

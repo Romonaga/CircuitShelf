@@ -1,6 +1,6 @@
 import type { AIUsageBreakdown } from "../types";
-import { formatInteger } from "../lib/format";
-import { money } from "../lib/money";
+import { formatInteger } from "../libs/format";
+import { money } from "../libs/money";
 
 export function AIUsageBreakdownCards({ title, rows }: { title: string; rows: AIUsageBreakdown[] }) {
   return (

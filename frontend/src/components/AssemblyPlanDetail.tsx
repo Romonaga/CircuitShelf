@@ -1,6 +1,6 @@
 import { askAssemblyAssistant, updateAssemblyStep } from "../api";
-import { errorMessage } from "../lib/errors";
-import { formatNumber } from "../lib/format";
+import { errorMessage } from "../libs/errors";
+import { formatNumber } from "../libs/format";
 import type { AppConfig, AssemblyPlan } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
 import { AssemblyExportPanel } from "./AssemblyExportPanel";

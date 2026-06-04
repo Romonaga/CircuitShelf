@@ -1,6 +1,6 @@
 import type { IngestStatus } from "../../types";
-import { formatInteger } from "../../lib/format";
-import { fileListSummary } from "../../lib/ingest/format";
+import { formatInteger } from "../../libs/format";
+import { fileListSummary } from "../../libs/ingest/format";
 
 export function IngestChangeSummary({ changes }: { changes: IngestStatus["lastChanges"] }) {
   if (!changes) {

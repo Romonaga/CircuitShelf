@@ -1,5 +1,5 @@
 import type { DocumentPage } from "../types";
-import { formatInteger } from "../lib/format";
+import { formatInteger } from "../libs/format";
 import { DocumentImageGallery } from "./DocumentImageGallery";
 
 export function DocumentPageInspector({ page }: { page: DocumentPage }) {

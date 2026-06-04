@@ -1,5 +1,5 @@
 import type { RuntimeBatches } from "../types";
-import { formatInteger } from "../lib/format";
+import { formatInteger } from "../libs/format";
 
 function BatchRow({
   label,

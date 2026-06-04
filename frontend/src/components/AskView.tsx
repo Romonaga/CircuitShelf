@@ -1,10 +1,10 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { deleteConversation, getConversation, getConversations, getUserPreference, runQuery } from "../api";
 import type { AppConfig, ChatTurn, ConversationSummary, QueryOptions, QueryResponse } from "../types";
-import { errorMessage } from "../lib/errors";
-import { formatNumber } from "../lib/format";
-import { formatElapsed } from "../lib/time";
-import { ASK_RETRIEVAL_PREFERENCE_KEY, resolveAskPreferences, type AskRetrievalPreference } from "../lib/askPreferences";
+import { errorMessage } from "../libs/errors";
+import { formatNumber } from "../libs/format";
+import { formatElapsed } from "../libs/time";
+import { ASK_RETRIEVAL_PREFERENCE_KEY, resolveAskPreferences, type AskRetrievalPreference } from "../libs/askPreferences";
 import { useElapsedSeconds } from "../hooks/useElapsedSeconds";
 import { AnswerRenderer } from "./AnswerRenderer";
 import { BuildCard } from "./BuildCard";

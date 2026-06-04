@@ -6,7 +6,7 @@ import { InventoryImportPanel } from "./InventoryImportPanel";
 import { InventoryPartList } from "./InventoryPartList";
 import { SectionHeader } from "./SectionHeader";
 import { useInventory } from "../hooks/useInventory";
-import { formatNumber } from "../lib/format";
+import { formatNumber } from "../libs/format";
 
 export function InventoryView({ isActive }: { isActive: boolean }) {
   const {

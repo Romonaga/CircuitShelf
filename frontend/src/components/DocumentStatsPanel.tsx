@@ -1,5 +1,5 @@
 import type { DocumentDetail } from "../types";
-import { formatInteger, formatNumber } from "../lib/format";
+import { formatInteger, formatNumber } from "../libs/format";
 
 function uniquePageCount(detail: DocumentDetail): number {
   return new Set(detail.pages.map((page) => String(page.page))).size;

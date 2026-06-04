@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getStatus } from "../api";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import type { StatusPayload } from "../types";
 
 function normalizedInterval(value: number | undefined, fallback: number, minimum: number): number {

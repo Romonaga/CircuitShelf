@@ -1,5 +1,5 @@
 import type { StatusPayload } from "../types";
-import { formatNumber, formatObject } from "../lib/format";
+import { formatNumber, formatObject } from "../libs/format";
 import { useLogTail } from "../hooks/useLogTail";
 import { IngestStatusPanel } from "./IngestStatusPanel";
 import { LogTailPanel } from "./LogTailPanel";

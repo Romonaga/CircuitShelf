@@ -9,7 +9,7 @@ import { useStatus } from "./hooks/useStatus";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { ErrorMessage } from "./components/ErrorMessage";
 import type { View } from "./types";
-import { canAccessView, firstAccessibleView } from "./lib/viewAccess";
+import { canAccessView, firstAccessibleView } from "./libs/viewAccess";
 
 const AccountView = lazy(() => import("./components/AccountView").then((module) => ({ default: module.AccountView })));
 const AIUsageView = lazy(() => import("./components/AIUsageView").then((module) => ({ default: module.AIUsageView })));

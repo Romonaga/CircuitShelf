@@ -1,6 +1,6 @@
 import type { IngestStatus } from "../../types";
-import { formatInteger } from "../../lib/format";
-import { formatDateTime, formatDetailLabel, formatDetailValue, formatStage } from "../../lib/ingest/format";
+import { formatInteger } from "../../libs/format";
+import { formatDateTime, formatDetailLabel, formatDetailValue, formatStage } from "../../libs/ingest/format";
 
 export function IngestDetailGrid({ ingest }: { ingest: IngestStatus }) {
   const totalFiles = ingest.totalFiles ?? 0;

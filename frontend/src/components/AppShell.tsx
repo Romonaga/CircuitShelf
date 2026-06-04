@@ -1,11 +1,11 @@
 import { ReactNode, useState } from "react";
 import type { StatusPayload, View } from "../types";
-import { formatNumber } from "../lib/format";
+import { formatNumber } from "../libs/format";
 import type { ThemeMode } from "../hooks/useThemePreference";
 import { LogoMark } from "./LogoMark";
 import { Stat } from "./Stat";
 import { SidebarSystemCard } from "./SidebarSystemCard";
-import { canAccessView } from "../lib/viewAccess";
+import { canAccessView } from "../libs/viewAccess";
 
 export function AppShell({
   activeView,

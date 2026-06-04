@@ -1,5 +1,5 @@
 import type { SourceSummary } from "../types";
-import { formatNumber } from "../lib/format";
+import { formatNumber } from "../libs/format";
 
 function pageLabel(pages: SourceSummary["pages"]): string {
   if (!pages?.length) {

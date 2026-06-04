@@ -6,8 +6,8 @@ import {
   preferenceFromResolved,
   resolveAskPreferences,
   type AskRetrievalPreference,
-} from "../lib/askPreferences";
-import { errorMessage } from "../lib/errors";
+} from "../libs/askPreferences";
+import { errorMessage } from "../libs/errors";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 

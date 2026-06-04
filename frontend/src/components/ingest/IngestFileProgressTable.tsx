@@ -1,4 +1,4 @@
-import { formatInteger } from "../../lib/format";
+import { formatInteger } from "../../libs/format";
 import {
   chunkProgress,
   compactPhase,
@@ -7,7 +7,7 @@ import {
   pageProgress,
   phaseTone,
   type IngestProgress
-} from "../../lib/ingest/format";
+} from "../../libs/ingest/format";
 
 export interface IngestFileRow {
   file: string;

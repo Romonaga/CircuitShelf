@@ -19,8 +19,8 @@ import type {
 } from "echarts/components";
 import type { LineSeriesOption } from "echarts/charts";
 import type { StatusHistoryPoint } from "../hooks/useStatusHistory";
-import { formatNumber } from "../lib/format";
-import { readChartTheme } from "../lib/chartTheme";
+import { formatNumber } from "../libs/format";
+import { readChartTheme } from "../libs/chartTheme";
 import type { ChartSeries } from "./PerformanceChart";
 
 echarts.use([

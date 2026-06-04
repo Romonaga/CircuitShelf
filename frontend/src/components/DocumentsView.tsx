@@ -1,8 +1,8 @@
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDocument, getDocuments, removeIndexedDocument, triggerIndexCheck } from "../api";
 import type { DocumentDetail, DocumentSummary, StatusPayload } from "../types";
-import { errorMessage } from "../lib/errors";
-import { formatInteger } from "../lib/format";
+import { errorMessage } from "../libs/errors";
+import { formatInteger } from "../libs/format";
 import { ErrorMessage } from "./ErrorMessage";
 import { DocumentContextMenu, type DocumentContextMenuState } from "./DocumentContextMenu";
 import { IngestStatusPanel } from "./IngestStatusPanel";

@@ -1,5 +1,5 @@
 import type { DocumentImage } from "../types";
-import { formatInteger } from "../lib/format";
+import { formatInteger } from "../libs/format";
 
 export function DocumentImageGallery({ images }: { images: DocumentImage[] }) {
   return (

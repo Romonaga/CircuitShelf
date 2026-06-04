@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { deleteAssemblyPlan, getAssemblyPlan, getAssemblyPlans } from "../api";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import type { AssemblyPlan, AssemblyPlanSummary } from "../types";
 
 export function useAssemblyPlans(isActive: boolean) {

@@ -1,5 +1,5 @@
 import type { DatasheetIntelligence, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../types";
-import { formatInteger } from "../lib/format";
+import { formatInteger } from "../libs/format";
 import { maxChunkPreviewLimit } from "../hooks/useReviewQueue";
 import { DatasheetIntelligencePanel } from "./DatasheetIntelligencePanel";
 import { LoadingSpinner } from "./LoadingSpinner";

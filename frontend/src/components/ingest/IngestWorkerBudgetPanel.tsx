@@ -1,6 +1,6 @@
 import type { IngestWorkerBudget, RuntimeBatches } from "../../types";
-import { formatInteger } from "../../lib/format";
-import { batchBrief, batchSummary } from "../../lib/ingest/format";
+import { formatInteger } from "../../libs/format";
+import { batchBrief, batchSummary } from "../../libs/ingest/format";
 
 export function IngestWorkerBudgetPanel({
   workerBudget,

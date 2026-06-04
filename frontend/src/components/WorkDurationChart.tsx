@@ -1,6 +1,6 @@
 import type { PerformanceWorkRun } from "../types";
-import { formatDurationMs, formatInteger } from "../lib/format";
-import { chartColors } from "../lib/chartColors";
+import { formatDurationMs, formatInteger } from "../libs/format";
+import { chartColors } from "../libs/chartColors";
 
 interface WorkSummary {
   key: string;

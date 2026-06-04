@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { PasswordPolicy } from "../types";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 

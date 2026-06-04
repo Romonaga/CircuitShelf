@@ -1,5 +1,5 @@
 import type { RuntimeBatchStatus, StatusPayload } from "../types";
-import { formatBytes, formatInteger, formatNumber, formatPercent } from "../lib/format";
+import { formatBytes, formatInteger, formatNumber, formatPercent } from "../libs/format";
 import { MetricBar } from "./MetricBar";
 
 function batchDetail(batch: RuntimeBatchStatus | undefined): string {

@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { uploadDocuments, type UploadProgress } from "../api";
-import { errorMessage } from "../lib/errors";
-import { formatBytes, formatDurationMs, formatInteger } from "../lib/format";
-import { uploadResultMessage } from "../lib/uploadMessages";
+import { errorMessage } from "../libs/errors";
+import { formatInteger } from "../libs/format";
+import { formatUploadEta, summarizeSelection } from "../libs/upload/progress";
+import { uploadResultMessage } from "../libs/uploadMessages";
 import { ErrorMessage } from "./ErrorMessage";
+import { UploadPickerActions } from "./upload/UploadPickerActions";
+import { UploadProgressPanel } from "./upload/UploadProgressPanel";
+import { UploadSelectionCard } from "./upload/UploadSelectionCard";
 
 type UploadScope = "entity" | "global";
 
@@ -112,19 +116,16 @@ export function DocumentUploadPanel({
     return () => window.clearInterval(timer);
   }, [uploading]);
 
-  const uploadEtaLabel = progress ? formatEta(progress.etaSeconds, progress.percent) : "calculating";
+  const uploadEtaLabel = progress ? formatUploadEta(progress.etaSeconds, progress.percent) : "calculating";
 
   return (
     <div className="upload-panel">
       {help ? <p className="upload-help">{help}</p> : null}
-      <div className="upload-picker-actions">
-        <button className="ghost-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={isDisabled}>
-          Choose files
-        </button>
-        <button className="ghost-button" type="button" onClick={() => folderInputRef.current?.click()} disabled={isDisabled}>
-          Choose folder
-        </button>
-      </div>
+      <UploadPickerActions
+        disabled={isDisabled}
+        onChooseFiles={() => fileInputRef.current?.click()}
+        onChooseFolder={() => folderInputRef.current?.click()}
+      />
       <input
         key={`files-${inputKey}`}
         ref={fileInputRef}
@@ -147,24 +148,7 @@ export function DocumentUploadPanel({
         onChange={(event) => acceptSelection(event.target.files)}
         disabled={isDisabled}
       />
-      {files.length ? (
-        <div className="upload-selection-card" title={selection.title}>
-          <div className="upload-selection-summary">
-            <strong>{selection.label}</strong>
-            <span>{selection.totalSize}</span>
-          </div>
-          <ul className="upload-selection-list" aria-label="Selected files">
-            {selection.files.map((file, index) => (
-              <li key={`${index}-${file.path}`} title={file.path}>
-                <span className="upload-selection-name">{file.name}</span>
-                {file.folder ? <span className="upload-selection-path">{file.folder}</span> : null}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : (
-        <p className="upload-selection muted">No files selected.</p>
-      )}
+      <UploadSelectionCard selection={selection} />
       <label className="checkbox-label">
         <input type="checkbox" checked={overwrite} onChange={(event) => setOverwrite(event.target.checked)} disabled={isDisabled} />
         Replace existing
@@ -172,92 +156,8 @@ export function DocumentUploadPanel({
       <button className="primary-button" onClick={submitUpload} disabled={!files.length || isDisabled}>
         {uploading ? `Uploading · ${uploadEtaLabel}` : files.length > 1 ? `Upload ${formatInteger(files.length)} files` : "Upload"}
       </button>
-      {uploading && progress ? (
-        <div className="upload-progress" role="status" aria-live="polite">
-          <div className="upload-progress-headline">
-            <span>
-              <small>Estimated time left</small>
-              <strong>{formatUploadEta(progress.etaSeconds, progress.percent)}</strong>
-            </span>
-            <span>
-              <small>Elapsed</small>
-              <strong>{formatDurationMs((progress.elapsedSeconds ?? 0) * 1000)}</strong>
-            </span>
-          </div>
-          <div className="upload-progress-bar">
-            <span style={{ width: `${progress.percent}%` }} />
-          </div>
-          <p>
-            Uploading {formatInteger(files.length)} file{files.length === 1 ? "" : "s"} · {progress.percent}% · ETA {uploadEtaLabel} ·{" "}
-            {formatBytes(progress.loaded)} / {progress.total > 0 ? formatBytes(progress.total) : "unknown size"}
-          </p>
-          <div className="upload-progress-stats">
-            <span>
-              <small>Speed</small>
-              <strong>{formatUploadSpeed(progress.bytesPerSecond)}</strong>
-            </span>
-            <span>
-              <small>ETA</small>
-              <strong>{formatEta(progress.etaSeconds, progress.percent)}</strong>
-            </span>
-            <span>
-              <small>Elapsed</small>
-              <strong>{formatDurationMs((progress.elapsedSeconds ?? 0) * 1000)}</strong>
-            </span>
-          </div>
-        </div>
-      ) : null}
+      {uploading && progress ? <UploadProgressPanel filesCount={files.length} progress={progress} /> : null}
       <ErrorMessage message={localError} />
     </div>
   );
-}
-
-function formatUploadSpeed(bytesPerSecond: number | null | undefined) {
-  if (!bytesPerSecond || !Number.isFinite(bytesPerSecond)) {
-    return "calculating";
-  }
-  return `${formatBytes(bytesPerSecond)}/s`;
-}
-
-function formatEta(seconds: number | null | undefined, percent: number) {
-  if (percent >= 100) {
-    return "server processing";
-  }
-  if (!seconds || !Number.isFinite(seconds)) {
-    return "calculating";
-  }
-  return formatDurationMs(seconds * 1000);
-}
-
-function formatUploadEta(seconds: number | null | undefined, percent: number) {
-  if (percent >= 100) {
-    return "Waiting for server";
-  }
-  if (!seconds || !Number.isFinite(seconds)) {
-    return "Calculating ETA";
-  }
-  return `${formatDurationMs(seconds * 1000)} left`;
-}
-
-function summarizeSelection(files: File[]) {
-  if (!files.length) {
-    return { label: "No files selected.", title: "", totalSize: "", files: [] };
-  }
-  const selectedFiles = files.map((file) => {
-    const path = file.webkitRelativePath || file.name;
-    const parts = path.split("/");
-    const name = parts.pop() || path;
-    return {
-      path,
-      name,
-      folder: parts.join("/")
-    };
-  });
-  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
-  return {
-    label: `${formatInteger(files.length)} selected`,
-    totalSize: formatBytes(totalBytes),
-    files: selectedFiles,
-    title: selectedFiles.map((file) => file.path).join("\n")
-  };
 }

@@ -1,5 +1,5 @@
 import type { PerformanceWorkRun } from "../types";
-import { formatInteger, formatNumber } from "../lib/format";
+import { formatInteger, formatNumber } from "../libs/format";
 
 function formatDuration(ms: number): string {
   if (!ms) {

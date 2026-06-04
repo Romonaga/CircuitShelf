@@ -1,6 +1,6 @@
 import type { StatusPayload } from "../../types";
 import type { StatusHistoryPoint } from "../../hooks/useStatusHistory";
-import { formatBytes, formatInteger, formatNumber, formatPercent } from "../../lib/format";
+import { formatBytes, formatInteger, formatNumber, formatPercent } from "../../libs/format";
 import { Stat } from "../Stat";
 
 export function PerformanceStatsGrid({

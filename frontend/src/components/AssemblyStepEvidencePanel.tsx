@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getAssemblyStepEvidence } from "../api";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import type { AssemblyPlanStep, AssemblyStepEvidence } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
 

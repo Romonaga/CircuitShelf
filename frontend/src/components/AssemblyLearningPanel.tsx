@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAssemblyLearning, updateAssemblyLearning } from "../api";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 import type { AssemblyLearningSession, AssemblyPlan } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
 

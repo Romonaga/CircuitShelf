@@ -9,8 +9,8 @@ import {
   updateReviewDocumentScope
 } from "../api";
 import type { DatasheetIntelligence, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../types";
-import { errorMessage } from "../lib/errors";
-import { formatInteger } from "../lib/format";
+import { errorMessage } from "../libs/errors";
+import { formatInteger } from "../libs/format";
 
 export const initialChunkPreviewLimit = 50;
 export const maxChunkPreviewLimit = 500;

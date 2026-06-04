@@ -6,7 +6,7 @@ import { AssemblyPlanContextMenu, type AssemblyPlanContextMenuState } from "./As
 import { AssemblyPlanDetail } from "./AssemblyPlanDetail";
 import { AssemblyPlanList } from "./AssemblyPlanList";
 import { useAssemblyPlans } from "../hooks/useAssemblyPlans";
-import { errorMessage } from "../lib/errors";
+import { errorMessage } from "../libs/errors";
 
 export function BenchView({ config, isActive }: { config: AppConfig; isActive: boolean }) {
   const [notice, setNotice] = useState("");
