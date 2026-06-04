@@ -26,6 +26,20 @@ export function UploadProgressPanel({ filesCount, progress }: { filesCount: numb
         {formatBytes(progress.loaded)} / {progress.total > 0 ? formatBytes(progress.total) : "unknown size"}
       </p>
       <div className="upload-progress-stats">
+        {progress.totalBatches ? (
+          <span>
+            <small>Batches</small>
+            <strong>
+              {formatInteger(progress.completedBatches ?? 0)} / {formatInteger(progress.totalBatches)}
+            </strong>
+          </span>
+        ) : null}
+        {progress.activeUploads !== undefined ? (
+          <span>
+            <small>Active</small>
+            <strong>{formatInteger(progress.activeUploads)}</strong>
+          </span>
+        ) : null}
         <span>
           <small>Speed</small>
           <strong>{formatUploadSpeed(progress.bytesPerSecond)}</strong>
