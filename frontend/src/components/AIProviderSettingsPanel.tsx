@@ -4,6 +4,12 @@ import { errorMessage } from "../libs/errors";
 import { ErrorMessage } from "./ErrorMessage";
 import { SectionHeader } from "./SectionHeader";
 import { AIProviderPricingOverrides } from "./AIProviderPricingOverrides";
+import { buildModelOptions } from "../libs/aiProvider/models";
+import { AIProviderBudgetFields } from "./aiProvider/AIProviderBudgetFields";
+import { AIProviderKeyFields } from "./aiProvider/AIProviderKeyFields";
+import { AIProviderMainFields } from "./aiProvider/AIProviderMainFields";
+import { AIProviderModelRefresh } from "./aiProvider/AIProviderModelRefresh";
+import { AIProviderPricingStrip } from "./aiProvider/AIProviderPricingStrip";
 
 const defaultSettings: AIProviderSettings = {
   scope: "user",
@@ -89,36 +95,7 @@ export function AIProviderSettingsPanel({
   );
 
   const modelOptions = useMemo(() => {
-    const byId = new Map<string, { id: string; source: "catalog" | "account"; priced: boolean; ownedBy: string; created: number }>();
-    pricing.forEach((item) => {
-      byId.set(item.modelName, {
-        id: item.modelName,
-        source: "catalog",
-        priced: true,
-        ownedBy: "",
-        created: 0
-      });
-    });
-    availableModels.forEach((item) => {
-      const existing = byId.get(item.id);
-      byId.set(item.id, {
-        id: item.id,
-        source: existing?.source || "account",
-        priced: Boolean(existing?.priced),
-        ownedBy: item.ownedBy,
-        created: item.created
-      });
-    });
-    if (settings.defaultModel && !byId.has(settings.defaultModel)) {
-      byId.set(settings.defaultModel, {
-        id: settings.defaultModel,
-        source: "account",
-        priced: false,
-        ownedBy: "",
-        created: 0
-      });
-    }
-    return Array.from(byId.values()).sort((left, right) => left.id.localeCompare(right.id));
+    return buildModelOptions({ availableModels, defaultModel: settings.defaultModel, pricing });
   }, [availableModels, pricing, settings.defaultModel]);
 
   async function refreshAvailableModels() {
@@ -176,148 +153,34 @@ export function AIProviderSettingsPanel({
       <SectionHeader title={title} description={busy ? "Loading..." : description} />
       <ErrorMessage message={error} />
 
-      <div className="ai-provider-grid">
-        <label className="inline-check ai-provider-enabled">
-          <input
-            type="checkbox"
-            checked={settings.enabled}
-            disabled={!canManage}
-            onChange={(event) => setSettings({ ...settings, enabled: event.target.checked })}
-          />
-          Enable OpenAI assist
-        </label>
-        <label>
-          Assist mode
-          <select
-            value={settings.assistMode}
-            disabled={!canManage}
-            onChange={(event) => setSettings({ ...settings, assistMode: event.target.value })}
-          >
-            <option value="auto">Auto</option>
-            <option value="always">Always</option>
-            <option value="off">Off</option>
-          </select>
-        </label>
-        {showKeyPolicy ? (
-          <label>
-            Key policy
-            <select
-              value={settings.keyPolicy}
-              disabled={!canManage}
-              onChange={(event) => setSettings({ ...settings, keyPolicy: event.target.value })}
-            >
-              <option value="entity">Entity key</option>
-              <option value="user_when_available">User key when available</option>
-              <option value="user_only">User key only</option>
-              <option value="system">System key</option>
-            </select>
-          </label>
-        ) : null}
-        <label>
-          Default model
-          <select
-            value={settings.defaultModel}
-            disabled={!canManage}
-            onChange={(event) => setSettings({ ...settings, defaultModel: event.target.value })}
-          >
-            <option value="">Select a model</option>
-            {modelOptions.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.id}{item.priced ? "" : " (unpriced)"}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="ai-key-row">
-        <div>
-          <strong>{settings.hasApiKey ? "Key stored" : "No key stored"}</strong>
-          <span>{settings.keyPreview || "Paste a key to store it encrypted."}</span>
-        </div>
-        <label>
-          Replace key
-          <input
-            type="password"
-            value={apiKey}
-            disabled={!canManage || clearApiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            autoComplete="off"
-            placeholder="sk-..."
-          />
-        </label>
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={clearApiKey}
-            disabled={!canManage}
-            onChange={(event) => setClearApiKey(event.target.checked)}
-          />
-          Clear stored key
-        </label>
-      </div>
+      <AIProviderMainFields
+        canManage={canManage}
+        modelOptions={modelOptions}
+        settings={settings}
+        showKeyPolicy={showKeyPolicy}
+        onChange={setSettings}
+      />
+      <AIProviderKeyFields
+        apiKey={apiKey}
+        canManage={canManage}
+        clearApiKey={clearApiKey}
+        settings={settings}
+        onApiKeyChange={setApiKey}
+        onClearApiKeyChange={setClearApiKey}
+      />
 
       {loadModels ? (
-        <div className="model-refresh-panel">
-          <div>
-            <strong>Available models</strong>
-            <span>
-              {availableModels.length
-                ? `${availableModels.length} models loaded from OpenAI for this key.`
-                : "Use the stored key to query the models this account can access."}
-            </span>
-          </div>
-          <button className="ghost-button" type="button" disabled={!canManage || refreshingModels || !settings.hasApiKey} onClick={refreshAvailableModels}>
-            {refreshingModels ? "Refreshing..." : "Refresh from OpenAI"}
-          </button>
-        </div>
+        <AIProviderModelRefresh
+          canManage={canManage}
+          hasApiKey={settings.hasApiKey}
+          modelsCount={availableModels.length}
+          refreshing={refreshingModels}
+          onRefresh={refreshAvailableModels}
+        />
       ) : null}
 
-      {showBudget ? (
-        <div className="ai-provider-grid compact">
-          <label>
-            Monthly budget
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              value={settings.monthlyBudget}
-              disabled={!canManage}
-              onChange={(event) => setSettings({ ...settings, monthlyBudget: Number(event.target.value) })}
-            />
-          </label>
-          <label>
-            Warn %
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={settings.warnPercent}
-              disabled={!canManage}
-              onChange={(event) => setSettings({ ...settings, warnPercent: Number(event.target.value) })}
-            />
-          </label>
-          <label>
-            Stop %
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={settings.stopPercent}
-              disabled={!canManage}
-              onChange={(event) => setSettings({ ...settings, stopPercent: Number(event.target.value) })}
-            />
-          </label>
-        </div>
-      ) : null}
-
-      {selectedPrice ? (
-        <div className="pricing-strip">
-          <span>Input ${selectedPrice.inputPerMillion}/1M</span>
-          <span>Cached ${selectedPrice.cachedInputPerMillion}/1M</span>
-          <span>Output ${selectedPrice.outputPerMillion}/1M</span>
-        </div>
-      ) : null}
+      {showBudget ? <AIProviderBudgetFields canManage={canManage} settings={settings} onChange={setSettings} /> : null}
+      <AIProviderPricingStrip price={selectedPrice} />
 
       <AIProviderPricingOverrides
         pricing={pricing}
