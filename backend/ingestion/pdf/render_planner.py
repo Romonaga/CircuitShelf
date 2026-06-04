@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from backend.ingestion.pdf.models import PdfPageExtraction, PdfRenderRequest
-from pdf_visuals import rendered_page_image_key, visual_keyword_hits
+from backend.ingestion.pdf_visuals import rendered_page_image_key, visual_keyword_hits
 
 
 PIN_OR_DATASHEET_PATTERN = re.compile(

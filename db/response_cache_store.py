@@ -8,7 +8,7 @@ from psycopg.errors import UndefinedColumn, UndefinedTable
 
 from db.connection import Database
 from db.sql import load_query
-from response_cache import ResponseCacheEntry, ResponseCacheKey
+from backend.services.response_cache import ResponseCacheEntry, ResponseCacheKey
 
 
 class PostgresResponseCache:

@@ -1,6 +1,6 @@
 import unittest
 
-from pinout_extractor import extract_pinout_map
+from backend.ingestion.pinout_extractor import extract_pinout_map
 
 
 class PinoutExtractorTests(unittest.TestCase):

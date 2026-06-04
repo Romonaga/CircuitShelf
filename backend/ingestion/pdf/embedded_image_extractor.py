@@ -6,7 +6,7 @@ from typing import Any
 
 import fitz
 
-from ocr_utils import should_skip_image_dimensions
+from backend.ingestion.ocr_utils import should_skip_image_dimensions
 
 
 @dataclass(frozen=True)

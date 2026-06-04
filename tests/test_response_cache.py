@@ -1,6 +1,6 @@
 import unittest
 
-from response_cache import (
+from backend.services.response_cache import (
     ResponseCache,
     ResponseCacheEntry,
     ResponseCacheKey,

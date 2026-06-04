@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from PIL import Image
 
 from backend.services.document_processing_service import DocumentProcessingService
-from ocr_utils import should_skip_image, should_skip_image_dimensions
-from pdf_visuals import RenderedPdfPage
+from backend.ingestion.ocr_utils import should_skip_image, should_skip_image_dimensions
+from backend.ingestion.pdf_visuals import RenderedPdfPage
 
 
 class ConfigWrapper:

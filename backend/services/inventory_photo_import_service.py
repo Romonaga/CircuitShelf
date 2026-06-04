@@ -4,7 +4,7 @@ from collections import OrderedDict
 from typing import Any
 
 from db.lab_inventory import normalize_part_name
-from inventory_import import dedupe_strings
+from backend.services.inventory_import import dedupe_strings
 
 
 PART_TYPES = {

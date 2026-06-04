@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from sentence_transformers import SentenceTransformer
 
-import bench_tools
+import backend.services.bench_tools as bench_tools
 from backend.services.app_runtime_helpers import conversation_title_from_question, sanitize_for_json
 from backend.services.document_intelligence_service import DocumentIntelligenceService
 from backend.services.document_management_service import DocumentManagementService
@@ -40,8 +40,8 @@ from backend.services.source_metadata import (
     source_image_id_from_metadata,
 )
 from backend.ingestion.chunking_util import ChunkingUtils
-from circuit_build_cards import RECOVERY_SYSTEM_PROMPT, build_recovery_prompt, parse_recovered_build_card
-from ingest_manifest import IngestManifest
+from backend.services.circuit_build_cards import RECOVERY_SYSTEM_PROMPT, build_recovery_prompt, parse_recovered_build_card
+from backend.ingestion.manifest import IngestManifest
 from backend.ingestion.worker_sizing import (
     detected_cpu_count,
     document_worker_count,
@@ -50,15 +50,15 @@ from backend.ingestion.worker_sizing import (
     reserved_core_count,
     usable_core_count,
 )
-from inventory_import import parse_inventory_import
-from log_retention import cleanup_old_logs
-from log_tail import tail_text_file
-from ocr_utils import run_ocr
-from pinout_extractor import extract_pinout_map
+from backend.services.inventory_import import parse_inventory_import
+from backend.services.log_retention import cleanup_old_logs
+from backend.services.log_tail import tail_text_file
+from backend.ingestion.ocr_utils import run_ocr
+from backend.ingestion.pinout_extractor import extract_pinout_map
 from backend.services.reranker import Reranker
-from response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT
-from tokenize_util import TokenUtils
-from system_init import SystemInit
+from backend.services.response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT
+from backend.ingestion.tokenize_util import TokenUtils
+from backend.services.system_init import SystemInit
 
 
 @dataclass

@@ -10,7 +10,7 @@ from collections.abc import Callable
 from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from tokenize_util import TokenUtils
+from backend.ingestion.tokenize_util import TokenUtils
 from backend.api.dependencies import ApiDependencies
 
 

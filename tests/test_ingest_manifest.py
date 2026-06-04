@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from ingest_manifest import FileRecord, IngestManifest
+from backend.ingestion.manifest import FileRecord, IngestManifest
 
 
 class IngestManifestTests(unittest.TestCase):

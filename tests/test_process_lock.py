@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from process_lock import ProcessLockError, acquire_process_lock, pid_file_process, read_pid_file
+from backend.services.process_lock import ProcessLockError, acquire_process_lock, pid_file_process, read_pid_file
 
 
 class ProcessLockTests(unittest.TestCase):

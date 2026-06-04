@@ -6,7 +6,7 @@
 
 import threading
 from collections import deque
-from response_cache import ResponseCache
+from backend.services.response_cache import ResponseCache
 
 class StateManager:
     def __init__(self, use_lock=True, cache_capacity=200, trace_logger=None):

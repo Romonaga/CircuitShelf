@@ -6,7 +6,7 @@ from io import BytesIO
 import fitz
 from PIL import Image
 
-from pdf_visuals import (
+from backend.ingestion.pdf_visuals import (
     link_chunks_to_rendered_pages,
     page_image_coverage,
     render_pdf_visual_pages,

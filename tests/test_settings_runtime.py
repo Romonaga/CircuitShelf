@@ -1,7 +1,7 @@
 import unittest
 
 from backend.services.runtime_status_service import effective_embedding_batch_size, effective_rerank_batch_size
-from settings_runtime import RuntimeSettingsManager, setting_restart_required
+from backend.services.settings_runtime import RuntimeSettingsManager, setting_restart_required
 
 
 class ConfigStub:

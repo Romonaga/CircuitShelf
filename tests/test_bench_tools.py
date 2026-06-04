@@ -3,7 +3,7 @@ from io import BytesIO
 
 from PIL import Image
 
-from bench_tools import analyze_bench_photo, build_assembly_export
+from backend.services.bench_tools import analyze_bench_photo, build_assembly_export
 
 
 class BenchToolsTests(unittest.TestCase):

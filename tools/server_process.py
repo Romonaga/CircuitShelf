@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from process_lock import process_exists, read_pid_file, terminate_pid_file_process  # noqa: E402
+from backend.services.process_lock import process_exists, read_pid_file, terminate_pid_file_process  # noqa: E402
 
 
 def configured_pid_file() -> Path:

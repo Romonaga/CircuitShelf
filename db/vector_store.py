@@ -11,7 +11,7 @@ from psycopg.errors import UndefinedColumn, UndefinedTable
 from db.connection import Database
 from db.sql import load_query
 from db.text import clean_db_text
-from ingest_manifest import FileRecord
+from backend.ingestion.manifest import FileRecord
 
 
 def vector_to_sql(value: Any) -> str:

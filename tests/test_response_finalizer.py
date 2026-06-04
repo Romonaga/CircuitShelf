@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from response_finalizer import (
+from backend.services.response_finalizer import (
     build_response_finalizer_prompt,
     deterministic_response_issues,
     finalize_response,

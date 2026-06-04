@@ -1,6 +1,6 @@
 import unittest
 
-from conversation_manager import (
+from backend.services.conversation_manager import (
     append_chat_turn,
     build_chat_messages,
     build_contextual_retrieval_query,

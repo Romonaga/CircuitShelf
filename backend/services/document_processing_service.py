@@ -12,7 +12,7 @@ from docx import Document
 from lxml import etree
 from PIL import Image
 
-from ocr_utils import should_skip_image_dimensions
+from backend.ingestion.ocr_utils import should_skip_image_dimensions
 
 PDF_NATIVE_LOCK = threading.Lock()
 

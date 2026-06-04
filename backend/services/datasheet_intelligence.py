@@ -9,7 +9,7 @@ from typing import Iterable
 
 from backend.ingestion.document_classifier import classify_document, detect_component_candidates, detect_component_type
 from backend.ingestion.models import ExtractedPage
-from pinout_extractor import extract_pinout_map
+from backend.ingestion.pinout_extractor import extract_pinout_map
 
 
 DATASHEET_INTELLIGENCE_VERSION = 2

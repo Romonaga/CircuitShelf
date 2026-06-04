@@ -16,7 +16,7 @@ from backend.ingestion.document_classifier import classify_document
 from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsset
 from backend.ingestion.ocr_assets import OcrAssetProcessor
 from backend.ingestion.pdf import PdfDocumentExtractor
-from pdf_visuals import link_chunks_to_rendered_pages
+from backend.ingestion.pdf_visuals import link_chunks_to_rendered_pages
 
 
 class IngestionPipeline:

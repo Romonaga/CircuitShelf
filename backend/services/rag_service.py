@@ -4,10 +4,10 @@ from typing import Callable
 
 import numpy as np
 
-from circuit_build_cards import build_circuit_build_card
-from conversation_manager import append_chat_turn, build_contextual_retrieval_query
-from response_cache import ResponseCacheEntry, ResponseCacheKey, should_cache_response
-from response_finalizer import finalize_response
+from backend.services.circuit_build_cards import build_circuit_build_card
+from backend.services.conversation_manager import append_chat_turn, build_contextual_retrieval_query
+from backend.services.response_cache import ResponseCacheEntry, ResponseCacheKey, should_cache_response
+from backend.services.response_finalizer import finalize_response
 
 
 class RagService:

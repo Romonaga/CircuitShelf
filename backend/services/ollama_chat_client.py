@@ -2,7 +2,7 @@ import requests
 import time
 from requests.exceptions import RequestException
 
-from conversation_manager import build_chat_messages
+from backend.services.conversation_manager import build_chat_messages
 
 
 class OllamaChatClient:

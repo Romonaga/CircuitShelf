@@ -2,7 +2,7 @@ import unittest
 from io import BytesIO
 
 from db.image_store import ImageStore
-from ingest_manifest import FileRecord
+from backend.ingestion.manifest import FileRecord
 from PIL import Image
 
 

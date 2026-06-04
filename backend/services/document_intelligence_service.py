@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Callable
 
 from backend.ingestion.document_classifier import is_plausible_component
-from datasheet_intelligence import DATASHEET_INTELLIGENCE_VERSION, build_datasheet_intelligence
+from backend.services.datasheet_intelligence import DATASHEET_INTELLIGENCE_VERSION, build_datasheet_intelligence
 
 
 class DocumentIntelligenceService:

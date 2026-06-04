@@ -4,7 +4,7 @@ import time
 import unittest
 from pathlib import Path
 
-from log_retention import cleanup_old_logs
+from backend.services.log_retention import cleanup_old_logs
 
 
 class LogRetentionTests(unittest.TestCase):

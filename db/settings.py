@@ -8,7 +8,7 @@ from psycopg.errors import UndefinedTable
 from db.connection import Database
 from db.sql import load_query
 from db.settings_catalog import SETTING_GROUPS, SETTING_UI, setting_metadata
-from settings_runtime import (
+from backend.services.settings_runtime import (
     BOOTSTRAP_SETTING_KEYS,
     DEPRECATED_SETTING_KEYS,
     SENSITIVE_SETTING_KEYS,

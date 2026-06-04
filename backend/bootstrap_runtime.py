@@ -11,9 +11,9 @@ from backend.runtime_container import CircuitShelfRuntime
 from backend.services.app_runtime_helpers import TraceLogHelper
 from backend.store_container import StoreContainer, create_store_container
 from db.connection import Database, database_url_from_config
-from settings_runtime import RuntimeSettingsManager
+from backend.services.settings_runtime import RuntimeSettingsManager
 from backend.services.state_manager import StateManager
-from system_init import SystemInit
+from backend.services.system_init import SystemInit
 
 
 USER_PREFERENCE_KEYS = {"ask.retrieval", "ui.theme", "status.sections"}

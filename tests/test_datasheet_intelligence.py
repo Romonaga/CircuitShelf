@@ -1,7 +1,7 @@
 import unittest
 
-from circuit_build_cards import build_circuit_build_card, should_build_card
-from datasheet_intelligence import build_datasheet_intelligence
+from backend.services.circuit_build_cards import build_circuit_build_card, should_build_card
+from backend.services.datasheet_intelligence import build_datasheet_intelligence
 from backend.ingestion.document_classifier import classify_document
 from backend.ingestion.models import ExtractedPage
 

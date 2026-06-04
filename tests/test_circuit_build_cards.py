@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from circuit_build_cards import build_recovery_prompt, parse_recovered_build_card
+from backend.services.circuit_build_cards import build_recovery_prompt, parse_recovered_build_card
 
 
 class CircuitBuildCardRecoveryTests(unittest.TestCase):

@@ -2,7 +2,7 @@ import os
 
 from backend.ingestion.chunking_util import ChunkingUtils
 from backend.services.state_manager import StateManager
-from tokenize_util import TokenUtils
+from backend.ingestion.tokenize_util import TokenUtils
 
 
 class IngestContextService:

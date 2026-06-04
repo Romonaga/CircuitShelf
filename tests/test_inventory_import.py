@@ -1,6 +1,6 @@
 import unittest
 
-from inventory_import import parse_inventory_import
+from backend.services.inventory_import import parse_inventory_import
 
 
 class InventoryImportTests(unittest.TestCase):

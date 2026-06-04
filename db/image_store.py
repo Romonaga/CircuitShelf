@@ -15,7 +15,7 @@ from db.connection import Database
 from db.sql import load_query
 from db.text import clean_db_text
 from db.vector_store import vector_to_sql
-from ingest_manifest import FileRecord
+from backend.ingestion.manifest import FileRecord
 
 
 class ImageStore:

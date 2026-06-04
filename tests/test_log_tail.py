@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from log_tail import tail_text_file
+from backend.services.log_tail import tail_text_file
 
 
 class LogTailTests(unittest.TestCase):
