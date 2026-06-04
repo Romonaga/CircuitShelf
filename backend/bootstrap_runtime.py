@@ -16,7 +16,7 @@ from state_manager import StateManager
 from system_init import SystemInit
 
 
-USER_PREFERENCE_KEYS = {"ask.retrieval", "ui.theme"}
+USER_PREFERENCE_KEYS = {"ask.retrieval", "ui.theme", "status.sections"}
 
 
 @dataclass

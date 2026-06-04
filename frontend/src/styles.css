@@ -3986,6 +3986,76 @@ nav {
   border-color: var(--line);
 }
 
+.collapsible-section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.collapsible-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(65, 199, 178, 0.1), transparent 44%),
+    var(--panel-soft);
+}
+
+.collapsible-section.collapsed .collapsible-section-header {
+  border-bottom: 0;
+}
+
+.collapsible-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.collapsible-section-toggle strong {
+  display: block;
+  font-size: 0.98rem;
+}
+
+.collapsible-section-toggle small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.collapse-caret {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.collapsible-section-actions {
+  flex: 0 0 auto;
+}
+
+.collapsible-section-body {
+  padding: 14px;
+}
+
 .performance-page {
   display: grid;
   gap: 18px;
@@ -4744,6 +4814,16 @@ nav {
 :root[data-theme="dark"] .document-loading,
 :root[data-theme="dark"] .review-loading {
   background: var(--panel-soft);
+}
+
+:root[data-theme="dark"] .collapsible-section {
+  background: var(--panel-raised);
+}
+
+:root[data-theme="dark"] .collapsible-section-header {
+  background:
+    linear-gradient(135deg, rgba(65, 199, 178, 0.14), transparent 44%),
+    var(--panel-soft);
 }
 
 :root[data-theme="dark"] .assembly-summary,
