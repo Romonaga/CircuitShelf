@@ -44,7 +44,7 @@ def test_answer_without_sources_blocks_when_budget_exceeded(monkeypatch):
     def fail_create_response(**_kwargs):
         raise AssertionError("OpenAI should not be called when budget is blocked")
 
-    monkeypatch.setattr(service, "_create_response", fail_create_response)
+    monkeypatch.setattr(service.tasks, "_create_response", fail_create_response)
 
     result = service.answer_without_sources(
         question="What is a 555 timer?",
@@ -102,7 +102,7 @@ def test_ingestion_review_uses_scoped_provider_and_records_cost(monkeypatch):
     service = OpenAIAssistService(store)
 
     monkeypatch.setattr(
-        service,
+        service.tasks,
         "_create_response",
         lambda **_kwargs: {
             "output_text": '{"quality":"good","useful":true,"warnings":[],"suggestedReviewFocus":"pinouts"}',
@@ -134,7 +134,7 @@ def test_datasheet_repair_records_usage_and_structured_review(monkeypatch):
     service = OpenAIAssistService(store)
 
     monkeypatch.setattr(
-        service,
+        service.tasks,
         "_create_response",
         lambda **_kwargs: {
             "output_text": (
