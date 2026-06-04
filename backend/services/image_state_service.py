@@ -116,13 +116,23 @@ class ImageStateService:
                     },
                 )
 
-        def report_image_save_progress(saved_images, total_images, skipped_images=0, current_image=None):
+        def report_image_save_progress(
+            saved_images=None,
+            total_images=0,
+            skipped_images=0,
+            current_image=None,
+            prepared_images=None,
+        ):
+            saved_count = int(saved_images or 0)
+            prepared_count = int(prepared_images or 0)
+            phase = "Preparing image save" if prepared_images is not None and saved_images is None else "Saving images"
             if progress_file:
                 self.update_index_progress(
                     current_file=progress_file,
                     file_details={
-                        "documentPhase": "Saving images",
-                        "savedImages": saved_images,
+                        "documentPhase": phase,
+                        "preparedImages": prepared_count,
+                        "savedImages": saved_count,
                         "totalImagesToSave": total_images,
                         "skippedImages": skipped_images,
                         "currentImage": current_image,
@@ -130,7 +140,8 @@ class ImageStateService:
                 )
             else:
                 self.update_index_detail(
-                    savedImages=saved_images,
+                    preparedImages=prepared_count,
+                    savedImages=saved_count,
                     totalImagesToSave=total_images,
                     skippedImages=skipped_images,
                 )
