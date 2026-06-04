@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { applyInventoryImport, previewInventoryImport, previewInventoryPhotoImport } from "../api";
+import { applyInventoryImport, previewInventoryImport, previewInventoryPhotoImport } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { InventoryImportItem, InventoryLocation } from "../types";
 import { ErrorMessage } from "./ErrorMessage";

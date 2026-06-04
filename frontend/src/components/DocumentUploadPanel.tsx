@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { uploadDocuments, type UploadProgress } from "../api";
+import { uploadDocuments, type UploadProgress } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import { formatInteger } from "../libs/format";
 import { formatUploadEta, summarizeSelection } from "../libs/upload/progress";

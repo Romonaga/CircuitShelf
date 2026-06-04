@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { getAccountAIProvider, getAccountAIProviderModels, updateAccountAIProvider, updateAccountPassword } from "../api";
+import { getAccountAIProvider, getAccountAIProviderModels, updateAccountAIProvider, updateAccountPassword } from "../libs/api";
 import type { ThemeMode } from "../hooks/useThemePreference";
 import type { AppConfig } from "../types";
 import { errorMessage } from "../libs/errors";

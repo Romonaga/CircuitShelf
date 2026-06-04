@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getMe, logout as logoutApi, sessionStorageKey } from "../api";
+import { getMe, logout as logoutApi, sessionStorageKey } from "../libs/api";
 import type { AppConfig, SessionUser } from "../types";
 
 const ACTIVITY_EVENTS = ["keydown", "mousedown", "mousemove", "scroll", "touchstart"] as const;

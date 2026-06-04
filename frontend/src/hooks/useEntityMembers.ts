@@ -7,7 +7,7 @@ import {
   getEntityMembers,
   resetEntityMemberPassword,
   updateEntityMemberRole
-} from "../api";
+} from "../libs/api";
 import type { EntityMember } from "../types";
 import { errorMessage } from "../libs/errors";
 

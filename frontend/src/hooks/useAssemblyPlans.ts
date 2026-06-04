@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { deleteAssemblyPlan, getAssemblyPlan, getAssemblyPlans } from "../api";
+import { deleteAssemblyPlan, getAssemblyPlan, getAssemblyPlans } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { AssemblyPlan, AssemblyPlanSummary } from "../types";
 

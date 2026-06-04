@@ -40,7 +40,7 @@ import type {
   AIProviderSettingsPayload,
   AIUsageReport,
   UploadDocumentsResponse
-} from "./types";
+} from "../types";
 
 const sessionStorageKey = "circuitshelf-session";
 

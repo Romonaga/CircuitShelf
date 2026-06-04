@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getStatusLogTail } from "../api";
+import { getStatusLogTail } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { LogTailPayload } from "../types";
 

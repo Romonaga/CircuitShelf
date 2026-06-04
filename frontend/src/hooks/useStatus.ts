@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getStatus } from "../api";
+import { getStatus } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { StatusPayload } from "../types";
 

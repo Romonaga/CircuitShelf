@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getRuntimeCatalog } from "../api";
+import { getRuntimeCatalog } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { RuntimeCatalog } from "../types";
 

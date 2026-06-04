@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getUserPreference, updateUserPreference } from "../api";
+import { getUserPreference, updateUserPreference } from "../libs/api";
 
 type UseUserPreferenceOptions<T> = {
   enabled?: boolean;

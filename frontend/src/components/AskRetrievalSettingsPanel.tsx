@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { getUserPreference, updateUserPreference } from "../api";
+import { getUserPreference, updateUserPreference } from "../libs/api";
 import type { AppConfig, QueryOptions } from "../types";
 import {
   ASK_RETRIEVAL_PREFERENCE_KEY,

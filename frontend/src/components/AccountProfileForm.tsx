@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { getMe, updateAccountProfile } from "../api";
+import { getMe, updateAccountProfile } from "../libs/api";
 import type { AccountProfile } from "../types";
 import { errorMessage } from "../libs/errors";
 import { ErrorMessage } from "./ErrorMessage";

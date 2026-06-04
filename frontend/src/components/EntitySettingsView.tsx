@@ -4,7 +4,7 @@ import {
   getEntityPasswordPolicy,
   updateEntityAIProvider,
   updateEntityPasswordPolicy
-} from "../api";
+} from "../libs/api";
 import { useEntityMembers } from "../hooks/useEntityMembers";
 import type { EntityContext } from "../types";
 import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";

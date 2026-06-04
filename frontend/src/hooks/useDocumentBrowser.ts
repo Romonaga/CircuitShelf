@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getDocument, getDocuments } from "../api";
+import { getDocument, getDocuments } from "../libs/api";
 import type { DocumentDetail, DocumentSummary } from "../types";
 import { errorMessage } from "../libs/errors";
 

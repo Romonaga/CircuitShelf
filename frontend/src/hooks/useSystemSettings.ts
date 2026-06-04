@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { getSettings, updateSetting } from "../api";
+import { getSettings, updateSetting } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { AppSetting, SettingValue } from "../types";
 

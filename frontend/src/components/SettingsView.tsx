@@ -4,7 +4,7 @@ import {
   getSystemPasswordPolicy,
   updateSystemAIProvider,
   updateSystemPasswordPolicy
-} from "../api";
+} from "../libs/api";
 import { useSystemSettings } from "../hooks/useSystemSettings";
 import { AIProviderSettingsPanel } from "./AIProviderSettingsPanel";
 import { PasswordPolicyPanel } from "./PasswordPolicyPanel";

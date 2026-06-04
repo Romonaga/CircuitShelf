@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { deleteInventoryPart, getInventoryLocations, getInventoryParts, getProjectCandidates, saveInventoryPart } from "../api";
+import { deleteInventoryPart, getInventoryLocations, getInventoryParts, getProjectCandidates, saveInventoryPart } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { InventoryLocation, InventoryPart, InventoryPartInput, ProjectCandidate, ProjectMissingPartSummary } from "../types";
 

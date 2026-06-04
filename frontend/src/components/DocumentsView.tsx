@@ -1,5 +1,5 @@
 import { type MouseEvent, useState } from "react";
-import { removeIndexedDocument, triggerIndexCheck } from "../api";
+import { removeIndexedDocument, triggerIndexCheck } from "../libs/api";
 import type { DocumentSummary, StatusPayload } from "../types";
 import { errorMessage } from "../libs/errors";
 import { formatInteger } from "../libs/format";

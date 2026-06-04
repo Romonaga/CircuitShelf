@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAccountAIUsage, getEntityAIUsage, getSystemAIUsage } from "../api";
+import { getAccountAIUsage, getEntityAIUsage, getSystemAIUsage } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { AIUsageReport } from "../types";
 

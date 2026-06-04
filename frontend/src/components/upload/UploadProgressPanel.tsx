@@ -1,4 +1,4 @@
-import type { UploadProgress } from "../../api";
+import type { UploadProgress } from "../../libs/api";
 import { formatBytes, formatDurationMs, formatInteger } from "../../libs/format";
 import { formatUploadEta, formatUploadEtaHeadline, formatUploadSpeed } from "../../libs/upload/progress";
 

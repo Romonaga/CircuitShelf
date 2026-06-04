@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { login } from "../api";
+import { login } from "../libs/api";
 import type { SessionUser } from "../types";
 import { errorMessage } from "../libs/errors";
 import { ErrorMessage } from "./ErrorMessage";

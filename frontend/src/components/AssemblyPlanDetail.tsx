@@ -1,4 +1,4 @@
-import { askAssemblyAssistant, updateAssemblyStep } from "../api";
+import { askAssemblyAssistant, updateAssemblyStep } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import { formatNumber } from "../libs/format";
 import type { AppConfig, AssemblyPlan } from "../types";

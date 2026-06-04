@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getTrace } from "../api";
+import { getTrace } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import { formatObject } from "../libs/format";
 import { useLogTail } from "../hooks/useLogTail";

@@ -7,7 +7,7 @@ import {
   reindexReviewDocument,
   removeReviewDocument,
   updateReviewDocumentScope
-} from "../api";
+} from "../libs/api";
 import type { DatasheetIntelligence, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../types";
 import { errorMessage } from "../libs/errors";
 import { formatInteger } from "../libs/format";

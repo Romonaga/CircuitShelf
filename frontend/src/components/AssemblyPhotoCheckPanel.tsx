@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { getAssemblyPhotoChecks, submitAssemblyPhotoCheck } from "../api";
+import { getAssemblyPhotoChecks, submitAssemblyPhotoCheck } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { AssemblyPhotoCheck, AssemblyPlan } from "../types";
 import { ErrorMessage } from "./ErrorMessage";

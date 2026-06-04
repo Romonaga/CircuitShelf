@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getPerformanceReport } from "../api";
+import { getPerformanceReport } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { PerformanceReport } from "../types";
 
