@@ -24,8 +24,8 @@ class IngestWorkerTests(unittest.TestCase):
         self.assertEqual(persist_worker_count(0, cpu_count=32), 0)
         self.assertEqual(persist_worker_count(1, cpu_count=32), 1)
         self.assertEqual(persist_worker_count(3, cpu_count=32), 3)
-        self.assertEqual(persist_worker_count(80, cpu_count=32), 3)
-        self.assertEqual(persist_worker_count(80, cpu_count=64), 4)
+        self.assertEqual(persist_worker_count(80, cpu_count=32), 10)
+        self.assertEqual(persist_worker_count(80, cpu_count=64), 10)
 
     def test_ocr_workers_share_bounded_budget_with_active_documents(self):
         self.assertEqual(ocr_worker_count(100, active_document_workers=1, cpu_count=32), 8)

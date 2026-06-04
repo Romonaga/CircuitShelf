@@ -56,19 +56,26 @@ class ImageStore:
                 self._refresh_document_image_stats(conn, None)
             return
 
-        image_meta = self._metadata_by_image_key(metadata)
-
         with self.database.connection() as conn:
             conn.execute(load_query("image_catalog_clear.sql"))
-            self._upsert_image_rows(
+        doc_rows = self._load_image_documents()
+        rows, refreshed_paths, skipped_images = self._prepare_image_insert_rows(
+            doc_rows,
+            file_records=file_records,
+            image_store=image_store,
+            image_captions=image_captions,
+            image_page_text=image_page_text,
+            image_embeddings=image_embeddings,
+            embedding_model=embedding_model,
+            metadata=metadata,
+            progress_callback=progress_callback,
+        )
+        with self.database.connection() as conn:
+            self._insert_image_rows(
                 conn,
-                file_records=file_records,
-                image_store=image_store,
-                image_captions=image_captions,
-                image_page_text=image_page_text,
-                image_embeddings=image_embeddings,
-                embedding_model=embedding_model,
-                metadata=metadata,
+                rows,
+                total_images=len(image_store),
+                initial_skipped_images=skipped_images,
                 progress_callback=progress_callback,
             )
             self._refresh_document_image_stats(conn, None)
@@ -88,25 +95,38 @@ class ImageStore:
     ) -> None:
         if not image_store:
             return
-        refreshed_paths = set(rel_paths)
+        doc_rows = self._load_image_documents()
+        rows, refreshed_paths, skipped_images = self._prepare_image_insert_rows(
+            doc_rows,
+            file_records=file_records,
+            image_store=image_store,
+            image_captions=image_captions,
+            image_page_text=image_page_text,
+            image_embeddings=image_embeddings,
+            embedding_model=embedding_model,
+            metadata=metadata,
+            rel_paths=rel_paths,
+            progress_callback=progress_callback,
+        )
+        if not rows and not refreshed_paths:
+            return
         with self.database.connection() as conn:
-            self._upsert_image_rows(
+            self._insert_image_rows(
                 conn,
-                file_records=file_records,
-                image_store=image_store,
-                image_captions=image_captions,
-                image_page_text=image_page_text,
-                image_embeddings=image_embeddings,
-                embedding_model=embedding_model,
-                metadata=metadata,
-                rel_paths=rel_paths,
+                rows,
+                total_images=len(image_store),
+                initial_skipped_images=skipped_images,
                 progress_callback=progress_callback,
             )
             self._refresh_document_image_stats(conn, refreshed_paths)
 
-    def _upsert_image_rows(
+    def _load_image_documents(self):
+        with self.database.connection() as conn:
+            return conn.execute(load_query("image_document_map.sql")).fetchall()
+
+    def _prepare_image_insert_rows(
         self,
-        conn,
+        doc_rows,
         *,
         file_records: dict[str, FileRecord],
         image_store: dict[str, str],
@@ -117,14 +137,15 @@ class ImageStore:
         metadata: list[dict],
         rel_paths: set[str] | None = None,
         progress_callback=None,
-    ) -> None:
+    ) -> tuple[list[tuple], set[str], int]:
         image_meta = self._metadata_by_image_key(metadata)
-        doc_rows = conn.execute(load_query("image_document_map.sql")).fetchall()
         documents = self._document_lookup(doc_rows)
         ordinals: dict[str, int] = defaultdict(int)
         total_images = len(image_store)
-        stored_images = 0
+        prepared_images = 0
         skipped_images = 0
+        refreshed_paths: set[str] = set(rel_paths or [])
+        rows: list[tuple] = []
 
         for image_key, image_base64 in sorted(image_store.items()):
             rel_path, page_number, score, confidence = self._resolve_image_document(
@@ -143,13 +164,18 @@ class ImageStore:
                     self.logger.warning(f"Skipping image without indexed document: {image_key}")
                 continue
 
-            image_bytes = base64.b64decode(image_base64)
+            try:
+                image_bytes = base64.b64decode(image_base64)
+            except Exception as exc:
+                skipped_images += 1
+                if self.logger:
+                    self.logger.warning(f"Skipping invalid image asset {image_key}: {exc}")
+                continue
             stored_image_bytes, mime_type, width, height = self._prepare_image_for_storage(image_bytes)
             ordinals[rel_path] += 1
             ordinal = ordinals[rel_path]
-
-            conn.execute(
-                load_query("image_insert.sql"),
+            refreshed_paths.add(rel_path)
+            rows.append(
                 (
                     doc_row["id"],
                     doc_row["id"],
@@ -167,20 +193,44 @@ class ImageStore:
                     hashlib.sha256(stored_image_bytes).hexdigest(),
                     clean_db_text(embedding_model),
                     vector_to_sql(image_embeddings[image_key]) if image_key in image_embeddings else None,
-                ),
+                )
             )
+            prepared_images += 1
+            if progress_callback and (prepared_images == 1 or prepared_images % 100 == 0 or prepared_images + skipped_images >= total_images):
+                progress_callback(
+                    prepared_images=prepared_images,
+                    total_images=total_images,
+                    skipped_images=skipped_images,
+                    current_image=image_key,
+                )
+        return rows, refreshed_paths, skipped_images
+
+    def _insert_image_rows(
+        self,
+        conn,
+        rows: list[tuple],
+        *,
+        total_images: int,
+        initial_skipped_images: int = 0,
+        progress_callback=None,
+    ) -> None:
+        stored_images = 0
+        skipped_images = initial_skipped_images
+        query = load_query("image_insert.sql")
+        for row in rows:
+            conn.execute(query, row)
             stored_images += 1
             if progress_callback and (stored_images == 1 or stored_images % 100 == 0 or stored_images + skipped_images >= total_images):
                 progress_callback(
                     saved_images=stored_images,
                     total_images=total_images,
                     skipped_images=skipped_images,
-                    current_image=image_key,
+                    current_image=row[3],
                 )
 
     def _refresh_document_image_stats(self, conn, rel_paths: set[str] | None) -> None:
         paths = sorted(rel_paths) if rel_paths is not None else None
-        conn.execute(load_query("document_image_stats_refresh.sql"), (paths, paths))
+        conn.execute(load_query("document_image_stats_refresh.sql"), (paths, paths, paths, paths))
 
     def counts(self) -> dict[str, int]:
         with self.database.connection() as conn:

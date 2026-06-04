@@ -4,6 +4,12 @@ WITH image_stats AS (
            count(*) FILTER (WHERE coalesce(ocr_text, '') <> '') AS ocr_image_text_count,
            count(*) FILTER (WHERE embedding IS NOT NULL) AS indexed_image_text_count
     FROM document_images
+    WHERE %s::text[] IS NULL
+       OR document_id IN (
+            SELECT id
+            FROM documents
+            WHERE source_path = ANY(%s::text[])
+       )
     GROUP BY document_id
 )
 UPDATE documents d

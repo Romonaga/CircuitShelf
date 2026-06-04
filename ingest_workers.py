@@ -39,8 +39,9 @@ def persist_worker_count(file_count: int, cpu_count: int | None = None) -> int:
         return 0
     if files == 1:
         return 1
-    workers = max(1, usable_core_count(cpu_count) // 8)
-    return max(1, min(files, workers, 4))
+    usable = usable_core_count(cpu_count)
+    workers = max(1, usable // 3)
+    return max(1, min(files, workers, 10))
 
 
 def ocr_worker_count(item_count: int, active_document_workers: int = 1, cpu_count: int | None = None) -> int:
