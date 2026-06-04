@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
 import * as echarts from "echarts/core";
 import {
   DataZoomComponent,
@@ -9,7 +9,7 @@ import {
 } from "echarts/components";
 import { LineChart } from "echarts/charts";
 import { CanvasRenderer } from "echarts/renderers";
-import type { ComposeOption, EChartsType } from "echarts/core";
+import type { ComposeOption } from "echarts/core";
 import type {
   DataZoomComponentOption,
   GridComponentOption,
@@ -20,8 +20,8 @@ import type {
 import type { LineSeriesOption } from "echarts/charts";
 import type { StatusHistoryPoint } from "../hooks/useStatusHistory";
 import { formatNumber } from "../libs/format";
-import { readChartTheme } from "../libs/chartTheme";
 import type { ChartSeries } from "./PerformanceChart";
+import { useEChart } from "../hooks/charts/useEChart";
 
 echarts.use([
   CanvasRenderer,
@@ -65,9 +65,7 @@ export function EChartsLineChart({
   labelMax?: number;
   ceiling?: number;
 }) {
-  const chartRef = useRef<HTMLDivElement | null>(null);
-  const chartInstanceRef = useRef<EChartsType | null>(null);
-  const [theme, setTheme] = useState(readChartTheme);
+  const { chartRef, setOption, theme } = useEChart<ChartOption>();
   const option = useMemo<ChartOption>(() => ({
     animation: false,
     color: series.map((item) => item.color),
@@ -218,28 +216,8 @@ export function EChartsLineChart({
   }), [ceiling, history, labelMax, max, min, series, theme, unit]);
 
   useEffect(() => {
-    if (!chartRef.current) {
-      return;
-    }
-    const chart = echarts.init(chartRef.current, null, { renderer: "canvas" });
-    chartInstanceRef.current = chart;
-    const resizeObserver = new ResizeObserver(() => chart.resize());
-    resizeObserver.observe(chartRef.current);
-    const refreshTheme = () => setTheme(readChartTheme());
-    const themeObserver = new MutationObserver(refreshTheme);
-    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
-    refreshTheme();
-    return () => {
-      themeObserver.disconnect();
-      resizeObserver.disconnect();
-      chart.dispose();
-      chartInstanceRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    chartInstanceRef.current?.setOption(option, true);
-  }, [option]);
+    setOption(option);
+  }, [option, setOption]);
 
   return <div ref={chartRef} className="performance-echart" role="img" aria-label={title} />;
 }
