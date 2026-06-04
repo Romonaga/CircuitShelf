@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import os
-import uuid
-from collections import OrderedDict
 from typing import Any
 
 from collections.abc import Callable
@@ -10,99 +7,9 @@ from collections.abc import Callable
 from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from backend.ingestion.tokenize_util import TokenUtils
 from backend.api.dependencies import ApiDependencies
-
-
-def safe_upload_filename(filename: str, supported_extensions: set[str]) -> str:
-    name = os.path.basename(str(filename or "")).strip()
-    if not name or name in {".", ".."}:
-        raise ValueError("Upload must include a file name.")
-    if name.startswith(".") or any(char in name for char in ("/", "\\")):
-        raise ValueError("Upload file name is not allowed.")
-    ext = os.path.splitext(name)[1].lower()
-    if ext not in supported_extensions:
-        allowed = ", ".join(sorted(supported_extensions))
-        raise ValueError(f"Unsupported file type. Allowed: {allowed}")
-    return name
-
-
-def upload_display_name(filename: str | None) -> str:
-    return str(filename or "").strip() or "(unnamed file)"
-
-
-async def write_uploaded_documents(files: list[UploadFile], overwrite: bool, training_dir: str, supported_extensions: set[str]) -> dict:
-    if not files:
-        raise ValueError("Upload must include at least one file.")
-
-    os.makedirs(training_dir, exist_ok=True)
-    training_root = os.path.abspath(training_dir)
-    prepared = []
-    seen_names = set()
-    tmp_paths = []
-    uploaded = []
-    skipped = []
-
-    try:
-        for file in files:
-            display_name = upload_display_name(file.filename)
-            try:
-                filename = safe_upload_filename(file.filename or "", supported_extensions)
-            except ValueError as exc:
-                skipped.append({"filename": display_name, "reason": str(exc)})
-                continue
-
-            if filename in seen_names:
-                skipped.append({"filename": display_name, "reason": f"duplicate file name: {filename}"})
-                continue
-            seen_names.add(filename)
-
-            destination = os.path.abspath(os.path.join(training_dir, filename))
-            if not destination.startswith(training_root + os.sep):
-                raise ValueError("Upload destination is outside the training directory.")
-            if os.path.exists(destination) and not overwrite:
-                skipped.append({"filename": filename, "reason": "already exists"})
-                continue
-
-            tmp_path = os.path.join(training_dir, f".{filename}.{uuid.uuid4().hex}.upload")
-            prepared.append((file, filename, destination, tmp_path))
-            tmp_paths.append(tmp_path)
-
-        for file, filename, destination, tmp_path in prepared:
-            bytes_written = 0
-            with open(tmp_path, "wb") as out_file:
-                while True:
-                    chunk = await file.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    bytes_written += len(chunk)
-                    out_file.write(chunk)
-            if bytes_written <= 0:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                skipped.append({"filename": filename, "reason": "empty file"})
-                continue
-            uploaded.append({
-                "filename": filename,
-                "destination": destination,
-                "tmpPath": tmp_path,
-                "bytes": bytes_written,
-            })
-
-        for item in uploaded:
-            os.replace(item["tmpPath"], item["destination"])
-        return {
-            "uploaded": [{"filename": item["filename"], "bytes": item["bytes"]} for item in uploaded],
-            "skipped": skipped,
-        }
-    except Exception:
-        for tmp_path in tmp_paths:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        raise
-    finally:
-        for file in files:
-            await file.close()
+from backend.services.document_detail_builder import DocumentDetailBuilder
+from backend.services.document_upload_writer import write_uploaded_documents
 
 
 def create_router(
@@ -124,99 +31,17 @@ def create_router(
     display_source_name: Callable[[str], str],
 ) -> APIRouter:
     router = APIRouter()
-
-    def build_document_detail(doc_name: str) -> dict:
-        rows = []
-        pages = OrderedDict()
-        image_assets = []
-        chunks = state.get_chunks()
-        metadata = state.get_metadata()
-        sources = state.get_sources()
-        image_store_payload = state.get_image_store()
-        image_captions = state.get_image_captions()
-        image_text = state.get_image_page_text()
-        image_mime_types = state.get_image_mime_types()
-        intelligence_chunks = []
-        intelligence_metadata = []
-
-        for image_id, image_base64 in sorted(image_store_payload.items()):
-            if not image_asset_belongs_to_document(image_id, doc_name):
-                continue
-            page = extract_page_number(image_id) or None
-            image_payload = {
-                "imageKey": image_id,
-                "caption": image_captions.get(image_id, image_id),
-                "page": page,
-                "imageMimeType": image_mime_types.get(image_id, "image/png"),
-                "imageBase64": image_base64,
-                "ocrText": image_text.get(image_id, ""),
-            }
-            image_assets.append(image_payload)
-            if page is not None:
-                pages.setdefault(page, {"page": page, "chunks": [], "images": []})["images"].append(image_payload)
-
-        for idx, source in enumerate(sources):
-            meta = metadata[idx] if idx < len(metadata) else {}
-            doc_source = document_source_from_metadata(source, meta)
-            if doc_source != doc_name:
-                continue
-            text = chunks[idx] if idx < len(chunks) else ""
-            intelligence_chunks.append(text)
-            intelligence_metadata.append({**meta, "source": doc_name, "parent_source": doc_name})
-            row = {
-                "index": idx,
-                "section": meta.get("section", "Unknown"),
-                "category": meta.get("category", "Uncategorized"),
-                "page": meta.get("page"),
-                "sourceImageId": source_image_id_from_metadata(source, meta),
-                "tokens": TokenUtils.tokenize_len(text),
-                "preview": text[:500],
-            }
-            rows.append(row)
-            page = row["page"]
-            if page is not None:
-                pages.setdefault(page, {"page": page, "chunks": [], "images": []})["chunks"].append(row)
-
-        pinout_chunks = list(intelligence_chunks)
-        pinout_metadata = list(intelligence_metadata)
-        for image in image_assets:
-            if image.get("ocrText"):
-                pinout_chunks.append(image["ocrText"])
-                pinout_metadata.append({
-                    "source": doc_name,
-                    "parent_source": doc_name,
-                    "page": image.get("page"),
-                    "source_image_id": image.get("imageKey"),
-                    "section": "Image OCR",
-                    "category": "ocr",
-                })
-        pinout = extract_pinout_map(pinout_chunks, pinout_metadata, doc_name)
-        intelligence = get_or_build_datasheet_intelligence(doc_name, pinout_chunks, pinout_metadata)
-        return {
-            "document": doc_name,
-            "displayName": display_source_name(doc_name),
-            "chunks": rows,
-            "images": image_assets,
-            "pages": sorted(pages.values(), key=lambda item: int(item["page"])),
-            "ingestStats": next(
-                (
-                    {
-                        "rawChunkCount": int(row["raw_chunk_count"] or 0),
-                        "chunkCount": int(row["actual_chunk_count"] or row["chunk_count"] or 0),
-                        "droppedChunkCount": int(row["dropped_chunk_count"] or 0),
-                        "extractedImageCount": int(row["extracted_image_count"] or 0),
-                        "storedImageCount": int(row["stored_image_count"] or 0),
-                        "indexedImageTextCount": int(row["indexed_image_text_count"] or 0),
-                        "ocrImageTextCount": int(row["ocr_image_text_count"] or 0),
-                    }
-                    for row in vector_store.list_document_stats()
-                    if row["source_path"] == doc_name
-                ),
-                None,
-            ),
-            "pinout": intelligence.get("pinout") if intelligence.get("pinout", {}).get("pins") else pinout,
-            "intelligence": intelligence,
-        }
+    detail_builder = DocumentDetailBuilder(
+        state=state,
+        vector_store=vector_store,
+        image_asset_belongs_to_document=image_asset_belongs_to_document,
+        extract_page_number=extract_page_number,
+        document_source_from_metadata=document_source_from_metadata,
+        source_image_id_from_metadata=source_image_id_from_metadata,
+        extract_pinout_map=extract_pinout_map,
+        get_or_build_datasheet_intelligence=get_or_build_datasheet_intelligence,
+        display_source_name=display_source_name,
+    )
 
     @router.get("/api/documents")
     async def documents(req: Request, scope: str = Query("visible")):
@@ -381,7 +206,7 @@ def create_router(
         }
         if source not in visible_sources:
             return JSONResponse({"error": "Document not found."}, status_code=404)
-        return build_document_detail(source)
+        return detail_builder.build(source)
 
     @router.get("/api/documents/{doc_name:path}")
     async def document_detail(req: Request, doc_name: str, scope: str = Query("visible")):
@@ -403,6 +228,6 @@ def create_router(
         }
         if doc_name not in visible_sources:
             return JSONResponse({"error": "Document not found."}, status_code=404)
-        return build_document_detail(doc_name)
+        return detail_builder.build(doc_name)
 
     return router
