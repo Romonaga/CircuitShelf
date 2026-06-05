@@ -3664,6 +3664,13 @@ nav {
   gap: 14px;
 }
 
+.document-detail-panel {
+  grid-template-rows: none;
+  grid-auto-rows: max-content;
+  align-content: start;
+  overflow: visible;
+}
+
 .review-panel {
   grid-template-rows: auto auto auto auto minmax(0, 1fr);
 }
@@ -3753,9 +3760,10 @@ nav {
 
 .document-pinout-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 8px;
   padding: 0 10px 10px;
+  min-width: 0;
 }
 
 .document-pin-card {
@@ -3772,6 +3780,7 @@ nav {
 .document-pin-card small {
   color: var(--muted);
   font-size: 0.78rem;
+  overflow-wrap: anywhere;
 }
 
 .pinout-panel {
@@ -3808,6 +3817,7 @@ nav {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
+  margin-top: 4px;
   min-width: 0;
   overflow: visible;
 }
@@ -3849,6 +3859,7 @@ nav {
 .page-detail {
   display: grid;
   min-width: 0;
+  position: relative;
   overflow: visible;
 }
 
@@ -3856,6 +3867,7 @@ nav {
   display: grid;
   gap: 10px;
   min-width: 0;
+  position: relative;
   overflow: visible;
 }
 

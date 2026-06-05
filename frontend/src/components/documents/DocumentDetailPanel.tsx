@@ -32,7 +32,7 @@ export function DocumentDetailPanel({
   const displayedImageCount = selectedDocument?.imageCount ?? detail?.ingestStats?.storedImageCount ?? detail?.images.length ?? 0;
 
   return (
-    <div className="chunk-panel">
+    <div className="chunk-panel document-detail-panel">
       {isAdmin ? (
         <IngestStatusPanel
           ingest={status?.ingest}
