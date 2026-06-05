@@ -3668,7 +3668,12 @@ nav {
   grid-template-rows: none;
   grid-auto-rows: max-content;
   align-content: start;
-  overflow: visible;
+  overflow: auto;
+  padding-bottom: 22px;
+}
+
+.document-detail-panel .intelligence-panel {
+  margin-bottom: 0;
 }
 
 .review-panel {
@@ -3817,9 +3822,13 @@ nav {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  margin-top: 4px;
+  margin-top: 2px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .page-strip {
@@ -3860,7 +3869,7 @@ nav {
   display: grid;
   min-width: 0;
   position: relative;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .document-page-inspector {
@@ -3868,7 +3877,11 @@ nav {
   gap: 10px;
   min-width: 0;
   position: relative;
-  overflow: visible;
+  overflow: hidden;
+}
+
+.document-page-inspector .empty-state {
+  min-height: 104px;
 }
 
 .document-page-toolbar {
