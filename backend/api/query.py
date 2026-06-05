@@ -12,6 +12,25 @@ from backend.api.dependencies import ApiDependencies
 from backend.services.answer_markdown import display_chat_history_from_turns, normalize_answer_markdown
 
 
+def _stored_context_chat_history(conversation: dict[str, Any] | None, fallback: list | None = None) -> list:
+    turns = (conversation or {}).get("turns") or []
+    for turn in reversed(turns):
+        snapshot = turn.get("responseSnapshot") or {}
+        context_history = snapshot.get("contextChatHistory")
+        if isinstance(context_history, list):
+            return context_history
+
+    rebuilt: list[list[str]] = []
+    for turn in turns:
+        question = str(turn.get("question") or "").strip()
+        answer = str(turn.get("answer") or "").strip()
+        if question and answer:
+            rebuilt.append([question, answer])
+    if rebuilt:
+        return rebuilt
+    return fallback or []
+
+
 class QueryRequest(BaseModel):
     question: str = ""
     conversationId: str | None = None
@@ -59,10 +78,12 @@ def create_router(
                 conversation_id = conversation["id"]
 
             model_name = payload.model or default_model
+            existing_conversation = conversation_store.get(str(conversation_id), user_id) or {"turns": []}
+            context_chat_history = _stored_context_chat_history(existing_conversation, payload.chatHistory)
             _, answer, chat_history, sources, cache_stats, confidence, avg_time, build_card, validation = await run_in_threadpool(
                 get_rag_response,
                 question=question,
-                chat_history=payload.chatHistory,
+                chat_history=context_chat_history,
                 show_full_text=payload.showFullText,
                 top_k=int(payload.topK),
                 dist_thresh=float(payload.distanceThreshold),
@@ -78,7 +99,6 @@ def create_router(
             )
             display_answer = normalize_answer_markdown(answer)
             api_sources = normalize_sources_for_api(sources)
-            existing_conversation = conversation_store.get(str(conversation_id), user_id) or {"turns": []}
             display_chat_history = [
                 *display_chat_history_from_turns(existing_conversation.get("turns")),
                 [question, display_answer],
@@ -111,6 +131,7 @@ def create_router(
                 "question": question,
                 "answer": display_answer,
                 "chatHistory": display_chat_history,
+                "contextChatHistory": chat_history,
                 "sources": api_sources,
                 "cacheStats": cache_stats,
                 "confidence": confidence,

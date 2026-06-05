@@ -13,11 +13,17 @@ function restoreResultFromConversationTurn(
 ): QueryResponse {
   const snapshot = turn.responseSnapshot;
   if (snapshot?.answer) {
+    const contextChatHistory = Array.isArray(snapshot.contextChatHistory)
+      ? snapshot.contextChatHistory
+      : Array.isArray(snapshot.chatHistory)
+        ? snapshot.chatHistory
+        : turns;
     return {
       conversation,
       question: snapshot.question || turn.question,
       answer: snapshot.answer,
       chatHistory: Array.isArray(snapshot.chatHistory) ? snapshot.chatHistory : turns,
+      contextChatHistory,
       sources: Array.isArray(snapshot.sources) ? snapshot.sources : [],
       buildCard: snapshot.buildCard ?? null,
       validation: snapshot.validation ?? null,
@@ -33,6 +39,7 @@ function restoreResultFromConversationTurn(
     question: turn.question,
     answer: turn.answer,
     chatHistory: turns,
+    contextChatHistory: turns,
     sources: [],
     buildCard: null,
     validation: null,
@@ -47,6 +54,7 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
   const [model, setModel] = useState(config.defaultModel);
   const [options, setOptions] = useState<QueryOptions>(config.defaults);
   const [chatHistory, setChatHistory] = useState<ChatTurn[]>([]);
+  const [contextChatHistory, setContextChatHistory] = useState<ChatTurn[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationsBusy, setConversationsBusy] = useState(false);
@@ -110,11 +118,12 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
         ...options,
         question,
         model,
-        chatHistory,
+        chatHistory: contextChatHistory,
         conversationId: activeConversationId
       });
       setResult(response);
       setChatHistory(response.chatHistory);
+      setContextChatHistory(response.contextChatHistory ?? response.chatHistory);
       if (response.conversation?.id) {
         setActiveConversationId(response.conversation.id);
       }
@@ -134,9 +143,11 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
       const response = await getConversation(conversationId);
       const turns = response.conversation.turns.map((turn) => [turn.question, turn.answer] as ChatTurn);
       const lastTurn = response.conversation.turns.at(-1);
+      const restoredResult = lastTurn ? restoreResultFromConversationTurn(response.conversation, turns, lastTurn) : null;
       setActiveConversationId(response.conversation.id);
-      setChatHistory(turns);
-      setResult(lastTurn ? restoreResultFromConversationTurn(response.conversation, turns, lastTurn) : null);
+      setChatHistory(restoredResult?.chatHistory ?? turns);
+      setContextChatHistory(restoredResult?.contextChatHistory ?? turns);
+      setResult(restoredResult);
     } catch (err) {
       setError(errorMessage(err, "Could not load conversation"));
     } finally {
@@ -160,6 +171,7 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
   function startNewConversation() {
     setActiveConversationId(null);
     setChatHistory([]);
+    setContextChatHistory([]);
     setResult(null);
     setQuestion("");
   }

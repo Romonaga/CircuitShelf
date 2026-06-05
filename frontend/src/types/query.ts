@@ -52,6 +52,7 @@ export interface QueryResponse {
   question: string;
   answer: string;
   chatHistory: ChatTurn[];
+  contextChatHistory?: ChatTurn[];
   sources: SourceSummary[];
   buildCard?: CircuitBuildCard | null;
   validation?: ResponseValidation | null;
