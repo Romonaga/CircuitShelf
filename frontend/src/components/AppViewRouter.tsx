@@ -89,6 +89,7 @@ export function AppViewRouter({
             description={`${status?.sources ?? 0} global indexed sources`}
             uploadHelp="Upload shared electronics books, datasheets, and notes for the global CircuitShelf corpus."
             emptyText="Select a corpus document to inspect its pages, chunks, images, and pinout."
+            showEmptyInspector={false}
             scope="global"
           />
         </ViewPane>

@@ -19,6 +19,7 @@ export function DocumentDetailPanel({
   isAdmin,
   selectedDocument,
   selectedPage,
+  showEmptyInspector = true,
   scope,
   status,
   onOpenReview,
@@ -30,6 +31,7 @@ export function DocumentDetailPanel({
   isAdmin: boolean;
   selectedDocument: DocumentSummary | null;
   selectedPage: DocumentPage | null;
+  showEmptyInspector?: boolean;
   scope: "visible" | "global";
   status: StatusPayload | null;
   onOpenReview: () => void;
@@ -39,6 +41,7 @@ export function DocumentDetailPanel({
   const [downloadError, setDownloadError] = useState("");
   const displayedChunkCount = selectedDocument?.chunkCount ?? detail?.ingestStats?.chunkCount ?? detail?.chunks.length ?? 0;
   const displayedImageCount = selectedDocument?.imageCount ?? detail?.ingestStats?.storedImageCount ?? detail?.images.length ?? 0;
+  const showInspector = Boolean(selectedDocument || detailBusy || showEmptyInspector);
 
   async function downloadSource() {
     if (!selectedDocument?.source) {
@@ -67,50 +70,54 @@ export function DocumentDetailPanel({
           onOpenReview={onOpenReview}
         />
       ) : null}
-      <SectionHeader
-        title={selectedDocument?.displayName ?? selectedDocument?.source ?? "No document selected"}
-        description={
-          detailBusy
-            ? "Loading document details..."
-            : `${formatInteger(displayedChunkCount)} chunks | ${formatInteger(displayedImageCount)} images`
-        }
-        actions={
-          selectedDocument ? (
-            <button className="ghost-button" type="button" onClick={() => void downloadSource()} disabled={downloadBusy || detailBusy}>
-              {downloadBusy ? "Preparing..." : "Download source"}
-            </button>
-          ) : null
-        }
-      />
-      <ErrorMessage message={downloadError} />
-      {detailBusy ? (
-        <div className="document-loading">
-          <LoadingSpinner />
-          <span>Loading document details...</span>
-        </div>
-      ) : null}
-      {!detailBusy ? <DocumentStatsPanel detail={detail} summary={selectedDocument} /> : null}
-      {!detailBusy ? <DatasheetIntelligencePanel intelligence={detail?.intelligence} /> : null}
-      {!detailBusy && detail?.pages.length ? (
-        <div className="document-explorer">
-          <div className="page-strip">
-            {detail.pages.map((page) => (
-              <button
-                key={page.page}
-                className={String(page.page) === String(selectedPage?.page) ? "page-chip active" : "page-chip"}
-                onClick={() => onSelectPage(page.page)}
-              >
-                Page {page.page}
-                <small>{formatInteger(page.chunks.length)} chunks | {formatInteger(page.images.length)} images</small>
-              </button>
-            ))}
-          </div>
-          <div className="page-detail">
-            {selectedPage ? <DocumentPageInspector page={selectedPage} /> : null}
-          </div>
-        </div>
-      ) : !detailBusy ? (
-        <div className="empty-state">{emptyText}</div>
+      {showInspector ? (
+        <>
+          <SectionHeader
+            title={selectedDocument?.displayName ?? selectedDocument?.source ?? "No document selected"}
+            description={
+              detailBusy
+                ? "Loading document details..."
+                : `${formatInteger(displayedChunkCount)} chunks | ${formatInteger(displayedImageCount)} images`
+            }
+            actions={
+              selectedDocument ? (
+                <button className="ghost-button" type="button" onClick={() => void downloadSource()} disabled={downloadBusy || detailBusy}>
+                  {downloadBusy ? "Preparing..." : "Download source"}
+                </button>
+              ) : null
+            }
+          />
+          <ErrorMessage message={downloadError} />
+          {detailBusy ? (
+            <div className="document-loading">
+              <LoadingSpinner />
+              <span>Loading document details...</span>
+            </div>
+          ) : null}
+          {!detailBusy ? <DocumentStatsPanel detail={detail} summary={selectedDocument} /> : null}
+          {!detailBusy ? <DatasheetIntelligencePanel intelligence={detail?.intelligence} /> : null}
+          {!detailBusy && detail?.pages.length ? (
+            <div className="document-explorer">
+              <div className="page-strip">
+                {detail.pages.map((page) => (
+                  <button
+                    key={page.page}
+                    className={String(page.page) === String(selectedPage?.page) ? "page-chip active" : "page-chip"}
+                    onClick={() => onSelectPage(page.page)}
+                  >
+                    Page {page.page}
+                    <small>{formatInteger(page.chunks.length)} chunks | {formatInteger(page.images.length)} images</small>
+                  </button>
+                ))}
+              </div>
+              <div className="page-detail">
+                {selectedPage ? <DocumentPageInspector page={selectedPage} /> : null}
+              </div>
+            </div>
+          ) : !detailBusy ? (
+            <div className="empty-state">{emptyText}</div>
+          ) : null}
+        </>
       ) : null}
     </div>
   );

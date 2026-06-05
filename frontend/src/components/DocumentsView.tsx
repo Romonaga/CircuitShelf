@@ -20,6 +20,7 @@ export function DocumentsView({
   description,
   uploadHelp,
   emptyText = "Select a document to inspect its pages, chunks, images, and pinout.",
+  showEmptyInspector = true,
   scope = "visible"
 }: {
   isActive: boolean;
@@ -32,6 +33,7 @@ export function DocumentsView({
   description?: string;
   uploadHelp?: string;
   emptyText?: string;
+  showEmptyInspector?: boolean;
   scope?: "visible" | "global";
 }) {
   const browser = useDocumentBrowser({ isActive, refreshSignal, scope });
@@ -150,6 +152,7 @@ export function DocumentsView({
         isAdmin={isAdmin}
         selectedDocument={browser.selectedDocument}
         selectedPage={browser.selectedPageDetail}
+        showEmptyInspector={showEmptyInspector}
         scope={scope}
         status={status}
         onOpenReview={onOpenReview}
