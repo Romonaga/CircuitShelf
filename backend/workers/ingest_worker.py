@@ -6,6 +6,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from backend.services.model_runtime import release_accelerator_memory
+
 
 @dataclass
 class IngestWorkerRunner:
@@ -42,6 +44,7 @@ class IngestWorkerRunner:
                     continue
                 self._run_job(job)
         finally:
+            release_accelerator_memory(self.trace_logger)
             self.runtime.runtime_status_reporter.stop_resource_sampler()
             self.trace_logger.info("👷 CircuitShelf ingestion worker stopped.")
 
@@ -63,6 +66,7 @@ class IngestWorkerRunner:
         self.runtime.runtime_status_reporter.start_resource_sampler()
         self._recover_abandoned_jobs()
         self.runtime.ingest_progress.schedule_next_check()
+        release_accelerator_memory(self.trace_logger)
 
     def _recover_abandoned_jobs(self):
         recovered = self.job_store.recover_abandoned_running(worker_pid=os.getpid())
@@ -133,3 +137,5 @@ class IngestWorkerRunner:
             snapshot = self.runtime.ingest_progress.snapshot()
             self.job_store.finish(job_id, status="failed", error=str(exc), details=snapshot)
             self.trace_logger.error(f"❌ Ingest worker failed job {job_id}: {reason}: {exc}")
+        finally:
+            release_accelerator_memory(self.trace_logger)
