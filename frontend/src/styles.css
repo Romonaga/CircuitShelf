@@ -2692,7 +2692,7 @@ nav {
 }
 
 .chat-question {
-  color: #172033;
+  color: var(--ink);
   font-weight: 700;
 }
 

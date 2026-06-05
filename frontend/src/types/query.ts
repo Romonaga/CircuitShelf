@@ -28,6 +28,7 @@ export interface ConversationTurn {
   modelName?: string | null;
   retrievalStrategy?: string | null;
   confidence?: number | null;
+  responseSnapshot?: Partial<QueryResponse> | null;
   createdAt?: string | null;
 }
 

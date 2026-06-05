@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from psycopg.errors import UndefinedTable
@@ -59,6 +60,7 @@ class ConversationStore:
         model_name: str,
         retrieval_strategy: str,
         confidence_score: Any,
+        response_snapshot: dict[str, Any] | None = None,
     ) -> dict:
         with self.database.connection() as conn:
             turn = conn.execute(
@@ -71,6 +73,7 @@ class ConversationStore:
                     model_name,
                     retrieval_strategy,
                     self._optional_float(confidence_score),
+                    json.dumps(response_snapshot or {}, default=str),
                 ),
             ).fetchone()
             conn.execute(load_query("conversation_touch.sql"), (conversation_id,))
@@ -124,5 +127,6 @@ class ConversationStore:
             "modelName": row.get("model_name"),
             "retrievalStrategy": row.get("retrieval_strategy"),
             "confidence": self._optional_float(row.get("confidence_score")),
+            "responseSnapshot": row.get("response_snapshot") or None,
             "createdAt": self._timestamp(row.get("created_at")),
         }

@@ -6,6 +6,42 @@ import { formatElapsed } from "../libs/time";
 import type { AppConfig, ChatTurn, ConversationSummary, QueryOptions, QueryResponse } from "../types";
 import { useElapsedSeconds } from "./useElapsedSeconds";
 
+function restoreResultFromConversationTurn(
+  conversation: QueryResponse["conversation"],
+  turns: ChatTurn[],
+  turn: NonNullable<QueryResponse["conversation"]>["turns"][number]
+): QueryResponse {
+  const snapshot = turn.responseSnapshot;
+  if (snapshot?.answer) {
+    return {
+      conversation,
+      question: snapshot.question || turn.question,
+      answer: snapshot.answer,
+      chatHistory: Array.isArray(snapshot.chatHistory) ? snapshot.chatHistory : turns,
+      sources: Array.isArray(snapshot.sources) ? snapshot.sources : [],
+      buildCard: snapshot.buildCard ?? null,
+      validation: snapshot.validation ?? null,
+      cacheStats: snapshot.cacheStats ?? null,
+      confidence: snapshot.confidence ?? turn.confidence ?? null,
+      averageQueryTime: snapshot.averageQueryTime ?? null,
+      error: snapshot.error
+    };
+  }
+
+  return {
+    conversation,
+    question: turn.question,
+    answer: turn.answer,
+    chatHistory: turns,
+    sources: [],
+    buildCard: null,
+    validation: null,
+    cacheStats: null,
+    confidence: turn.confidence ?? null,
+    averageQueryTime: null
+  };
+}
+
 export function useAskController({ config, isActive }: { config: AppConfig; isActive: boolean }) {
   const [question, setQuestion] = useState("");
   const [model, setModel] = useState(config.defaultModel);
@@ -100,22 +136,7 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
       const lastTurn = response.conversation.turns.at(-1);
       setActiveConversationId(response.conversation.id);
       setChatHistory(turns);
-      setResult(
-        lastTurn
-          ? {
-              conversation: response.conversation,
-              question: lastTurn.question,
-              answer: lastTurn.answer,
-              chatHistory: turns,
-              sources: [],
-              buildCard: null,
-              validation: null,
-              cacheStats: null,
-              confidence: lastTurn.confidence ?? null,
-              averageQueryTime: null
-            }
-          : null
-      );
+      setResult(lastTurn ? restoreResultFromConversationTurn(response.conversation, turns, lastTurn) : null);
     } catch (err) {
       setError(errorMessage(err, "Could not load conversation"));
     } finally {

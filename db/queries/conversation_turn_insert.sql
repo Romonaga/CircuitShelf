@@ -10,7 +10,8 @@ INSERT INTO conversation_turns (
     answer_markdown,
     model_name,
     retrieval_strategy,
-    confidence_score
+    confidence_score,
+    response_snapshot
 )
 SELECT %s,
        next_turn.ordinal,
@@ -18,6 +19,7 @@ SELECT %s,
        %s,
        %s,
        %s,
-       %s
+       %s,
+       %s::jsonb
 FROM next_turn
-RETURNING id, ordinal, question, answer_markdown, created_at;
+RETURNING id, ordinal, question, answer_markdown, model_name, retrieval_strategy, confidence_score, response_snapshot, created_at;

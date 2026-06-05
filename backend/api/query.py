@@ -76,6 +76,18 @@ def create_router(
                 ai_context_id=str(conversation_id),
             )
             stored_answer = chat_history[-1][1] if chat_history else answer
+            api_sources = normalize_sources_for_api(sources)
+            response_snapshot = {
+                "question": question,
+                "answer": answer,
+                "chatHistory": chat_history,
+                "sources": api_sources,
+                "cacheStats": cache_stats,
+                "confidence": confidence,
+                "averageQueryTime": avg_time,
+                "buildCard": build_card,
+                "validation": validation,
+            }
             conversation_store.append_turn(
                 conversation_id=str(conversation_id),
                 question=question,
@@ -83,6 +95,7 @@ def create_router(
                 model_name=model_name,
                 retrieval_strategy=payload.strategy,
                 confidence_score=confidence,
+                response_snapshot=response_snapshot,
             )
             conversation = conversation_store.get(str(conversation_id), user_id)
 
@@ -91,7 +104,7 @@ def create_router(
                 "question": question,
                 "answer": answer,
                 "chatHistory": chat_history,
-                "sources": normalize_sources_for_api(sources),
+                "sources": api_sources,
                 "cacheStats": cache_stats,
                 "confidence": confidence,
                 "averageQueryTime": avg_time,
