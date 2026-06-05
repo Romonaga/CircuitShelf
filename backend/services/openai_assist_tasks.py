@@ -74,6 +74,9 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
         ):
             return None
         decision_reason = finalizer_decision_reason(
+            question=question,
+            answer=answer,
+            source_payload=source_payload,
             provider_mode=provider_mode,
             effective_mode=effective_mode,
             confidence=confidence,
@@ -426,6 +429,9 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
 
 def finalizer_decision_reason(
     *,
+    question: str,
+    answer: str,
+    source_payload: list[dict],
     provider_mode: str,
     effective_mode: str,
     confidence: Any,
@@ -435,7 +441,7 @@ def finalizer_decision_reason(
 ) -> str:
     reasons: list[str] = []
     if provider_mode == "always" or effective_mode == "always":
-        reasons.append("validation mode is always")
+        reasons.append("OpenAI answer validation ran because validation mode is always")
     if issues:
         reasons.append(f"deterministic issues: {', '.join(str(issue) for issue in issues[:3])}")
     try:
@@ -447,5 +453,42 @@ def finalizer_decision_reason(
     if build_card:
         reasons.append("answer included a build card")
     if not reasons:
-        reasons.append(f"validation mode {effective_mode} allowed OpenAI answer validation")
+        reasons.append(f"OpenAI answer validation ran because mode {effective_mode} allowed it")
+    reasons.append(
+        _answer_validation_scope_summary(
+            question=question,
+            answer=answer,
+            source_payload=source_payload,
+            confidence=confidence_value,
+        )
+    )
     return "; ".join(reasons)[:1000]
+
+
+def _answer_validation_scope_summary(
+    *,
+    question: str,
+    answer: str,
+    source_payload: list[dict],
+    confidence: float | None,
+) -> str:
+    question_preview = " ".join(str(question or "").split())[:120] or "empty question"
+    answer_chars = len(str(answer or ""))
+    source_count = len(source_payload or [])
+    chunk_count = 0
+    page_count = 0
+    for source in source_payload or []:
+        try:
+            chunk_count += int(source.get("chunkCount") or len(source.get("chunks") or []))
+        except (TypeError, ValueError, AttributeError):
+            pass
+        try:
+            page_count += len(source.get("pages") or [])
+        except (TypeError, AttributeError):
+            pass
+    confidence_text = f"{confidence:.2f}" if confidence is not None else "n/a"
+    return (
+        "reviewed answer for "
+        f"'{question_preview}' with {answer_chars} answer chars, {source_count} source groups, "
+        f"{chunk_count} retrieved chunks, {page_count} cited pages, confidence {confidence_text}"
+    )
