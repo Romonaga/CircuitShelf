@@ -4537,10 +4537,110 @@ nav {
   gap: 18px;
 }
 
-.ai-usage-breakdown-grid {
+.ai-usage-hero {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(240px, 0.9fr) minmax(300px, 1.3fr) minmax(300px, 1fr);
   gap: 14px;
+  align-items: stretch;
+}
+
+.ai-usage-scope-card,
+.ai-usage-spend-card,
+.ai-usage-token-strip {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 13%, transparent), transparent 55%),
+    var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.ai-usage-scope-card,
+.ai-usage-spend-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.ai-usage-scope-card > span,
+.ai-usage-spend-card > span,
+.ai-usage-token-strip span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-usage-scope-card strong,
+.ai-usage-spend-card strong {
+  color: var(--ink);
+  font-size: clamp(1.55rem, 2vw, 2.15rem);
+  line-height: 1;
+}
+
+.ai-usage-scope-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.ai-usage-spend-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-usage-spend-meta span {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--panel-soft);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.ai-usage-token-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ai-usage-token-strip > div {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px;
+  border-right: 1px solid var(--line);
+}
+
+.ai-usage-token-strip > div:last-child {
+  border-right: 0;
+}
+
+.ai-usage-token-strip strong {
+  color: var(--ink);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.ai-usage-breakdown-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(520px, 1.4fr);
+  gap: 14px;
+}
+
+.ai-usage-breakdown-primary,
+.ai-usage-breakdown-secondary {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.ai-usage-breakdown-secondary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .ai-usage-breakdown {
@@ -4560,13 +4660,21 @@ nav {
 }
 
 .ai-usage-card {
-  display: grid;
-  gap: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   min-width: 0;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-soft);
+}
+
+.ai-usage-card > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
 .ai-usage-card span,
@@ -4580,6 +4688,7 @@ nav {
 .ai-usage-card strong {
   color: var(--ink);
   font-size: 1.1rem;
+  white-space: nowrap;
 }
 
 .ai-usage-table {
@@ -4890,6 +4999,12 @@ nav {
 }
 
 @media (max-width: 1120px) {
+  .ai-usage-hero,
+  .ai-usage-breakdown-layout,
+  .ai-usage-breakdown-secondary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .ask-grid,
   .docs-grid,
   .settings-grid,
@@ -4935,8 +5050,7 @@ nav {
   .ai-provider-grid.compact,
   .ai-key-row,
   .ask-settings-grid,
-  .performance-stats,
-  .ai-usage-breakdown-grid {
+  .performance-stats {
     grid-template-columns: 1fr;
   }
 }

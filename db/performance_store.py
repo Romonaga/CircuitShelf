@@ -255,7 +255,7 @@ class PerformanceStore:
             "sourcePath": "",
             "startedAt": row["created_at"].isoformat() if row.get("created_at") else None,
             "finishedAt": row["created_at"].isoformat() if row.get("created_at") else None,
-            "durationMs": 0,
+            "durationMs": PerformanceStore._optional_int(row.get("latency_ms")) or 0,
             "chunks": 0,
             "images": 0,
             "droppedChunks": 0,

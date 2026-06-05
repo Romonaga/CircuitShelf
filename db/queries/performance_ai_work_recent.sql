@@ -17,7 +17,8 @@ SELECT ev.id,
        ev.estimated_cost,
        ev.paid_by,
        ev.success,
-       ev.error_message
+       ev.error_message,
+       ev.latency_ms
 FROM ai_assist_events ev
 LEFT JOIN entities en ON en.id = ev.entity_id
 LEFT JOIN users u ON u.id = ev.user_id
