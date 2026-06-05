@@ -276,7 +276,7 @@ class RagService:
         )
 
         image_md_blocks = (
-            self.image_retrieval_service.build_image_markdown_blocks(retrieval_q, selected_chunks)
+            self.image_retrieval_service.build_image_markdown_blocks(retrieval_q, selected_chunks, entity_id=entity_id)
             if show_full_text
             else []
         )

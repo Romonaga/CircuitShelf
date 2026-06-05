@@ -2127,6 +2127,169 @@ nav {
   background: var(--panel-soft);
 }
 
+.review-qa-panel {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.8fr) minmax(0, 1.8fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.review-health-card,
+.review-qa-metric,
+.review-evidence-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.review-health-card {
+  display: grid;
+  gap: 6px;
+  padding: 13px;
+  border-left-width: 5px;
+}
+
+.review-health-card.clean {
+  border-left-color: #14b8a6;
+}
+
+.review-health-card.attention {
+  border-left-color: #f59e0b;
+}
+
+.review-health-card.blocked {
+  border-left-color: #ef4444;
+}
+
+.review-health-card span,
+.review-qa-metric span,
+.section-kicker {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.review-health-card strong {
+  color: var(--ink);
+  font-size: 1.15rem;
+}
+
+.review-health-card p,
+.review-qa-metric small,
+.review-evidence-card p {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.review-qa-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.review-qa-metric {
+  display: grid;
+  gap: 5px;
+  min-height: 82px;
+  padding: 11px;
+}
+
+.review-qa-metric strong {
+  color: var(--ink);
+  font-size: 1.15rem;
+}
+
+.review-qa-notes {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-note {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-soft);
+}
+
+.review-note.attention {
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.review-note.blocked {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.review-evidence-panel,
+.review-deep-inspect {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.review-evidence-panel {
+  padding: 12px;
+}
+
+.review-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.review-evidence-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 11px;
+}
+
+.review-evidence-card p {
+  max-height: 150px;
+  overflow: auto;
+}
+
+.review-evidence-image img {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.review-deep-inspect {
+  padding: 0;
+}
+
+.review-deep-inspect > summary {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 12px;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 850;
+}
+
+.review-deep-inspect > summary small {
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.review-deep-inspect > .review-summary-strip {
+  padding: 0 12px;
+}
+
 .review-row-meta {
   display: flex;
   flex-wrap: wrap;
@@ -2297,13 +2460,44 @@ nav {
   }
 }
 
-.review-images {
+.review-image-pages {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
+  gap: 12px;
   max-height: 430px;
   overflow: auto;
   padding: 0 10px 10px;
+}
+
+.review-image-page {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.review-image-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text);
+}
+
+.review-image-page-header span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.review-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  min-width: 0;
 }
 
 .review-image-details,
@@ -2341,7 +2535,7 @@ nav {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 360px;
+  max-height: 230px;
   object-fit: contain;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -3677,7 +3871,11 @@ nav {
 }
 
 .review-panel {
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  grid-template-rows: none;
+  grid-auto-rows: max-content;
+  align-content: start;
+  overflow: auto;
+  padding-bottom: 22px;
 }
 
 .document-stats-panel {
@@ -4955,6 +5153,10 @@ nav {
 :root[data-theme="dark"] .document-row,
 :root[data-theme="dark"] .document-context-menu,
 :root[data-theme="dark"] .document-stat,
+:root[data-theme="dark"] .review-health-card,
+:root[data-theme="dark"] .review-qa-metric,
+:root[data-theme="dark"] .review-evidence-card,
+:root[data-theme="dark"] .review-deep-inspect,
 :root[data-theme="dark"] .document-pinout-details,
 :root[data-theme="dark"] .pinout-row,
 :root[data-theme="dark"] .page-chip,
@@ -4995,6 +5197,7 @@ nav {
 :root[data-theme="dark"] .validation-panel,
 :root[data-theme="dark"] .project-finder-summary,
 :root[data-theme="dark"] .document-stats-panel,
+:root[data-theme="dark"] .review-evidence-panel,
 :root[data-theme="dark"] .pinout-panel,
 :root[data-theme="dark"] .document-pin-card,
 :root[data-theme="dark"] .ingest-status-grid,
@@ -5125,6 +5328,8 @@ nav {
   .ai-provider-grid.compact,
   .ai-key-row,
   .ask-settings-grid,
+  .review-qa-panel,
+  .review-qa-metrics,
   .performance-stats {
     grid-template-columns: 1fr;
   }

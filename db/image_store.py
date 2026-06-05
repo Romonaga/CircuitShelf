@@ -262,10 +262,10 @@ class ImageStore:
         counts = self.counts()
         return counts["referenced"] > counts["stored"] or counts["stored"] > counts["embeddings"]
 
-    def search_images(self, query_embedding, *, top_k: int) -> list[dict]:
+    def search_images(self, query_embedding, *, top_k: int, entity_id: int | None = None) -> list[dict]:
         vector = vector_to_sql(query_embedding)
         with self.database.connection() as conn:
-            rows = conn.execute(load_query("image_search.sql"), (vector, vector, int(top_k))).fetchall()
+            rows = conn.execute(load_query("image_search.sql"), (vector, entity_id, vector, int(top_k))).fetchall()
         return [dict(row) for row in rows]
 
     def load_state_payload(self) -> tuple[dict[str, str], dict[str, str], dict[str, str], dict[str, str]]:

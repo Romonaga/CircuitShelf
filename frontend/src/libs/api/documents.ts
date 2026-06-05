@@ -230,3 +230,20 @@ export function triggerIndexCheck(): Promise<{ ok: boolean; started: boolean; st
 export function getDocument(source: string, scope = "visible"): Promise<DocumentDetail> {
   return requestJson<DocumentDetail>(`/api/document?source=${encodeURIComponent(source)}&scope=${encodeURIComponent(scope)}`);
 }
+
+export async function downloadDocumentSource(source: string, scope = "visible"): Promise<Blob> {
+  const session = readSessionToken();
+  const response = await fetch(`/api/document/download?source=${encodeURIComponent(source)}&scope=${encodeURIComponent(scope)}`, {
+    headers: {
+      ...(session ? { Authorization: `Bearer ${session}` } : {})
+    }
+  });
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("circuitshelf-auth-expired"));
+  }
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Download failed with status ${response.status}`);
+  }
+  return response.blob();
+}

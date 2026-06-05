@@ -1,5 +1,5 @@
 import type { DatasheetIntelligence, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../../types";
-import { requestJson } from "./core";
+import { readSessionToken, requestJson } from "./core";
 
 export function getReviewDocuments(): Promise<{ documents: ReviewDocument[] }> {
   return requestJson<{ documents: ReviewDocument[] }>("/api/review/documents");
@@ -18,6 +18,23 @@ export function getReviewDocumentImages(source: string): Promise<{ document: str
   return requestJson<{ document: string; images: ReviewImage[] }>(
     `/api/review/document/images?source=${encodeURIComponent(source)}`
   );
+}
+
+export async function downloadReviewDocumentSource(source: string): Promise<Blob> {
+  const session = readSessionToken();
+  const response = await fetch(`/api/review/document/download?source=${encodeURIComponent(source)}`, {
+    headers: {
+      ...(session ? { Authorization: `Bearer ${session}` } : {})
+    }
+  });
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("circuitshelf-auth-expired"));
+  }
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Download failed with status ${response.status}`);
+  }
+  return response.blob();
 }
 
 export function approveReviewDocument(source: string, includeImages = true): Promise<{ ok: boolean }> {

@@ -1,6 +1,11 @@
+import { useState } from "react";
 import type { DocumentDetail, DocumentPage, DocumentSummary, StatusPayload } from "../../types";
 import { formatInteger } from "../../libs/format";
+import { downloadDocumentSource } from "../../libs/api";
+import { downloadBlob } from "../../libs/download";
+import { errorMessage } from "../../libs/errors";
 import { DatasheetIntelligencePanel } from "../DatasheetIntelligencePanel";
+import { ErrorMessage } from "../ErrorMessage";
 import { DocumentPageInspector } from "../DocumentPageInspector";
 import { DocumentStatsPanel } from "../DocumentStatsPanel";
 import { IngestStatusPanel } from "../IngestStatusPanel";
@@ -14,6 +19,7 @@ export function DocumentDetailPanel({
   isAdmin,
   selectedDocument,
   selectedPage,
+  scope,
   status,
   onOpenReview,
   onSelectPage
@@ -24,12 +30,31 @@ export function DocumentDetailPanel({
   isAdmin: boolean;
   selectedDocument: DocumentSummary | null;
   selectedPage: DocumentPage | null;
+  scope: "visible" | "global";
   status: StatusPayload | null;
   onOpenReview: () => void;
   onSelectPage: (page: number | string) => void;
 }) {
+  const [downloadBusy, setDownloadBusy] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
   const displayedChunkCount = selectedDocument?.chunkCount ?? detail?.ingestStats?.chunkCount ?? detail?.chunks.length ?? 0;
   const displayedImageCount = selectedDocument?.imageCount ?? detail?.ingestStats?.storedImageCount ?? detail?.images.length ?? 0;
+
+  async function downloadSource() {
+    if (!selectedDocument?.source) {
+      return;
+    }
+    setDownloadBusy(true);
+    setDownloadError("");
+    try {
+      const blob = await downloadDocumentSource(selectedDocument.source, scope);
+      downloadBlob(blob, selectedDocument.displayName || selectedDocument.source);
+    } catch (err) {
+      setDownloadError(errorMessage(err, "Could not download source document"));
+    } finally {
+      setDownloadBusy(false);
+    }
+  }
 
   return (
     <div className="chunk-panel document-detail-panel">
@@ -49,7 +74,15 @@ export function DocumentDetailPanel({
             ? "Loading document details..."
             : `${formatInteger(displayedChunkCount)} chunks | ${formatInteger(displayedImageCount)} images`
         }
+        actions={
+          selectedDocument ? (
+            <button className="ghost-button" type="button" onClick={() => void downloadSource()} disabled={downloadBusy || detailBusy}>
+              {downloadBusy ? "Preparing..." : "Download source"}
+            </button>
+          ) : null
+        }
       />
+      <ErrorMessage message={downloadError} />
       {detailBusy ? (
         <div className="document-loading">
           <LoadingSpinner />

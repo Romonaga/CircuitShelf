@@ -46,6 +46,27 @@ export function ReviewView({
     setContextMenu(null);
   }
 
+  async function reindexSelectedDocument() {
+    if (!review.selectedDocument) {
+      return;
+    }
+    await review.reindexDocument(review.selectedDocument);
+  }
+
+  async function downloadSelectedDocument() {
+    if (!review.selectedDocument) {
+      return;
+    }
+    await review.downloadDocument(review.selectedDocument);
+  }
+
+  async function removeSelectedDocument() {
+    if (!review.selectedDocument) {
+      return;
+    }
+    await removeDocument(review.selectedDocument);
+  }
+
   return (
     <section className="view-grid docs-grid">
       <ReviewDocumentList
@@ -71,8 +92,11 @@ export function ReviewView({
         chunkPreviewCap={review.chunkPreviewCap}
         chunks={review.chunks}
         detailBusy={review.detailBusy}
+        downloadSelected={() => void downloadSelectedDocument()}
         images={review.images}
         intelligence={review.intelligence}
+        reindexSelected={() => void reindexSelectedDocument()}
+        removeSelected={() => void removeSelectedDocument()}
         scopeAudit={review.scopeAudit}
         selectedDocument={review.selectedDocument}
         setChunkLimit={review.setChunkLimit}

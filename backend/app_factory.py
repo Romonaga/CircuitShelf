@@ -115,6 +115,7 @@ def register_api_routes(
         deps=api_dependencies,
         vector_store=vector_store,
         image_store=image_store,
+        training_dir=training_dir,
         refresh_active_state_from_db=refresh_active_state_from_db,
         start_index_check=start_index_check,
         remove_document_from_store=remove_document_from_store,

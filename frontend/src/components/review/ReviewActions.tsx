@@ -6,6 +6,9 @@ export function ReviewActions({
   canManageSystem,
   changeSelectedScope,
   detailBusy,
+  downloadSelected,
+  reindexSelected,
+  removeSelected,
   selectedDocument
 }: {
   actionBusy: boolean;
@@ -13,6 +16,9 @@ export function ReviewActions({
   canManageSystem: boolean;
   changeSelectedScope: (scope: "global" | "entity") => void;
   detailBusy: boolean;
+  downloadSelected: () => void;
+  reindexSelected: () => void;
+  removeSelected: () => void;
   selectedDocument: ReviewDocument;
 }) {
   const disabled = actionBusy || detailBusy;
@@ -36,6 +42,15 @@ export function ReviewActions({
           Make entity-private
         </button>
       ) : null}
+      <button className="ghost-button" onClick={downloadSelected} disabled={disabled}>
+        Download
+      </button>
+      <button className="ghost-button" onClick={reindexSelected} disabled={disabled}>
+        Re-index
+      </button>
+      <button className="danger-button" onClick={removeSelected} disabled={disabled}>
+        Delete
+      </button>
     </div>
   );
 }

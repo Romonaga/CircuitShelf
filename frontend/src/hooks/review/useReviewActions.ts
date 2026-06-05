@@ -1,10 +1,12 @@
 import { useState } from "react";
 import {
   approveReviewDocument,
+  downloadReviewDocumentSource,
   reindexReviewDocument,
   removeReviewDocument,
   updateReviewDocumentScope
 } from "../../libs/api";
+import { downloadBlob } from "../../libs/download";
 import { errorMessage } from "../../libs/errors";
 import { formatInteger } from "../../libs/format";
 import type { ReviewDocument, ReviewScopeAudit } from "../../types";
@@ -79,6 +81,24 @@ export function useReviewActions({
     });
   }
 
+  async function downloadDocument(document: ReviewActionDocument | null) {
+    if (!document) {
+      return;
+    }
+    setActionBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const blob = await downloadReviewDocumentSource(document.source);
+      downloadBlob(blob, document.displayName ?? document.source);
+      setMessage(`${document.displayName ?? document.source} downloaded.`);
+    } catch (err) {
+      setError(errorMessage(err, "Could not download document"));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   async function changeSelectedScope(scope: "global" | "entity") {
     if (!selectedDocument) {
       return;
@@ -95,6 +115,7 @@ export function useReviewActions({
     actionBusy,
     approveSelected,
     changeSelectedScope,
+    downloadDocument,
     reindexDocument,
     message,
     removeDocument,

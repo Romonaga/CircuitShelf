@@ -63,6 +63,7 @@ export function useReviewQueue({
     chunks: detail.chunks,
     detailBusy: detail.detailBusy,
     documents: documents.documents,
+    downloadDocument: actions.downloadDocument,
     error: documents.error,
     filter: documents.filter,
     filteredDocuments: documents.filteredDocuments,

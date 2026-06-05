@@ -150,6 +150,7 @@ export function DocumentsView({
         isAdmin={isAdmin}
         selectedDocument={browser.selectedDocument}
         selectedPage={browser.selectedPageDetail}
+        scope={scope}
         status={status}
         onOpenReview={onOpenReview}
         onSelectPage={browser.setSelectedPage}

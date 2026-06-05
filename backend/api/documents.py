@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from collections.abc import Callable
 
 from fastapi import APIRouter, File, Query, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from backend.api.dependencies import ApiDependencies
 from backend.services.document_detail_builder import DocumentDetailBuilder
@@ -41,6 +42,34 @@ def create_router(
         get_or_build_datasheet_intelligence=get_or_build_datasheet_intelligence,
         display_source_name=display_source_name,
     )
+
+    def visible_document_sources(req: Request, scope: str):
+        entity_id = None
+        stats_scope = "visible"
+        if scope == "global":
+            _, error = deps.require_system_admin_user(req)
+            if error:
+                return None, error
+            stats_scope = "global"
+        else:
+            _, entity, error = deps.require_entity_member(req)
+            if error:
+                return None, error
+            entity_id = entity.entity_id
+        return {
+            row["source_path"]
+            for row in vector_store.list_document_stats(entity_id=entity_id, scope=stats_scope)
+        }, None
+
+    def source_file_response(source: str):
+        rel_source = vector_store.rel_path_for_source(source, {"source": source})
+        training_root = os.path.abspath(training_dir)
+        target = os.path.abspath(os.path.join(training_dir, rel_source))
+        if not target.startswith(training_root + os.sep):
+            return JSONResponse({"error": "Document path is not allowed."}, status_code=400)
+        if not os.path.exists(target) or not os.path.isfile(target):
+            return JSONResponse({"error": "Source file is not available on disk."}, status_code=404)
+        return FileResponse(target, filename=os.path.basename(rel_source), media_type="application/octet-stream")
 
     @router.get("/api/documents")
     async def documents(req: Request, scope: str = Query("visible")):
@@ -187,44 +216,27 @@ def create_router(
 
     @router.get("/api/document")
     async def document_detail_query(req: Request, source: str, scope: str = Query("visible")):
-        entity_id = None
-        stats_scope = "visible"
-        if scope == "global":
-            _, error = deps.require_system_admin_user(req)
-            if error:
-                return error
-            stats_scope = "global"
-        else:
-            _, entity, error = deps.require_entity_member(req)
-            if error:
-                return error
-            entity_id = entity.entity_id
-        visible_sources = {
-            row["source_path"]
-            for row in vector_store.list_document_stats(entity_id=entity_id, scope=stats_scope)
-        }
+        visible_sources, error = visible_document_sources(req, scope)
+        if error:
+            return error
         if source not in visible_sources:
             return JSONResponse({"error": "Document not found."}, status_code=404)
         return detail_builder.build(source)
 
+    @router.get("/api/document/download")
+    async def document_download(req: Request, source: str, scope: str = Query("visible")):
+        visible_sources, error = visible_document_sources(req, scope)
+        if error:
+            return error
+        if source not in visible_sources:
+            return JSONResponse({"error": "Document not found."}, status_code=404)
+        return source_file_response(source)
+
     @router.get("/api/documents/{doc_name:path}")
     async def document_detail(req: Request, doc_name: str, scope: str = Query("visible")):
-        entity_id = None
-        stats_scope = "visible"
-        if scope == "global":
-            _, error = deps.require_system_admin_user(req)
-            if error:
-                return error
-            stats_scope = "global"
-        else:
-            _, entity, error = deps.require_entity_member(req)
-            if error:
-                return error
-            entity_id = entity.entity_id
-        visible_sources = {
-            row["source_path"]
-            for row in vector_store.list_document_stats(entity_id=entity_id, scope=stats_scope)
-        }
+        visible_sources, error = visible_document_sources(req, scope)
+        if error:
+            return error
         if doc_name not in visible_sources:
             return JSONResponse({"error": "Document not found."}, status_code=404)
         return detail_builder.build(doc_name)

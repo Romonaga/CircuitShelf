@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 
@@ -119,12 +120,23 @@ def create_router(
     deps: Any,
     vector_store: Any,
     image_store: Any,
+    training_dir: str,
     refresh_active_state_from_db: Callable[[], int],
     start_index_check: Callable[..., dict],
     remove_document_from_store: Callable[..., tuple[dict, int]],
     get_or_build_datasheet_intelligence: Callable[..., dict],
 ) -> APIRouter:
     router = APIRouter()
+
+    def source_file_response(source: str):
+        rel_source = vector_store.rel_path_for_source(source, {"source": source})
+        training_root = os.path.abspath(training_dir)
+        target = os.path.abspath(os.path.join(training_dir, rel_source))
+        if not target.startswith(training_root + os.sep):
+            return JSONResponse({"error": "Document path is not allowed."}, status_code=400)
+        if not os.path.exists(target) or not os.path.isfile(target):
+            return JSONResponse({"error": "Source file is not available on disk."}, status_code=404)
+        return FileResponse(target, filename=os.path.basename(rel_source), media_type="application/octet-stream")
 
     def authorize_review_read(req: Request, source: str):
         scope = vector_store.get_document_scope(source)
@@ -180,6 +192,13 @@ def create_router(
             return error
         rows = image_store.list_review_images(source)
         return {"document": source, "images": [review_image_payload(row) for row in rows]}
+
+    @router.get("/api/review/document/download")
+    async def review_document_download(req: Request, source: str):
+        _, _, error = authorize_review_read(req, source)
+        if error:
+            return error
+        return source_file_response(source)
 
     @router.post("/api/review/document/approve")
     async def review_document_approve(req: Request, payload: DocumentActionRequest):

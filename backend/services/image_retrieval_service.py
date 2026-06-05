@@ -7,7 +7,7 @@ class ImageRetrievalService:
         self.embedder = embedder
         self.image_store = image_store
 
-    def search_top_images(self, question: str, top_n: int = 4) -> list[tuple[str, float]]:
+    def search_top_images(self, question: str, top_n: int = 4, *, entity_id: int | None = None) -> list[tuple[str, float]]:
         action_keywords = ["click", "enter", "select", "choose", "screen", "dashboard", "button", "setting"]
         query_emb = self.embedder.encode(
             [question],
@@ -16,7 +16,7 @@ class ImageRetrievalService:
         ).astype("float32")
         results = []
 
-        for row in self.image_store.search_images(query_emb[0], top_k=top_n * 2):
+        for row in self.image_store.search_images(query_emb[0], top_k=top_n * 2, entity_id=entity_id):
             img_id = row["image_key"]
             score_boost = 0.0
             ocr_text = str(row.get("ocr_text") or "").lower()
@@ -34,7 +34,13 @@ class ImageRetrievalService:
             return doc_name, int(page_str)
         return img_id, -1
 
-    def build_image_markdown_blocks(self, question: str, selected_chunks: list[dict] | None = None) -> list[str]:
+    def build_image_markdown_blocks(
+        self,
+        question: str,
+        selected_chunks: list[dict] | None = None,
+        *,
+        entity_id: int | None = None,
+    ) -> list[str]:
         linked_images = []
         seen_images = set()
         for chunk in selected_chunks or []:
@@ -44,7 +50,7 @@ class ImageRetrievalService:
                 seen_images.add(image_id)
 
         matched_images = linked_images
-        for img_id, score in self.search_top_images(question, top_n=10):
+        for img_id, score in self.search_top_images(question, top_n=10, entity_id=entity_id):
             if img_id in seen_images:
                 continue
             matched_images.append((img_id, score))

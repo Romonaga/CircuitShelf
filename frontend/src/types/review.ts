@@ -62,6 +62,7 @@ export interface ReviewImage {
   height: number;
   imageMimeType?: string;
   imageBase64: string;
+  ocrText?: string;
 }
 
 export type ReviewDocumentPayload = {
