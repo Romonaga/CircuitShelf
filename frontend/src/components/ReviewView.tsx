@@ -1,6 +1,9 @@
+import { type MouseEvent, useState } from "react";
+import { DocumentContextMenu, type DocumentContextMenuState, type DocumentMenuItem } from "./DocumentContextMenu";
 import { ReviewDocumentDetail } from "./ReviewDocumentDetail";
 import { ReviewDocumentList } from "./ReviewDocumentList";
 import { initialChunkPreviewLimit, useReviewQueue } from "../hooks/useReviewQueue";
+import type { ReviewDocument } from "../types";
 
 export function ReviewView({
   canManageSystem,
@@ -14,6 +17,34 @@ export function ReviewView({
   onStatusChange: () => void;
 }) {
   const review = useReviewQueue({ isActive, refreshSignal, onStatusChange });
+  const [contextMenu, setContextMenu] = useState<DocumentContextMenuState | null>(null);
+
+  function selectReviewDocument(document: ReviewDocument) {
+    review.setChunkLimit(initialChunkPreviewLimit);
+    review.setSelected(document.source);
+  }
+
+  function openDocumentContextMenu(event: MouseEvent, document: ReviewDocument) {
+    event.preventDefault();
+    selectReviewDocument(document);
+    setContextMenu({ document, x: event.clientX, y: event.clientY });
+  }
+
+  async function reindexDocument(document: DocumentMenuItem) {
+    await review.reindexDocument(document);
+    setContextMenu(null);
+  }
+
+  async function removeDocument(document: DocumentMenuItem) {
+    const displayName = document.displayName ?? document.source;
+    const confirmed = window.confirm(`Remove ${displayName} from CircuitShelf?\n\nThis removes the pending review document and deletes the source file from the training folder.`);
+    if (!confirmed) {
+      setContextMenu(null);
+      return;
+    }
+    await review.removeDocument(document);
+    setContextMenu(null);
+  }
 
   return (
     <section className="view-grid docs-grid">
@@ -24,12 +55,10 @@ export function ReviewView({
         error={review.error}
         filter={review.filter}
         message={review.message}
+        onContextMenu={openDocumentContextMenu}
         onFilterChange={review.setFilter}
         onRefresh={review.loadDocuments}
-        onSelect={(document) => {
-          review.setChunkLimit(initialChunkPreviewLimit);
-          review.setSelected(document.source);
-        }}
+        onSelect={selectReviewDocument}
         selected={review.selected}
       />
       <ReviewDocumentDetail
@@ -44,12 +73,18 @@ export function ReviewView({
         detailBusy={review.detailBusy}
         images={review.images}
         intelligence={review.intelligence}
-        reindexSelected={review.reindexSelected}
-        removeSelected={review.removeSelected}
         scopeAudit={review.scopeAudit}
         selectedDocument={review.selectedDocument}
         setChunkLimit={review.setChunkLimit}
         totalChunkCount={review.totalChunkCount}
+      />
+      <DocumentContextMenu
+        menu={contextMenu}
+        removing={review.actionBusy}
+        reindexing={review.actionBusy}
+        onClose={() => setContextMenu(null)}
+        onReindex={(document) => void reindexDocument(document)}
+        onRemove={(document) => void removeDocument(document)}
       />
     </section>
   );

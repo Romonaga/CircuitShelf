@@ -1,10 +1,10 @@
 import { type MouseEvent, useState } from "react";
-import { removeIndexedDocument, triggerIndexCheck } from "../libs/api";
+import { reindexReviewDocument, removeIndexedDocument, triggerIndexCheck } from "../libs/api";
 import type { DocumentSummary, StatusPayload } from "../types";
 import { errorMessage } from "../libs/errors";
 import { formatInteger } from "../libs/format";
 import { useDocumentBrowser } from "../hooks/useDocumentBrowser";
-import { DocumentContextMenu, type DocumentContextMenuState } from "./DocumentContextMenu";
+import { DocumentContextMenu, type DocumentContextMenuState, type DocumentMenuItem } from "./DocumentContextMenu";
 import { DocumentUploadPanel } from "./DocumentUploadPanel";
 import { DocumentDetailPanel } from "./documents/DocumentDetailPanel";
 import { DocumentListPanel } from "./documents/DocumentListPanel";
@@ -38,6 +38,7 @@ export function DocumentsView({
   const [message, setMessage] = useState("");
   const [busyAction, setBusyAction] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
   const [contextMenu, setContextMenu] = useState<DocumentContextMenuState | null>(null);
 
   async function runIndexCheck() {
@@ -64,7 +65,24 @@ export function DocumentsView({
     setContextMenu({ document, x: event.clientX, y: event.clientY });
   }
 
-  async function removeDocument(document: DocumentSummary) {
+  async function reindexDocument(document: DocumentMenuItem) {
+    const displayName = document.displayName ?? document.source;
+    setReindexing(true);
+    browser.setError("");
+    setMessage("");
+    try {
+      const result = await reindexReviewDocument(document.source);
+      setMessage(`${displayName} queued for re-index${result.indexing?.jobId ? ` as job ${formatInteger(result.indexing.jobId)}` : ""}.`);
+      onStatusChange();
+    } catch (err) {
+      browser.setError(errorMessage(err, "Could not re-index document"));
+    } finally {
+      setContextMenu(null);
+      setReindexing(false);
+    }
+  }
+
+  async function removeDocument(document: DocumentMenuItem) {
     const displayName = document.displayName ?? document.source;
     const confirmed = window.confirm(
       `Remove ${displayName} from CircuitShelf?\n\nThis removes its database rows and deletes the source file from the training folder so it is not re-indexed.`
@@ -140,7 +158,9 @@ export function DocumentsView({
         <DocumentContextMenu
           menu={contextMenu}
           removing={removing}
+          reindexing={reindexing}
           onClose={() => setContextMenu(null)}
+          onReindex={(document) => void reindexDocument(document)}
           onRemove={(document) => void removeDocument(document)}
         />
       ) : null}

@@ -9,6 +9,8 @@ import { errorMessage } from "../../libs/errors";
 import { formatInteger } from "../../libs/format";
 import type { ReviewDocument, ReviewScopeAudit } from "../../types";
 
+type ReviewActionDocument = Pick<ReviewDocument, "source"> & { displayName?: string };
+
 export function useReviewActions({
   selectedDocument,
   clearDetails,
@@ -57,23 +59,23 @@ export function useReviewActions({
     });
   }
 
-  async function removeSelected() {
-    if (!selectedDocument) {
+  async function removeDocument(document: ReviewActionDocument | null) {
+    if (!document) {
       return;
     }
     await runDocumentAction("Could not remove document", async () => {
-      await removeReviewDocument(selectedDocument.source);
-      setMessage(`${selectedDocument.displayName} removed.`);
+      await removeReviewDocument(document.source);
+      setMessage(`${document.displayName ?? document.source} removed.`);
     });
   }
 
-  async function reindexSelected() {
-    if (!selectedDocument) {
+  async function reindexDocument(document: ReviewActionDocument | null) {
+    if (!document) {
       return;
     }
     await runDocumentAction("Could not re-index document", async () => {
-      const result = await reindexReviewDocument(selectedDocument.source);
-      setMessage(`${selectedDocument.displayName} queued for re-index${result.indexing?.jobId ? ` as job ${formatInteger(result.indexing.jobId)}` : ""}.`);
+      const result = await reindexReviewDocument(document.source);
+      setMessage(`${document.displayName ?? document.source} queued for re-index${result.indexing?.jobId ? ` as job ${formatInteger(result.indexing.jobId)}` : ""}.`);
     });
   }
 
@@ -93,8 +95,8 @@ export function useReviewActions({
     actionBusy,
     approveSelected,
     changeSelectedScope,
+    reindexDocument,
     message,
-    reindexSelected,
-    removeSelected
+    removeDocument,
   };
 }

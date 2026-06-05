@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import type { ReviewDocument } from "../types";
 import { formatInteger } from "../libs/format";
 import { ErrorMessage } from "./ErrorMessage";
@@ -11,6 +12,7 @@ export function ReviewDocumentList({
   error,
   filter,
   message,
+  onContextMenu,
   onFilterChange,
   onRefresh,
   onSelect,
@@ -22,6 +24,7 @@ export function ReviewDocumentList({
   error: string;
   filter: string;
   message: string;
+  onContextMenu: (event: MouseEvent, document: ReviewDocument) => void;
   onFilterChange: (value: string) => void;
   onRefresh: () => void;
   onSelect: (document: ReviewDocument) => void;
@@ -47,6 +50,7 @@ export function ReviewDocumentList({
             key={document.source}
             className={document.source === selected ? "document-row active" : "document-row"}
             onClick={() => onSelect(document)}
+            onContextMenu={(event) => onContextMenu(event, document)}
           >
             <span>{document.displayName}</span>
             <small className="review-row-meta">

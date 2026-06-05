@@ -1,8 +1,12 @@
 import { useEffect, useRef } from "react";
-import type { DocumentSummary } from "../types";
+
+export interface DocumentMenuItem {
+  source: string;
+  displayName?: string;
+}
 
 export interface DocumentContextMenuState {
-  document: DocumentSummary;
+  document: DocumentMenuItem;
   x: number;
   y: number;
 }
@@ -10,13 +14,17 @@ export interface DocumentContextMenuState {
 export function DocumentContextMenu({
   menu,
   removing,
+  reindexing,
   onClose,
+  onReindex,
   onRemove
 }: {
   menu: DocumentContextMenuState | null;
   removing: boolean;
+  reindexing?: boolean;
   onClose: () => void;
-  onRemove: (document: DocumentSummary) => void;
+  onReindex?: (document: DocumentMenuItem) => void;
+  onRemove: (document: DocumentMenuItem) => void;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -53,12 +61,18 @@ export function DocumentContextMenu({
 
   const displayName = menu.document.displayName ?? menu.document.source;
   const left = Math.max(8, Math.min(menu.x, window.innerWidth - 250));
-  const top = Math.max(8, Math.min(menu.y, window.innerHeight - 118));
+  const top = Math.max(8, Math.min(menu.y, window.innerHeight - 164));
+  const busy = Boolean(removing || reindexing);
 
   return (
     <div ref={menuRef} className="document-context-menu" style={{ left, top }} role="menu">
       <div className="document-context-title">{displayName}</div>
-      <button type="button" role="menuitem" className="danger-menu-item" onClick={() => onRemove(menu.document)} disabled={removing}>
+      {onReindex ? (
+        <button type="button" role="menuitem" onClick={() => onReindex(menu.document)} disabled={busy}>
+          {reindexing ? "Queueing re-index..." : "Re-index document"}
+        </button>
+      ) : null}
+      <button type="button" role="menuitem" className="danger-menu-item" onClick={() => onRemove(menu.document)} disabled={busy}>
         {removing ? "Removing..." : "Remove document"}
       </button>
     </div>

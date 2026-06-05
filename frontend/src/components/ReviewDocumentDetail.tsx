@@ -22,8 +22,6 @@ export function ReviewDocumentDetail({
   detailBusy,
   images,
   intelligence,
-  reindexSelected,
-  removeSelected,
   scopeAudit,
   selectedDocument,
   setChunkLimit,
@@ -40,8 +38,6 @@ export function ReviewDocumentDetail({
   detailBusy: boolean;
   images: ReviewImage[];
   intelligence: DatasheetIntelligence | null;
-  reindexSelected: () => void;
-  removeSelected: () => void;
   scopeAudit: ReviewScopeAudit[];
   selectedDocument: ReviewDocument | null;
   setChunkLimit: (limit: number) => void;
@@ -64,8 +60,6 @@ export function ReviewDocumentDetail({
               canManageSystem={canManageSystem}
               changeSelectedScope={changeSelectedScope}
               detailBusy={detailBusy}
-              reindexSelected={reindexSelected}
-              removeSelected={removeSelected}
               selectedDocument={selectedDocument}
             />
           ) : null
