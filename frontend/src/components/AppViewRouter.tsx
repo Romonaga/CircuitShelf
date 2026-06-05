@@ -17,6 +17,7 @@ import {
   SettingsView,
   StatusView,
   TraceView,
+  WorkView,
 } from "./app/LazyViews";
 import { ViewPane } from "./app/ViewPane";
 import { LoadingSpinner } from "./LoadingSpinner";
@@ -113,6 +114,9 @@ export function AppViewRouter({
             isActive={activeView === "performance"}
             onOpenReview={() => setActiveView("review")}
           />
+        </ViewPane>
+        <ViewPane activeView={activeView} view="work" mounted={visitedViews.has("work")}>
+          <WorkView isActive={activeView === "work"} status={status} />
         </ViewPane>
         <ViewPane activeView={activeView} view="aiUsage" mounted={visitedViews.has("aiUsage")}>
           <AIUsageView

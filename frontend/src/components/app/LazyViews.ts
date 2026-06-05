@@ -13,3 +13,4 @@ export const RuntimeCatalogView = lazy(() => import("../RuntimeCatalogView").the
 export const SettingsView = lazy(() => import("../SettingsView").then((module) => ({ default: module.SettingsView })));
 export const StatusView = lazy(() => import("../StatusView").then((module) => ({ default: module.StatusView })));
 export const TraceView = lazy(() => import("../TraceView").then((module) => ({ default: module.TraceView })));
+export const WorkView = lazy(() => import("../WorkView").then((module) => ({ default: module.WorkView })));

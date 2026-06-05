@@ -1,6 +1,6 @@
 import type { QueryOptions, RetrievalStrategy } from "./query";
 
-export type View = "ask" | "bench" | "finder" | "inventory" | "documents" | "corpus" | "review" | "trace" | "status" | "performance" | "aiUsage" | "settings" | "runtime" | "entity" | "account";
+export type View = "ask" | "bench" | "finder" | "inventory" | "documents" | "corpus" | "review" | "trace" | "status" | "performance" | "work" | "aiUsage" | "settings" | "runtime" | "entity" | "account";
 
 export interface EntityContext {
   id: number;

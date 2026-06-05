@@ -57,6 +57,7 @@ export function AppShell({
     trace: "Trace",
     status: "Status",
     performance: "Performance",
+    work: "Work",
     aiUsage: "AI Usage",
     settings: "Admin Settings",
     runtime: "Runtime Catalog",
@@ -86,6 +87,7 @@ export function AppShell({
         { id: "trace" as View, label: "Trace" },
         { id: "status" as View, label: "Status" },
         { id: "performance" as View, label: "Performance" },
+        { id: "work" as View, label: "Work" },
         { id: "aiUsage" as View, label: "AI Usage" }
       ]
     },

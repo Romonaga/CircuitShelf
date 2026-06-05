@@ -4,7 +4,6 @@ import { usePerformanceReport } from "../hooks/usePerformanceReport";
 import { usePerformanceHistory } from "../hooks/charts/usePerformanceHistory";
 import { IngestStatusPanel } from "./IngestStatusPanel";
 import { LoadingSpinner } from "./LoadingSpinner";
-import { RecentWorkTable } from "./RecentWorkTable";
 import { RuntimeBatchPanel } from "./RuntimeBatchPanel";
 import { SectionHeader } from "./SectionHeader";
 import { PerformanceChartDeck } from "./performance/PerformanceChartDeck";
@@ -24,7 +23,6 @@ export function PerformanceView({
 }) {
   const report = usePerformanceReport(isActive, 24, status?.ingest?.lastFinishedAt ?? "");
   const [chartChoice, setChartChoice] = useState<PerformanceChartChoice>("utilization");
-  const [showIndexChecks, setShowIndexChecks] = useState(false);
   const resources = status?.systemResources;
   const runtimePeaks = resources?.peaks;
   const { history, peaks } = usePerformanceHistory({
@@ -34,7 +32,7 @@ export function PerformanceView({
   });
   const peakWorkers = Math.max(runtimePeaks?.activeDocumentWorkers ?? 0, peaks.workers ?? 0);
   const recentWork = report.report?.recentWork ?? [];
-  const visibleRecentWork = showIndexChecks ? recentWork : recentWork.filter((row) => row.workType !== "index_check");
+  const chartWorkRows = recentWork.filter((row) => row.workType !== "index_check");
   const initialPerformanceLoad = report.loading && !report.report;
 
   return (
@@ -63,7 +61,7 @@ export function PerformanceView({
           <PerformanceChartDeck
             chartChoice={chartChoice}
             history={history}
-            visibleRecentWork={visibleRecentWork}
+            visibleRecentWork={chartWorkRows}
             loadingInitial={initialPerformanceLoad}
           />
         </div>
@@ -78,7 +76,6 @@ export function PerformanceView({
           />
         </aside>
       </div>
-      <RecentWorkTable rows={visibleRecentWork} showIndexChecks={showIndexChecks} onShowIndexChecksChange={setShowIndexChecks} />
     </section>
   );
 }

@@ -15,6 +15,7 @@ const AUTHENTICATED_VIEWS = new Set<View>([
   "trace",
   "status",
   "performance",
+  "work",
   "aiUsage",
   "account"
 ]);
