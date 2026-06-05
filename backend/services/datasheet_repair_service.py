@@ -115,11 +115,22 @@ class DatasheetRepairService:
             score = 0
             for marker in (
                 "pin functions",
+                "pin function",
                 "pin description",
                 "pin descriptions",
                 "pin configuration",
+                "pin configurations",
+                "pin assignment",
+                "pin assignments",
+                "pin arrangement",
+                "pin no",
+                "pin number",
+                "lead configuration",
+                "lead assignments",
                 "connection diagram",
+                "terminal function",
                 "terminal functions",
+                "terminal assignment",
                 "terminal assignments",
                 "electrical characteristics",
                 "recommended operating",
@@ -127,6 +138,22 @@ class DatasheetRepairService:
             ):
                 if marker in lowered:
                     score += 5
+            pin_signal_hits = len(
+                re.findall(
+                    r"\b(?:anode|cathode|emitter|collector|base|vcc|vdd|vss|vee|gnd|"
+                    r"sda|scl|addr|out|output|input|reset|trigger|threshold|discharge|"
+                    r"control|nc|no\s+connection)\b",
+                    lowered,
+                )
+            )
+            if pin_signal_hits >= 3:
+                score += min(6, pin_signal_hits)
+            if re.search(
+                r"\b(?:A|C|K|NC)\s+\d{1,2}\s+\d{1,2}\s+(?:B|C|E|NC)\b",
+                cleaned,
+                re.IGNORECASE,
+            ):
+                score += 8
             if re.search(r"\b(?:vcc|vdd|gnd|supply voltage|operating voltage|output current)\b", lowered):
                 score += 2
             page = (metadata[index] if index < len(metadata) else {}).get("page")

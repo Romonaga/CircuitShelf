@@ -8,7 +8,7 @@ export function DocumentPageInspector({ page }: { page: DocumentPage }) {
       <div className="document-page-toolbar">
         <strong>Page {page.page}</strong>
         <span>{formatInteger(page.chunks.length)} chunks</span>
-        <span>{formatInteger(page.images.length)} image assets available to retrieval</span>
+        <span>{formatInteger(page.images.length)} image assets</span>
       </div>
 
       <DocumentImageGallery images={page.images} />

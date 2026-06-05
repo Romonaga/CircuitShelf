@@ -24,6 +24,30 @@ class PinoutExtractorTests(unittest.TestCase):
             ],
         )
 
+    def test_extracts_side_by_side_optocoupler_diagram_pinout(self):
+        chunks = [
+            """Optocoupler, Phototransistor Output, With Base Connection
+Input-output coupling capacitance < 0.5 pF A 1 6 B
+Industry Standard Dual-in line 6-pin package
+C 2 5 C
+Agency Approvals NC 3 4 E"""
+        ]
+        metadata = [{"source": "training/opto.pdf", "page": 2}]
+
+        pinout = extract_pinout_map(chunks, metadata, "training/opto.pdf")
+
+        self.assertEqual(
+            [(pin["pin"], pin["function"]) for pin in pinout["pins"]],
+            [
+                (1, "Anode"),
+                (2, "Cathode"),
+                (3, "No connection"),
+                (4, "Emitter"),
+                (5, "Collector"),
+                (6, "Base"),
+            ],
+        )
+
     def test_extracts_direct_pin_lines(self):
         chunks = ["Pin 1: VCC\nPin 2: GND"]
         metadata = [{"source": "timer.pdf", "page": 1}]

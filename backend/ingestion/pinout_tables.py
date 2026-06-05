@@ -120,21 +120,85 @@ def extract_compact_optocoupler_pinout(
     page: int | None,
     chunk_index: int | None,
 ) -> list[PinoutPin]:
-    """Handle common PDF-extracted optocoupler diagram text."""
+    """Handle common PDF/OCR-extracted 6-pin optocoupler diagram text.
+
+    These diagrams are often not real tables after extraction. They commonly
+    arrive as either a flattened top-view sequence or three side-by-side rows:
+    ``A 1 6 B``, ``C 2 5 C``, ``NC 3 4 E``.
+    """
 
     flattened = re.sub(r"\s+", " ", text or "").strip()
-    pattern = re.compile(r"\b1\s+2\s+3\s+6\s+5\s+4\s+B\s+C\s+E\s+A\s+C\s+NC\b", re.IGNORECASE)
-    if not pattern.search(flattened):
-        return []
+    if re.search(r"\b1\s+2\s+3\s+6\s+5\s+4\s+B\s+C\s+E\s+A\s+C\s+NC\b", flattened, re.IGNORECASE):
+        return _optocoupler_pins_from_side_labels(
+            left_labels=["A", "C", "NC"],
+            left_pins=[1, 2, 3],
+            right_labels=["B", "C", "E"],
+            right_pins=[6, 5, 4],
+            source=source,
+            page=page,
+            chunk_index=chunk_index,
+        )
 
-    mapping = [
-        (1, "A", "input"),
-        (2, "C", "input"),
-        (3, "NC", ""),
-        (4, "E", "output"),
-        (5, "C", "output"),
-        (6, "B", "output"),
-    ]
+    side_rows = _extract_side_by_side_pin_rows(text)
+    if len(side_rows) >= 3:
+        left_labels = [row[0] for row in side_rows[:3]]
+        left_pins = [row[1] for row in side_rows[:3]]
+        right_pins = [row[2] for row in side_rows[:3]]
+        right_labels = [row[3] for row in side_rows[:3]]
+        left_compact = [clean_signal_label(label) for label in left_labels]
+        right_compact = [clean_signal_label(label) for label in right_labels]
+        if left_compact == ["A", "C", "NC"] and right_compact == ["B", "C", "E"]:
+            return _optocoupler_pins_from_side_labels(
+                left_labels=left_compact,
+                left_pins=left_pins,
+                right_labels=right_compact,
+                right_pins=right_pins,
+                source=source,
+                page=page,
+                chunk_index=chunk_index,
+            )
+
+    return []
+
+
+def _extract_side_by_side_pin_rows(text: str) -> list[tuple[str, int, int, str]]:
+    row_pattern = re.compile(
+        r"\b(?P<left>A|C|K|NC|N/C|NO\s+CONNECTION)\s+"
+        r"(?P<left_pin>\d{1,2})\s+"
+        r"(?P<right_pin>\d{1,2})\s+"
+        r"(?P<right>B|C|E|NC|N/C|NO\s+CONNECTION)\b",
+        re.IGNORECASE,
+    )
+    rows: list[tuple[str, int, int, str]] = []
+    for line in str(text or "").splitlines():
+        normalized = re.sub(r"\s+", " ", line).strip()
+        match = row_pattern.search(normalized)
+        if not match:
+            continue
+        rows.append(
+            (
+                match.group("left"),
+                int(match.group("left_pin")),
+                int(match.group("right_pin")),
+                match.group("right"),
+            )
+        )
+    return rows
+
+
+def _optocoupler_pins_from_side_labels(
+    *,
+    left_labels: list[str],
+    left_pins: list[int],
+    right_labels: list[str],
+    right_pins: list[int],
+    source: str,
+    page: int | None,
+    chunk_index: int | None,
+) -> list[PinoutPin]:
+    mapping: list[tuple[int, str, str]] = []
+    mapping.extend((pin, label, "input") for pin, label in zip(left_pins, left_labels, strict=False))
+    mapping.extend((pin, label, "output") for pin, label in zip(right_pins, right_labels, strict=False))
     return [
         PinoutPin(
             pin=pin,
@@ -145,6 +209,7 @@ def extract_compact_optocoupler_pinout(
             chunk_index=chunk_index,
         )
         for pin, label, role in mapping
+        if 1 <= pin <= 64 and is_signal_label(label)
     ]
 
 
