@@ -4465,15 +4465,7 @@ nav {
   background: var(--panel-soft);
 }
 
-.performance-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
-  gap: 18px;
-  align-items: start;
-}
-
-.performance-main,
-.performance-side {
+.performance-chart-workspace {
   display: grid;
   gap: 18px;
   min-width: 0;
@@ -5286,7 +5278,6 @@ nav {
   .ask-grid,
   .docs-grid,
   .settings-grid,
-  .performance-layout,
   .resource-panel {
     grid-template-columns: minmax(0, 1fr);
   }

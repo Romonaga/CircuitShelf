@@ -109,11 +109,7 @@ export function AppViewRouter({
           <StatusView status={status} refresh={refreshStatus} isActive={activeView === "status"} isAdmin={isAdmin} />
         </ViewPane>
         <ViewPane activeView={activeView} view="performance" mounted={visitedViews.has("performance")}>
-          <PerformanceView
-            status={status}
-            isActive={activeView === "performance"}
-            onOpenReview={() => setActiveView("review")}
-          />
+          <PerformanceView status={status} isActive={activeView === "performance"} />
         </ViewPane>
         <ViewPane activeView={activeView} view="work" mounted={visitedViews.has("work")}>
           <WorkView isActive={activeView === "work"} status={status} />

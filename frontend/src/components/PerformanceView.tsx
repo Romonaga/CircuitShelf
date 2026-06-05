@@ -2,9 +2,7 @@ import { useState } from "react";
 import type { StatusPayload } from "../types";
 import { usePerformanceReport } from "../hooks/usePerformanceReport";
 import { usePerformanceHistory } from "../hooks/charts/usePerformanceHistory";
-import { IngestStatusPanel } from "./IngestStatusPanel";
 import { LoadingSpinner } from "./LoadingSpinner";
-import { RuntimeBatchPanel } from "./RuntimeBatchPanel";
 import { SectionHeader } from "./SectionHeader";
 import { PerformanceChartDeck } from "./performance/PerformanceChartDeck";
 import { PerformanceChartSelector } from "./performance/PerformanceChartSelector";
@@ -14,12 +12,10 @@ import type { PerformanceChartChoice } from "./performance/chartTypes";
 
 export function PerformanceView({
   status,
-  isActive,
-  onOpenReview
+  isActive
 }: {
   status: StatusPayload | null;
   isActive: boolean;
-  onOpenReview: () => void;
 }) {
   const report = usePerformanceReport(isActive, 24, status?.ingest?.lastFinishedAt ?? "");
   const [chartChoice, setChartChoice] = useState<PerformanceChartChoice>("utilization");
@@ -55,26 +51,14 @@ export function PerformanceView({
       <PerformanceStatsGrid resources={resources} peaks={peaks} peakWorkers={peakWorkers} />
       <LiveResourcePressure resources={resources} />
 
-      <div className="performance-layout">
-        <div className="performance-main">
-          <PerformanceChartSelector value={chartChoice} onChange={setChartChoice} />
-          <PerformanceChartDeck
-            chartChoice={chartChoice}
-            history={history}
-            visibleRecentWork={chartWorkRows}
-            loadingInitial={initialPerformanceLoad}
-          />
-        </div>
-        <aside className="performance-side">
-          <RuntimeBatchPanel batches={status?.runtimeBatches} />
-          <IngestStatusPanel
-            ingest={status?.ingest}
-            workerBudget={status?.ingestWorkerBudget}
-            runtimeBatches={status?.runtimeBatches}
-            pendingReview={status?.pendingReview}
-            onOpenReview={onOpenReview}
-          />
-        </aside>
+      <div className="performance-chart-workspace">
+        <PerformanceChartSelector value={chartChoice} onChange={setChartChoice} />
+        <PerformanceChartDeck
+          chartChoice={chartChoice}
+          history={history}
+          visibleRecentWork={chartWorkRows}
+          loadingInitial={initialPerformanceLoad}
+        />
       </div>
     </section>
   );
