@@ -6,6 +6,7 @@ SELECT d.source_path,
        i.width_px,
        i.height_px,
        i.image_mime_type,
+       i.ocr_text,
        p.page_number,
        encode(i.image_bytes, 'base64') AS image_base64
 FROM documents d

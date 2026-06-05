@@ -12,7 +12,7 @@ class DocumentDetailBuilder:
         *,
         state: Any,
         vector_store: Any,
-        image_asset_belongs_to_document: Callable[[str, str], bool],
+        image_store: Any,
         extract_page_number: Callable[[str], int | None],
         document_source_from_metadata: Callable[[str, dict], str],
         source_image_id_from_metadata: Callable[[str, dict], str | None],
@@ -22,7 +22,7 @@ class DocumentDetailBuilder:
     ):
         self.state = state
         self.vector_store = vector_store
-        self.image_asset_belongs_to_document = image_asset_belongs_to_document
+        self.image_store = image_store
         self.extract_page_number = extract_page_number
         self.document_source_from_metadata = document_source_from_metadata
         self.source_image_id_from_metadata = source_image_id_from_metadata
@@ -37,30 +37,24 @@ class DocumentDetailBuilder:
         chunks = self.state.get_chunks()
         metadata = self.state.get_metadata()
         sources = self.state.get_sources()
-        image_store_payload = self.state.get_image_store()
-        image_captions = self.state.get_image_captions()
-        image_text = self.state.get_image_page_text()
-        image_mime_types = self.state.get_image_mime_types()
         intelligence_chunks = []
         intelligence_metadata = []
+        requested_doc = self.vector_store.rel_path_for_source(doc_name, {"source": doc_name})
 
-        for image_id, image_base64 in sorted(image_store_payload.items()):
-            if not self.image_asset_belongs_to_document(image_id, doc_name):
-                continue
-            page = self.extract_page_number(image_id) or None
+        for image_row in self.image_store.list_document_images(requested_doc):
+            image_id = image_row["image_key"]
+            page = image_row.get("page_number") or self.extract_page_number(image_id) or None
             image_payload = {
                 "imageKey": image_id,
-                "caption": image_captions.get(image_id, image_id),
+                "caption": image_row.get("caption") or image_id,
                 "page": page,
-                "imageMimeType": image_mime_types.get(image_id, "image/png"),
-                "imageBase64": image_base64,
-                "ocrText": image_text.get(image_id, ""),
+                "imageMimeType": image_row.get("image_mime_type") or "image/png",
+                "imageBase64": image_row.get("image_base64") or "",
+                "ocrText": image_row.get("ocr_text") or "",
             }
             image_assets.append(image_payload)
             if page is not None:
                 pages.setdefault(page, {"page": page, "chunks": [], "images": []})["images"].append(image_payload)
-
-        requested_doc = self.vector_store.rel_path_for_source(doc_name, {"source": doc_name})
 
         for idx, source in enumerate(sources):
             meta = metadata[idx] if idx < len(metadata) else {}
@@ -75,6 +69,7 @@ class DocumentDetailBuilder:
                 "section": meta.get("section", "Unknown"),
                 "category": meta.get("category", "Uncategorized"),
                 "page": meta.get("page"),
+                "chunkType": meta.get("chunk_type") or "native",
                 "sourceImageId": self.source_image_id_from_metadata(source, meta),
                 "tokens": TokenUtils.tokenize_len(text),
                 "preview": text[:500],

@@ -26,18 +26,6 @@ class FakeState:
     def get_sources(self):
         return self.sources
 
-    def get_image_store(self):
-        return {"4n35.pdf_page2_img1": "base64"}
-
-    def get_image_captions(self):
-        return {"4n35.pdf_page2_img1": "Pinout image"}
-
-    def get_image_page_text(self):
-        return {"4n35.pdf_page2_img1": "pin 1 anode pin 2 cathode"}
-
-    def get_image_mime_types(self):
-        return {"4n35.pdf_page2_img1": "image/png"}
-
 
 class FakeVectorStore:
     training_dir = "/repo/training"
@@ -63,11 +51,26 @@ class FakeVectorStore:
         ]
 
 
+class FakeImageStore:
+    def list_document_images(self, source_path):
+        assert source_path == "4n35.pdf"
+        return [
+            {
+                "image_key": "4n35.pdf_page2_img1",
+                "caption": "Pinout image",
+                "page_number": 2,
+                "image_mime_type": "image/png",
+                "image_base64": "base64",
+                "ocr_text": "pin 1 anode pin 2 cathode",
+            }
+        ]
+
+
 def test_document_detail_matches_full_path_state_sources_to_relative_document_name():
     builder = DocumentDetailBuilder(
         state=FakeState(),
         vector_store=FakeVectorStore(),
-        image_asset_belongs_to_document=lambda image_id, doc: image_id.startswith(f"{doc}_page"),
+        image_store=FakeImageStore(),
         extract_page_number=lambda image_id: 2 if "_page2_" in image_id else None,
         document_source_from_metadata=lambda source, metadata: metadata.get("parent_source") or source,
         source_image_id_from_metadata=lambda source, metadata: metadata.get("source_image_id"),

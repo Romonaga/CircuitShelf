@@ -72,6 +72,7 @@ def review_image_payload(row: Any) -> dict:
         "height": int(row["height_px"] or 0),
         "imageMimeType": row["image_mime_type"] or "image/png",
         "imageBase64": row["image_base64"],
+        "ocrText": row.get("ocr_text") or "",
     }
 
 

@@ -289,6 +289,9 @@ class ImageStore:
             rows = conn.execute(load_query("review_document_images.sql"), (source_path,)).fetchall()
         return [dict(row) for row in rows]
 
+    def list_document_images(self, source_path: str) -> list[dict]:
+        return self.list_review_images(source_path)
+
     def delete_document_images(self, source_path: str) -> None:
         with self.database.connection() as conn:
             conn.execute(load_query("review_document_images_delete.sql"), (source_path, source_path))

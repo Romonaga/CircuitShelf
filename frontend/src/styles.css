@@ -3993,6 +3993,27 @@ nav {
   padding-right: 3px;
 }
 
+.document-chunk-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.document-chunk-group-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text);
+}
+
+.document-chunk-group-title span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
 .chunk-row {
   padding: 14px;
   border: 1px solid var(--line);

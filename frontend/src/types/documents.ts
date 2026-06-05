@@ -67,6 +67,7 @@ export interface DocumentChunk {
   section: string;
   category: string;
   page?: number | string | null;
+  chunkType?: string;
   sourceImageId?: string | null;
   tokens: number;
   preview: string;

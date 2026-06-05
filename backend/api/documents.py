@@ -22,7 +22,6 @@ def create_router(
     state: Any,
     trace_logger: Any,
     start_index_check: Callable[..., dict],
-    image_asset_belongs_to_document: Callable[[str, str], bool],
     extract_page_number: Callable[[str], int | None],
     document_source_from_metadata: Callable[[str, dict], str],
     source_image_id_from_metadata: Callable[[str, dict], str | None],
@@ -34,7 +33,7 @@ def create_router(
     detail_builder = DocumentDetailBuilder(
         state=state,
         vector_store=vector_store,
-        image_asset_belongs_to_document=image_asset_belongs_to_document,
+        image_store=image_store,
         extract_page_number=extract_page_number,
         document_source_from_metadata=document_source_from_metadata,
         source_image_id_from_metadata=source_image_id_from_metadata,

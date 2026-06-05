@@ -1,9 +1,21 @@
+import { useEffect, useState } from "react";
 import type { DocumentImage } from "../types";
 import { formatInteger } from "../libs/format";
 
-export function DocumentImageGallery({ images }: { images: DocumentImage[] }) {
+export function DocumentImageGallery({ images, defaultOpen = false }: { images: DocumentImage[]; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const imageSignature = images.map((image) => image.imageKey).join("|");
+
+  useEffect(() => {
+    setOpen(defaultOpen);
+  }, [defaultOpen, imageSignature]);
+
   return (
-    <details className="document-image-details">
+    <details
+      className="document-image-details"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary>Image assets ({formatInteger(images.length)})</summary>
       {images.length ? (
         <div className="document-image-grid">
