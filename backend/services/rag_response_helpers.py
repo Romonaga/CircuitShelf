@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 
+from backend.services.answer_markdown import normalize_answer_markdown
 from backend.services.response_cache import ResponseCacheKey
 
 
@@ -20,7 +21,7 @@ class QueryTimingTracker:
 
 
 def assemble_final_markdown(response: str, image_blocks: list[str]) -> str:
-    answer_md = f"🧠 Answer\n\n{response}"
+    answer_md = f"🧠 Answer\n\n{normalize_answer_markdown(response)}"
     image_md = "🖼️ Related Images\n\n" + "\n\n".join(image_blocks) if image_blocks else ""
     return f"{answer_md}\n\n---\n\n{image_md}" if image_md else answer_md
 

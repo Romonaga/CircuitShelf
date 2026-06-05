@@ -55,7 +55,7 @@ class ImageStoreHelperTests(unittest.TestCase):
         self.assertEqual(mime_type, "image/webp")
         self.assertLess(len(stored_bytes), len(raw.getvalue()))
 
-    def test_keeps_original_when_webp_is_not_smaller(self):
+    def test_canonicalizes_valid_images_to_webp_even_when_not_smaller(self):
         store = ImageStore(None, "training")
         image = Image.effect_noise((100, 100), 80).convert("RGB")
         raw = BytesIO()
@@ -64,8 +64,8 @@ class ImageStoreHelperTests(unittest.TestCase):
         stored_bytes, mime_type, width, height = store._prepare_image_for_storage(raw.getvalue())
 
         self.assertEqual((width, height), (100, 100))
-        self.assertEqual(mime_type, "image/jpeg")
-        self.assertEqual(stored_bytes, raw.getvalue())
+        self.assertEqual(mime_type, "image/webp")
+        self.assertNotEqual(stored_bytes, raw.getvalue())
 
 
 if __name__ == "__main__":

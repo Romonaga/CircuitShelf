@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from backend.api.dependencies import ApiDependencies
+from backend.services.answer_markdown import display_chat_history_from_turns, normalize_answer_markdown
 
 
 class QueryRequest(BaseModel):
@@ -75,12 +76,18 @@ def create_router(
                 ai_context_type="conversation",
                 ai_context_id=str(conversation_id),
             )
-            stored_answer = chat_history[-1][1] if chat_history else answer
+            display_answer = normalize_answer_markdown(answer)
             api_sources = normalize_sources_for_api(sources)
+            existing_conversation = conversation_store.get(str(conversation_id), user_id) or {"turns": []}
+            display_chat_history = [
+                *display_chat_history_from_turns(existing_conversation.get("turns")),
+                [question, display_answer],
+            ]
             response_snapshot = {
                 "question": question,
-                "answer": answer,
-                "chatHistory": chat_history,
+                "answer": display_answer,
+                "chatHistory": display_chat_history,
+                "contextChatHistory": chat_history,
                 "sources": api_sources,
                 "cacheStats": cache_stats,
                 "confidence": confidence,
@@ -91,7 +98,7 @@ def create_router(
             conversation_store.append_turn(
                 conversation_id=str(conversation_id),
                 question=question,
-                answer=stored_answer,
+                answer=display_answer,
                 model_name=model_name,
                 retrieval_strategy=payload.strategy,
                 confidence_score=confidence,
@@ -102,8 +109,8 @@ def create_router(
             return {
                 "conversation": conversation,
                 "question": question,
-                "answer": answer,
-                "chatHistory": chat_history,
+                "answer": display_answer,
+                "chatHistory": display_chat_history,
                 "sources": api_sources,
                 "cacheStats": cache_stats,
                 "confidence": confidence,

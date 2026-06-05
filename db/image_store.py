@@ -383,19 +383,18 @@ class ImageStore:
 
     def _prepare_image_for_storage(self, image_bytes: bytes) -> tuple[bytes, str, int | None, int | None]:
         width, height = self._image_size(image_bytes)
-        optimized = self._to_webp_if_smaller(image_bytes)
-        if optimized:
+        optimized = self._to_webp(image_bytes)
+        if optimized is not None:
             if self.logger:
                 saved = len(image_bytes) - len(optimized)
-                self.logger.debug(
-                    f"Compressed image asset from {len(image_bytes)} to {len(optimized)} bytes "
-                    f"({saved / max(1, len(image_bytes)):.1%} smaller)."
-                )
+                direction = "Compressed" if saved >= 0 else "Canonicalized"
+                suffix = f"({saved / max(1, len(image_bytes)):.1%} smaller)" if saved >= 0 else f"({abs(saved)} bytes larger)"
+                self.logger.debug(f"{direction} image asset from {len(image_bytes)} to {len(optimized)} bytes {suffix}.")
             return optimized, "image/webp", width, height
         return image_bytes, self._detect_mime_type(image_bytes), width, height
 
     @staticmethod
-    def _to_webp_if_smaller(image_bytes: bytes) -> bytes | None:
+    def _to_webp(image_bytes: bytes) -> bytes | None:
         try:
             with Image.open(BytesIO(image_bytes)) as image:
                 image.load()
@@ -406,11 +405,11 @@ class ImageStore:
                     converted.save(output, format="WEBP", lossless=True, method=6)
                 else:
                     converted = image.convert("RGB")
-                    converted.save(output, format="WEBP", quality=88, method=6)
+                    converted.save(output, format="WEBP", quality=82, method=6)
                 candidate = output.getvalue()
         except Exception:
             return None
-        return candidate if candidate and len(candidate) < len(image_bytes) else None
+        return candidate or None
 
     @staticmethod
     def _detect_mime_type(image_bytes: bytes) -> str:

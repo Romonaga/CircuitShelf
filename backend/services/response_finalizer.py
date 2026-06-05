@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from backend.services.answer_markdown import normalize_answer_markdown
 
 RESPONSE_FINALIZER_SYSTEM_PROMPT = (
     "You are CircuitShelf's response finalizer. Review retrieval-grounded electronics "
@@ -142,6 +143,8 @@ def build_response_finalizer_prompt(
         "Rules:\n"
         "- Keep only facts supported by the answer and retrieved source summaries.\n"
         "- Improve Markdown structure and readability.\n"
+        "- revisedAnswer must be human-readable Markdown: headings, bullets, numbered steps, and table rows must use literal newline characters.\n"
+        "- Do not collapse the revisedAnswer into a single paragraph.\n"
         "- For wiring/build answers, make power, ground, pin-by-pin steps, checks, and warnings explicit when supported.\n"
         "- If something important is missing, say what must be verified instead of guessing.\n"
         "- Remove unrelated build-card content.\n"
@@ -169,7 +172,7 @@ def parse_response_finalizer_output(
     schema_issue = []
     if "revisedAnswer" not in data:
         schema_issue.append("Response finalizer did not return the requested review schema.")
-    revised = _clean_answer(data.get("revisedAnswer"), 20_000) or fallback_answer
+    revised = normalize_answer_markdown(_clean_answer(data.get("revisedAnswer"), 20_000)) or fallback_answer
     issues = _normalize_strings(data.get("issues"), 12)
     notes = _normalize_strings(data.get("notes"), 8)
     result = ResponseValidationResult(
