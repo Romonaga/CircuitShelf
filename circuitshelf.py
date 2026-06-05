@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from contextlib import asynccontextmanager
 
 from backend.app_factory import create_circuitshelf_app, register_api_routes
@@ -25,6 +26,19 @@ stores = boot.stores
 runtime = boot.runtime
 auth_dependencies = boot.auth_dependencies
 api_dependencies = boot.api_dependencies
+
+
+def load_active_catalog_in_background():
+    def run():
+        try:
+            runtime.cleanup_stale_tesseract_temp_files()
+            runtime.get_or_build_index()
+        except Exception as exc:
+            trace_logger.error(f"Active catalog background load failed: {exc}")
+
+    thread = threading.Thread(target=run, name="circuitshelf-active-catalog-loader", daemon=True)
+    thread.start()
+    return thread
 
 
 def enqueue_index_check(reason="manual", *, requested_by_user_id=None):
@@ -108,9 +122,8 @@ if __name__ == "__main__":
 
     try:
         with acquire_process_lock(server_pid_file, name="CircuitShelf web"):
-            runtime.cleanup_stale_tesseract_temp_files()
-            runtime.get_or_build_index()
             mount_react_app(app, react_dist_dir=runtime.react_dist_dir, logger=trace_logger)
+            load_active_catalog_in_background()
             trace_logger.info(f"🌐 CircuitShelf available at http://{app_host}:{app_port}")
             start_app_server(app, host=app_host, port=app_port)
     except ProcessLockError as exc:
