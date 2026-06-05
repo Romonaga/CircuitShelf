@@ -60,14 +60,16 @@ class DocumentDetailBuilder:
             if page is not None:
                 pages.setdefault(page, {"page": page, "chunks": [], "images": []})["images"].append(image_payload)
 
+        requested_doc = self.vector_store.rel_path_for_source(doc_name, {"source": doc_name})
+
         for idx, source in enumerate(sources):
             meta = metadata[idx] if idx < len(metadata) else {}
-            doc_source = self.document_source_from_metadata(source, meta)
-            if doc_source != doc_name:
+            doc_source = self._document_source(source, meta)
+            if doc_source != requested_doc:
                 continue
             text = chunks[idx] if idx < len(chunks) else ""
             intelligence_chunks.append(text)
-            intelligence_metadata.append({**meta, "source": doc_name, "parent_source": doc_name})
+            intelligence_metadata.append({**meta, "source": requested_doc, "parent_source": requested_doc})
             row = {
                 "index": idx,
                 "section": meta.get("section", "Unknown"),
@@ -88,8 +90,8 @@ class DocumentDetailBuilder:
             if image.get("ocrText"):
                 pinout_chunks.append(image["ocrText"])
                 pinout_metadata.append({
-                    "source": doc_name,
-                    "parent_source": doc_name,
+                    "source": requested_doc,
+                    "parent_source": requested_doc,
                     "page": image.get("page"),
                     "source_image_id": image.get("imageKey"),
                     "section": "Image OCR",
@@ -108,7 +110,12 @@ class DocumentDetailBuilder:
             "intelligence": intelligence,
         }
 
+    def _document_source(self, source: str, meta: dict) -> str:
+        candidate = self.document_source_from_metadata(source, meta)
+        return self.vector_store.rel_path_for_source(candidate, {**meta, "source": candidate})
+
     def _ingest_stats(self, doc_name: str) -> dict | None:
+        requested_doc = self.vector_store.rel_path_for_source(doc_name, {"source": doc_name})
         return next(
             (
                 {
@@ -121,7 +128,7 @@ class DocumentDetailBuilder:
                     "ocrImageTextCount": int(row["ocr_image_text_count"] or 0),
                 }
                 for row in self.vector_store.list_document_stats()
-                if row["source_path"] == doc_name
+                if row["source_path"] == requested_doc
             ),
             None,
         )
