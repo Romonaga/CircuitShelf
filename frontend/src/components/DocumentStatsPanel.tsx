@@ -1,11 +1,25 @@
-import type { DocumentDetail } from "../types";
+import type { DocumentDetail, DocumentSummary } from "../types";
 import { formatInteger, formatNumber } from "../libs/format";
 
 function uniquePageCount(detail: DocumentDetail): number {
   return new Set(detail.pages.map((page) => String(page.page))).size;
 }
 
-export function DocumentStatsPanel({ detail }: { detail: DocumentDetail | null }) {
+function countFromDetail(detail: DocumentDetail): { chunks: number; images: number; pages: number } {
+  return {
+    chunks: detail.ingestStats?.chunkCount ?? detail.chunks.length,
+    images: detail.ingestStats?.storedImageCount ?? detail.images.length,
+    pages: uniquePageCount(detail)
+  };
+}
+
+export function DocumentStatsPanel({
+  detail,
+  summary
+}: {
+  detail: DocumentDetail | null;
+  summary?: DocumentSummary | null;
+}) {
   if (!detail) {
     return <div className="empty-state compact">Select a document to inspect its catalog statistics.</div>;
   }
@@ -13,29 +27,38 @@ export function DocumentStatsPanel({ detail }: { detail: DocumentDetail | null }
   const factCount = detail.intelligence?.facts.length ?? 0;
   const pinCount = detail.pinout.pins.length;
   const stats = detail.ingestStats;
+  const detailCounts = countFromDetail(detail);
+  const catalogChunks = summary?.chunkCount ?? detailCounts.chunks;
+  const catalogImages = summary?.imageCount ?? detailCounts.images;
+  const catalogPages = detailCounts.pages;
 
   return (
     <div className="document-stats-panel">
       <div className="document-stat-grid">
         <div className="document-stat">
           <span>Pages</span>
-          <strong>{formatInteger(uniquePageCount(detail))}</strong>
+          <strong>{formatInteger(catalogPages)}</strong>
+          <small>with indexed content</small>
         </div>
         <div className="document-stat">
           <span>Chunks</span>
-          <strong>{formatInteger(detail.chunks.length)}</strong>
+          <strong>{formatInteger(catalogChunks)}</strong>
+          <small>{formatInteger(detail.chunks.length)} loaded here</small>
         </div>
         <div className="document-stat">
           <span>Image assets</span>
-          <strong>{formatInteger(detail.images.length)}</strong>
+          <strong>{formatInteger(catalogImages)}</strong>
+          <small>{formatInteger(detail.images.length)} loaded here</small>
         </div>
         <div className="document-stat">
           <span>Detected pins</span>
           <strong>{formatInteger(pinCount)}</strong>
+          <small>{pinCount ? "from datasheet intelligence" : "none detected"}</small>
         </div>
         <div className="document-stat">
           <span>Facts</span>
           <strong>{formatInteger(factCount)}</strong>
+          <small>{factCount ? "extracted facts" : "none detected"}</small>
         </div>
       </div>
 

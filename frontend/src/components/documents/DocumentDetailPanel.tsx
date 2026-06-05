@@ -28,6 +28,9 @@ export function DocumentDetailPanel({
   onOpenReview: () => void;
   onSelectPage: (page: number | string) => void;
 }) {
+  const displayedChunkCount = selectedDocument?.chunkCount ?? detail?.ingestStats?.chunkCount ?? detail?.chunks.length ?? 0;
+  const displayedImageCount = selectedDocument?.imageCount ?? detail?.ingestStats?.storedImageCount ?? detail?.images.length ?? 0;
+
   return (
     <div className="chunk-panel">
       {isAdmin ? (
@@ -41,7 +44,11 @@ export function DocumentDetailPanel({
       ) : null}
       <SectionHeader
         title={selectedDocument?.displayName ?? selectedDocument?.source ?? "No document selected"}
-        description={detailBusy ? "Loading document details..." : `${formatInteger(detail?.chunks.length ?? 0)} chunks | ${formatInteger(detail?.images.length ?? 0)} images`}
+        description={
+          detailBusy
+            ? "Loading document details..."
+            : `${formatInteger(displayedChunkCount)} chunks | ${formatInteger(displayedImageCount)} images`
+        }
       />
       {detailBusy ? (
         <div className="document-loading">
@@ -49,7 +56,7 @@ export function DocumentDetailPanel({
           <span>Loading document details...</span>
         </div>
       ) : null}
-      {!detailBusy ? <DocumentStatsPanel detail={detail} /> : null}
+      {!detailBusy ? <DocumentStatsPanel detail={detail} summary={selectedDocument} /> : null}
       {!detailBusy ? <DatasheetIntelligencePanel intelligence={detail?.intelligence} /> : null}
       {!detailBusy && detail?.pages.length ? (
         <div className="document-explorer">

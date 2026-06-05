@@ -3671,10 +3671,12 @@ nav {
 .document-stats-panel {
   display: grid;
   gap: 12px;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel-soft);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 42%),
+    var(--panel-soft);
 }
 
 .document-stat-grid {
@@ -3685,15 +3687,17 @@ nav {
 
 .document-stat {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
-  padding: 10px;
+  min-height: 76px;
+  padding: 11px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .document-stat span,
+.document-stat small,
 .document-detection-summary span,
 .document-detection-summary p {
   color: var(--muted);
@@ -3701,14 +3705,37 @@ nav {
   line-height: 1.35;
 }
 
+.document-stat span {
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
 .document-stat strong {
-  font-size: 1.05rem;
+  color: var(--ink);
+  font-size: 1.2rem;
   line-height: 1.1;
+}
+
+.document-stat small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .document-detection-summary {
   display: grid;
   gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.document-detection-summary strong {
+  color: var(--ink);
 }
 
 .document-pinout-details {
@@ -3857,7 +3884,7 @@ nav {
   color: var(--muted);
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--panel);
   font-size: 0.78rem;
   font-weight: 700;
 }
