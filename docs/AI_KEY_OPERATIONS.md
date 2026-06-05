@@ -5,24 +5,30 @@ The encryption secret is runtime infrastructure, not an application setting.
 
 ## Secret Location
 
-Set the key encryption secret with `AI_KEY_ENCRYPTION_SECRET`.
-
-For the systemd service, put it in:
+Store the key encryption secret in an OS-protected file. By default CircuitShelf reads:
 
 ```bash
-/etc/circuitshelf/circuitshelf.env
+/etc/circuitshelf/ai-key-encryption.secret
 ```
 
-The service unit loads that file with `EnvironmentFile=-/etc/circuitshelf/circuitshelf.env`.
-Keep the file owned by root and readable only by the service group.
-
-Example shape:
+The file should contain only the secret value, with no `KEY=` prefix:
 
 ```bash
-AI_KEY_ENCRYPTION_SECRET=replace-with-a-long-random-secret
+replace-with-a-long-random-secret
 ```
 
-Legacy `config/config.yaml` secrets are still read with a warning so an older local install can boot, but new installs should not store provider-key encryption material in YAML.
+Keep the file owned by root and readable only by the service group:
+
+```bash
+sudo install -d -m 750 -o root -g hellweek /etc/circuitshelf
+openssl rand -base64 48 | sudo tee /etc/circuitshelf/ai-key-encryption.secret >/dev/null
+sudo chown root:hellweek /etc/circuitshelf/ai-key-encryption.secret
+sudo chmod 640 /etc/circuitshelf/ai-key-encryption.secret
+```
+
+If you need a non-default path, set `AI_KEY_ENCRYPTION_SECRET_FILE` in `config/config.yaml`.
+
+`AI_KEY_ENCRYPTION_SECRET` in the process environment and legacy YAML secrets are still read as compatibility fallbacks with warnings. New installs should not use them.
 
 ## Backup
 
@@ -32,7 +38,7 @@ Back up encrypted provider-key rows before DB maintenance or secret rotation:
 .venv/bin/python tools/ai_key_ops.py backup --output /secure/path/circuitshelf-ai-keys.json
 ```
 
-The backup contains encrypted keys, previews, billing settings, key policies, assist mode, and default models. It is only useful with the matching `AI_KEY_ENCRYPTION_SECRET`, so keep both protected.
+The backup contains encrypted keys, previews, billing settings, key policies, assist mode, and default models. It is only useful with the matching AI key encryption secret file, so keep both protected.
 
 ## Restore
 
@@ -49,20 +55,20 @@ Restore does not decrypt keys. It writes the encrypted values back into the syst
 Rotate when the infrastructure secret may be exposed or as scheduled maintenance:
 
 ```bash
-AI_KEY_ENCRYPTION_SECRET_OLD=old-secret \
-AI_KEY_ENCRYPTION_SECRET=new-secret \
-.venv/bin/python tools/ai_key_ops.py rotate-secret
+.venv/bin/python tools/ai_key_ops.py rotate-secret \
+  --old-secret-file /secure/path/old-ai-key-encryption.secret \
+  --new-secret-file /secure/path/new-ai-key-encryption.secret
 ```
 
-The command decrypts each stored provider key with the old secret and re-encrypts it with the new secret inside one database transaction. After the command succeeds, update `/etc/circuitshelf/circuitshelf.env` to the new secret and restart CircuitShelf.
+The command decrypts each stored provider key with the old secret and re-encrypts it with the new secret inside one database transaction. After the command succeeds, install the new secret at `/etc/circuitshelf/ai-key-encryption.secret` and restart CircuitShelf.
 
 Recommended order:
 
 1. Run an AI key backup.
 2. Generate a long random new secret.
 3. Run `rotate-secret`.
-4. Update the service environment file.
+4. Install the new secret file.
 5. Restart CircuitShelf.
 6. Test system, entity, and user OpenAI key paths from the UI.
 
-Do not rotate the secret by editing the environment file alone. Existing encrypted rows will become unreadable until they are re-encrypted or restored from a backup made with the previous secret.
+Do not rotate the secret by replacing the file alone. Existing encrypted rows will become unreadable until they are re-encrypted or restored from a backup made with the previous secret.

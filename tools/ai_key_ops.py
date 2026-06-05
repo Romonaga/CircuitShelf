@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from db.ai_key_secret import load_ai_key_encryption_secret  # noqa: E402
 from db.sql import load_query  # noqa: E402
 
 
@@ -37,7 +38,7 @@ def backup_keys(database_url: str, output_path: Path) -> None:
     payload = {
         "format": "circuitshelf-ai-provider-key-backup-v1",
         "createdAt": datetime.now(timezone.utc).isoformat(),
-        "warning": "Contains encrypted provider keys. Keep with the matching AI_KEY_ENCRYPTION_SECRET.",
+        "warning": "Contains encrypted provider keys. Keep with the matching CircuitShelf AI key encryption secret file.",
         "rows": rows,
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -119,6 +120,14 @@ def rotate_secret(database_url: str, old_secret: str, new_secret: str) -> None:
             conn.execute(load_query("ai_provider_user_secret_rotate.sql"), (old_secret, new_secret))
 
 
+def secret_from_arg_or_file(value: str, file_path: Path | None) -> str:
+    if value:
+        return value
+    if file_path:
+        return file_path.read_text(encoding="utf-8").strip()
+    return ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Backup, restore, or rotate encrypted CircuitShelf AI provider keys.")
     parser.add_argument("--database-url", default=load_database_url())
@@ -132,7 +141,9 @@ def main() -> int:
 
     rotate = subparsers.add_parser("rotate-secret", help="Re-encrypt stored provider keys with a new secret.")
     rotate.add_argument("--old-secret", default=os.environ.get("AI_KEY_ENCRYPTION_SECRET_OLD", ""))
-    rotate.add_argument("--new-secret", default=os.environ.get("AI_KEY_ENCRYPTION_SECRET", ""))
+    rotate.add_argument("--old-secret-file", type=Path)
+    rotate.add_argument("--new-secret", default="")
+    rotate.add_argument("--new-secret-file", type=Path)
 
     args = parser.parse_args()
     if not args.database_url:
@@ -148,8 +159,12 @@ def main() -> int:
         print(f"Restored {count} encrypted AI provider settings.")
         return 0
     if args.command == "rotate-secret":
-        rotate_secret(args.database_url, args.old_secret, args.new_secret)
-        print("Rotated encrypted AI provider keys. Update AI_KEY_ENCRYPTION_SECRET before restarting services.")
+        old_secret = secret_from_arg_or_file(args.old_secret, args.old_secret_file)
+        new_secret = secret_from_arg_or_file(args.new_secret, args.new_secret_file)
+        if not new_secret:
+            new_secret = load_ai_key_encryption_secret(config_path=PROJECT_ROOT / "config" / "config.yaml")
+        rotate_secret(args.database_url, old_secret, new_secret)
+        print("Rotated encrypted AI provider keys. Update the CircuitShelf AI key encryption secret file before restarting services.")
         return 0
     return 2
 

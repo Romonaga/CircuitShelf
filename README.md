@@ -126,7 +126,7 @@ The guided installer:
 
 ### AI Provider Key Encryption
 
-OpenAI provider keys are encrypted in Postgres with `pgcrypto`. Set `AI_KEY_ENCRYPTION_SECRET` in the service environment, not in committed config. For the systemd service, use `/etc/circuitshelf/circuitshelf.env`.
+OpenAI provider keys are encrypted in Postgres with `pgcrypto`. Store the master encryption secret in an OS-protected file such as `/etc/circuitshelf/ai-key-encryption.secret`; do not store it in committed config or in Postgres.
 
 Key backup, restore, and encryption-secret rotation are documented in [docs/AI_KEY_OPERATIONS.md](docs/AI_KEY_OPERATIONS.md).
 

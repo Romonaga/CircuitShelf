@@ -17,6 +17,11 @@ import yaml
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from db.ai_key_secret import load_ai_key_encryption_secret  # noqa: E402
+
 CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
 
 
@@ -25,16 +30,6 @@ def load_config() -> dict:
         return {}
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
-
-
-def encryption_secret(config: dict) -> str:
-    secret = str(os.environ.get("AI_KEY_ENCRYPTION_SECRET") or "").strip()
-    if secret:
-        return secret
-    secret = str(config.get("AI_KEY_ENCRYPTION_SECRET") or "").strip()
-    if secret:
-        return secret
-    raise RuntimeError("AI_KEY_ENCRYPTION_SECRET must be set in the environment before storing provider keys.")
 
 
 def read_key(prompt: bool) -> str:
@@ -77,7 +72,7 @@ def main() -> int:
     if not database_url:
         print("DATABASE_URL is missing from the environment or config/config.yaml.", file=sys.stderr)
         return 2
-    secret = encryption_secret(config)
+    secret = load_ai_key_encryption_secret(config=config)
     preview = f"{api_key[:7]}...{api_key[-4:]}"
 
     with psycopg.connect(database_url) as conn:

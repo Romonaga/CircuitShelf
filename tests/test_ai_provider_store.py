@@ -8,14 +8,43 @@ import yaml
 from db.ai_provider_store import AIProviderStore
 
 
-def test_ai_provider_encryption_secret_prefers_environment(monkeypatch, tmp_path: Path):
+def test_ai_provider_encryption_secret_prefers_secret_file(monkeypatch, tmp_path: Path):
     config_path = tmp_path / "config.yaml"
-    config_path.write_text(yaml.safe_dump({"AI_KEY_ENCRYPTION_SECRET": "yaml-secret"}), encoding="utf-8")
+    secret_path = tmp_path / "ai.secret"
+    secret_path.write_text("file-secret\n", encoding="utf-8")
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "AI_KEY_ENCRYPTION_SECRET_FILE": str(secret_path),
+                "AI_KEY_ENCRYPTION_SECRET": "yaml-secret",
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setenv("AI_KEY_ENCRYPTION_SECRET", "env-secret")
 
     store = AIProviderStore(database=None, config_path=config_path)
 
+    assert store.encryption_secret() == "file-secret"
+
+
+def test_ai_provider_encryption_secret_allows_environment_fallback_with_warning(monkeypatch, tmp_path: Path):
+    class Logger:
+        def __init__(self):
+            self.messages: list[str] = []
+
+        def warning(self, message: str):
+            self.messages.append(message)
+
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump({"AI_KEY_ENCRYPTION_SECRET_FILE": str(tmp_path / "missing.secret")}), encoding="utf-8")
+    monkeypatch.setenv("AI_KEY_ENCRYPTION_SECRET", "env-secret")
+    logger = Logger()
+
+    store = AIProviderStore(database=None, config_path=config_path, logger=logger)
+
     assert store.encryption_secret() == "env-secret"
+    assert logger.messages
 
 
 def test_ai_provider_encryption_secret_allows_legacy_yaml_with_warning(monkeypatch, tmp_path: Path):
@@ -27,7 +56,15 @@ def test_ai_provider_encryption_secret_allows_legacy_yaml_with_warning(monkeypat
             self.messages.append(message)
 
     config_path = tmp_path / "config.yaml"
-    config_path.write_text(yaml.safe_dump({"AI_KEY_ENCRYPTION_SECRET": "yaml-secret"}), encoding="utf-8")
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "AI_KEY_ENCRYPTION_SECRET_FILE": str(tmp_path / "missing.secret"),
+                "AI_KEY_ENCRYPTION_SECRET": "yaml-secret",
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.delenv("AI_KEY_ENCRYPTION_SECRET", raising=False)
     logger = Logger()
 
@@ -39,10 +76,10 @@ def test_ai_provider_encryption_secret_allows_legacy_yaml_with_warning(monkeypat
 
 def test_ai_provider_encryption_secret_requires_configuration(monkeypatch, tmp_path: Path):
     config_path = tmp_path / "config.yaml"
-    config_path.write_text(yaml.safe_dump({}), encoding="utf-8")
+    config_path.write_text(yaml.safe_dump({"AI_KEY_ENCRYPTION_SECRET_FILE": str(tmp_path / "missing.secret")}), encoding="utf-8")
     monkeypatch.delenv("AI_KEY_ENCRYPTION_SECRET", raising=False)
 
     store = AIProviderStore(database=None, config_path=config_path)
 
-    with pytest.raises(RuntimeError, match="AI_KEY_ENCRYPTION_SECRET"):
+    with pytest.raises(RuntimeError, match="AI key encryption secret"):
         store.encryption_secret()

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 import json
 
-import yaml
-
+from db.ai_key_secret import load_ai_key_encryption_secret
 from db.connection import Database
 from db.sql import load_query
 
@@ -19,22 +17,7 @@ class AIProviderStore:
         self.logger = logger
 
     def encryption_secret(self) -> str:
-        env_secret = str(os.environ.get("AI_KEY_ENCRYPTION_SECRET") or "").strip()
-        if env_secret:
-            return env_secret
-        config = self._load_config()
-        secret = str(config.get("AI_KEY_ENCRYPTION_SECRET") or "").strip()
-        if secret:
-            if self.logger:
-                self.logger.warning(
-                    "AI_KEY_ENCRYPTION_SECRET is being read from config YAML. "
-                    "Move it to the AI_KEY_ENCRYPTION_SECRET environment variable."
-                )
-            return secret
-        raise RuntimeError(
-            "AI_KEY_ENCRYPTION_SECRET is not configured. Set it in the service environment "
-            "or /etc/circuitshelf/circuitshelf.env before storing or reading provider keys."
-        )
+        return load_ai_key_encryption_secret(config_path=self.config_path, logger=self.logger)
 
     def pricing_catalog(self, provider: str = "openai") -> list[dict[str, Any]]:
         with self.database.connection() as conn:
@@ -741,9 +724,3 @@ class AIProviderStore:
         if not context_id:
             return str(context_type)
         return f"{context_type}:{str(context_id)[:8]}"
-
-    def _load_config(self) -> dict:
-        if not self.config_path.exists():
-            return {}
-        with open(self.config_path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}

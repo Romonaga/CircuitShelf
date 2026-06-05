@@ -56,7 +56,8 @@ STATUS_POLL_ACTIVE_INTERVAL_SECONDS: 3
 # Prefer DATABASE_URL from the environment. Do not commit real credentials.
 DATABASE_URL: ""
 # Provider API keys are encrypted in Postgres with pgcrypto.
-# Set AI_KEY_ENCRYPTION_SECRET in the service environment, not YAML.
+# Store the master encryption secret in this OS-protected file, not YAML or DB.
+AI_KEY_ENCRYPTION_SECRET_FILE: "/etc/circuitshelf/ai-key-encryption.secret"
 DB_MIGRATIONS_DIR: "db/migrations"
 DB_SCHEMA_VERSION_TABLE: "schema_migrations"
 VECTOR_EMBEDDING_DIM: 768
