@@ -319,6 +319,8 @@ class AIProviderStore:
         provider_key_owner_user_id: int | None = None,
         success: bool = True,
         error_message: str | None = None,
+        decision_reason: str = "",
+        latency_ms: int = 0,
     ) -> int | None:
         safe_context_id = self._uuid_or_none(context_id)
         with self.database.connection() as conn:
@@ -342,6 +344,8 @@ class AIProviderStore:
                     provider_key_owner_user_id,
                     bool(success),
                     str(error_message or "")[:1000] if error_message else None,
+                    str(decision_reason or "")[:1000],
+                    int(latency_ms or 0),
                 ),
             ).fetchone()
         return int(row["id"]) if row else None
@@ -700,6 +704,8 @@ class AIProviderStore:
             "providerKeyOwnerUsername": row.get("provider_key_owner_username"),
             "success": bool(row.get("success")),
             "errorMessage": row.get("error_message"),
+            "decisionReason": row.get("decision_reason") or "",
+            "latencyMs": int(row.get("latency_ms") or 0),
         }
 
     @staticmethod

@@ -17,6 +17,7 @@ class OpenAIAssistAccountingMixin:
         context_id: str | None = None,
         round_number: int = 1,
         round_count: int = 1,
+        decision_reason: str = "",
     ) -> dict[str, Any]:
         return {
             "entity_id": entity_id,
@@ -28,6 +29,7 @@ class OpenAIAssistAccountingMixin:
             "context_id": context_id,
             "round_number": round_number,
             "round_count": round_count,
+            "decision_reason": decision_reason,
             "paid_by": settings["paidBy"],
             "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
         }
@@ -44,23 +46,32 @@ class OpenAIAssistAccountingMixin:
             user_id=settings.get("pricingUserId"),
         )
 
-    def _record_ai_success(self, event_base: dict[str, Any], usage: dict[str, int], estimated_cost: float) -> None:
+    def _record_ai_success(
+        self,
+        event_base: dict[str, Any],
+        usage: dict[str, int],
+        estimated_cost: float,
+        *,
+        latency_ms: int = 0,
+    ) -> None:
         self.ai_provider_store.record_ai_assist_event(
             **event_base,
             input_tokens=usage["inputTokens"],
             cached_input_tokens=usage["cachedInputTokens"],
             output_tokens=usage["outputTokens"],
             estimated_cost=estimated_cost,
+            latency_ms=latency_ms,
             success=True,
         )
 
-    def _record_ai_failure(self, event_base: dict[str, Any], message: str) -> None:
+    def _record_ai_failure(self, event_base: dict[str, Any], message: str, *, latency_ms: int = 0) -> None:
         self.ai_provider_store.record_ai_assist_event(
             **event_base,
             input_tokens=0,
             cached_input_tokens=0,
             output_tokens=0,
             estimated_cost=0,
+            latency_ms=latency_ms,
             success=False,
             error_message=message,
         )

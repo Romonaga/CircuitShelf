@@ -15,7 +15,9 @@ INSERT INTO ai_assist_events (
     paid_by,
     provider_key_owner_user_id,
     success,
-    error_message
+    error_message,
+    decision_reason,
+    latency_ms
 )
 VALUES (
     %s,
@@ -25,6 +27,8 @@ VALUES (
     %s,
     %s,
     %s::uuid,
+    %s,
+    %s,
     %s,
     %s,
     %s,

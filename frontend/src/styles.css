@@ -4583,7 +4583,14 @@ nav {
 }
 
 .ai-usage-table {
-  min-width: 1160px;
+  min-width: 1360px;
+}
+
+.ai-usage-table .usage-reason {
+  max-width: 340px;
+  color: var(--muted);
+  white-space: normal;
+  line-height: 1.35;
 }
 
 .runtime-catalog-page {

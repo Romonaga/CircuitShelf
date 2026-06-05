@@ -23,6 +23,8 @@ AI_USAGE_CSV_FIELDS = [
     "estimatedCost",
     "paidBy",
     "providerKeyOwnerUsername",
+    "decisionReason",
+    "latencyMs",
     "success",
     "errorMessage",
 ]

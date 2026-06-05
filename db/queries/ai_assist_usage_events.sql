@@ -20,7 +20,9 @@ SELECT ev.id,
        ev.provider_key_owner_user_id,
        key_owner.username AS provider_key_owner_username,
        ev.success,
-       ev.error_message
+       ev.error_message,
+       ev.decision_reason,
+       ev.latency_ms
 FROM ai_assist_events ev
 LEFT JOIN entities en ON en.id = ev.entity_id
 LEFT JOIN users u ON u.id = ev.user_id

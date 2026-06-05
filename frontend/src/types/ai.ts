@@ -86,6 +86,8 @@ export interface AIUsageEvent {
   paidBy: string;
   providerKeyOwnerUserId?: number | null;
   providerKeyOwnerUsername?: string | null;
+  decisionReason?: string;
+  latencyMs?: number;
   success: boolean;
   errorMessage?: string | null;
 }

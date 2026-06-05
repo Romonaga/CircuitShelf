@@ -73,6 +73,14 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             min_confidence=min_confidence,
         ):
             return None
+        decision_reason = finalizer_decision_reason(
+            provider_mode=provider_mode,
+            effective_mode=effective_mode,
+            confidence=confidence,
+            min_confidence=min_confidence,
+            build_card=build_card,
+            issues=issues,
+        )
 
         prompt = build_response_finalizer_prompt(
             question=question,
@@ -90,6 +98,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             task_type="answer_validation",
             context_type=context_type,
             context_id=context_id,
+            decision_reason=decision_reason,
         )
         if self._record_budget_block_if_needed(event_base, settings):
             return None
@@ -104,15 +113,16 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             text = extract_response_text(data)
             usage = extract_usage(data)
             estimated_cost = self._estimate_openai_cost(settings, usage)
-            self._record_ai_success(event_base, usage, estimated_cost)
+            elapsed_ms = int((time.time() - started_at) * 1000)
+            self._record_ai_success(event_base, usage, estimated_cost, latency_ms=elapsed_ms)
             revised, result = parse_response_finalizer_output(text, fallback_answer=answer, deterministic_issues=issues)
-            result.elapsed_ms = int((time.time() - started_at) * 1000)
+            result.elapsed_ms = elapsed_ms
             result.model = f"openai:{settings['modelName']}"
             result.notes = [*result.notes, f"OpenAI assist cost ${estimated_cost:.6f}."]
             return revised, result
         except Exception as exc:
             message = safe_error_message(exc)
-            self._record_ai_failure(event_base, message)
+            self._record_ai_failure(event_base, message, latency_ms=int((time.time() - started_at) * 1000))
             if self.logger:
                 self.logger.warning(f"OpenAI assist finalizer failed: {message}")
             return None
@@ -136,6 +146,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             task_type="answer_validation",
             context_type=context_type,
             context_id=context_id,
+            decision_reason="No relevant indexed documents were found, so OpenAI fallback answered without local RAG sources.",
         )
         if self._record_budget_block_if_needed(event_base, settings):
             return None
@@ -150,7 +161,8 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             )
             usage = extract_usage(data)
             estimated_cost = self._estimate_openai_cost(settings, usage)
-            self._record_ai_success(event_base, usage, estimated_cost)
+            elapsed_ms = int((time.time() - started_at) * 1000)
+            self._record_ai_success(event_base, usage, estimated_cost, latency_ms=elapsed_ms)
             return extract_response_text(data), {
                 "enabled": True,
                 "ran": True,
@@ -159,12 +171,12 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
                 "confidence": None,
                 "issues": ["No indexed documents matched this question."],
                 "notes": [f"Answered with OpenAI fallback. Estimated cost ${estimated_cost:.6f}."],
-                "elapsedMs": int((time.time() - started_at) * 1000),
+                "elapsedMs": elapsed_ms,
                 "model": f"openai:{settings['modelName']}",
             }
         except Exception as exc:
             message = safe_error_message(exc)
-            self._record_ai_failure(event_base, message)
+            self._record_ai_failure(event_base, message, latency_ms=int((time.time() - started_at) * 1000))
             if self.logger:
                 self.logger.warning(f"OpenAI fallback answer failed: {message}")
             return None
@@ -196,9 +208,11 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             user_id=user_id,
             task_type="ingestion_assist",
             context_type="document_ingest",
+            decision_reason=f"Ingestion review enabled for {source_path}; sampled chunks and extraction stats were sent for quality review.",
         )
         if self._record_budget_block_if_needed(event_base, settings):
             return None
+        started_at = time.time()
         try:
             data = self._create_response(
                 api_key=settings["apiKey"],
@@ -216,7 +230,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             estimated_cost = self._estimate_openai_cost(settings, usage)
             text = extract_response_text(data)
             parsed = parse_json_object(text)
-            self._record_ai_success(event_base, usage, estimated_cost)
+            self._record_ai_success(event_base, usage, estimated_cost, latency_ms=int((time.time() - started_at) * 1000))
             self.ai_provider_store.record_document_ingest_ai_review(
                 source_path=source_path,
                 provider="openai",
@@ -235,7 +249,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             }
         except Exception as exc:
             message = safe_error_message(exc)
-            self._record_ai_failure(event_base, message)
+            self._record_ai_failure(event_base, message, latency_ms=int((time.time() - started_at) * 1000))
             if self.logger:
                 self.logger.warning(f"OpenAI ingestion assist failed for {source_path}: {message}")
             return None
@@ -250,6 +264,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
         local_intelligence: dict[str, Any],
         sample_text: str,
         enabled: bool,
+        decision_reason: str = "",
     ) -> dict[str, Any] | None:
         if not enabled:
             return None
@@ -267,9 +282,11 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             user_id=user_id,
             task_type="ingestion_assist",
             context_type="datasheet_intelligence",
+            decision_reason=decision_reason or f"Datasheet intelligence repair requested for {source_path}.",
         )
         if self._record_budget_block_if_needed(event_base, settings):
             return None
+        started_at = time.time()
         try:
             data = self._create_response(
                 api_key=settings["apiKey"],
@@ -287,7 +304,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             estimated_cost = self._estimate_openai_cost(settings, usage)
             text = extract_response_text(data)
             parsed = parse_json_object(text)
-            self._record_ai_success(event_base, usage, estimated_cost)
+            self._record_ai_success(event_base, usage, estimated_cost, latency_ms=int((time.time() - started_at) * 1000))
             self.ai_provider_store.record_document_ingest_ai_review(
                 source_path=source_path,
                 provider="openai",
@@ -298,6 +315,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
                     "kind": "datasheet_intelligence_repair",
                     "repair": parsed,
                     "localConfidence": local_intelligence.get("confidence"),
+                    "decisionReason": event_base["decision_reason"],
                 },
                 estimated_cost=estimated_cost,
             )
@@ -310,7 +328,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             }
         except Exception as exc:
             message = safe_error_message(exc)
-            self._record_ai_failure(event_base, message)
+            self._record_ai_failure(event_base, message, latency_ms=int((time.time() - started_at) * 1000))
             if self.logger:
                 self.logger.warning(f"OpenAI datasheet intelligence repair failed for {source_path}: {message}")
             return None
@@ -333,11 +351,13 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             user_id=user_id,
             task_type="inventory_photo_import",
             context_type="inventory_import",
+            decision_reason="User requested inventory import from a photo.",
         )
         budget_block = self._record_budget_block_if_needed(event_base, settings)
         if budget_block:
             raise ValueError(budget_block)
 
+        started_at = time.time()
         try:
             data = self._create_multimodal_response(
                 api_key=settings["apiKey"],
@@ -350,7 +370,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             )
             usage = extract_usage(data)
             estimated_cost = self._estimate_openai_cost(settings, usage)
-            self._record_ai_success(event_base, usage, estimated_cost)
+            self._record_ai_success(event_base, usage, estimated_cost, latency_ms=int((time.time() - started_at) * 1000))
             parsed = parse_json_object(extract_response_text(data))
             parsed["estimatedCost"] = estimated_cost
             parsed["model"] = settings["modelName"]
@@ -360,7 +380,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             raise
         except Exception as exc:
             message = safe_error_message(exc)
-            self._record_ai_failure(event_base, message)
+            self._record_ai_failure(event_base, message, latency_ms=int((time.time() - started_at) * 1000))
             if self.logger:
                 self.logger.warning(f"OpenAI inventory photo import failed: {message}")
             raise ValueError(f"Inventory photo analysis failed: {message}") from exc
@@ -402,3 +422,30 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             mime_type=mime_type,
             max_output_tokens=max_output_tokens,
         )
+
+
+def finalizer_decision_reason(
+    *,
+    provider_mode: str,
+    effective_mode: str,
+    confidence: Any,
+    min_confidence: float,
+    build_card: dict | None,
+    issues: list[str],
+) -> str:
+    reasons: list[str] = []
+    if provider_mode == "always" or effective_mode == "always":
+        reasons.append("validation mode is always")
+    if issues:
+        reasons.append(f"deterministic issues: {', '.join(str(issue) for issue in issues[:3])}")
+    try:
+        confidence_value = float(confidence)
+    except (TypeError, ValueError):
+        confidence_value = None
+    if confidence_value is not None and confidence_value < min_confidence:
+        reasons.append(f"retrieval confidence {confidence_value:.2f} is below {min_confidence:.2f}")
+    if build_card:
+        reasons.append("answer included a build card")
+    if not reasons:
+        reasons.append(f"validation mode {effective_mode} allowed OpenAI answer validation")
+    return "; ".join(reasons)[:1000]

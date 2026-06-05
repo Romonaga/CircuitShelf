@@ -40,6 +40,7 @@ class DatasheetRepairService:
                 local_intelligence=intelligence,
                 sample_text=self.repair_sample_text(chunks, metadata),
                 enabled=True,
+                decision_reason=self.repair_decision_reason(doc_name, intelligence),
             )
         except Exception as exc:
             self.trace_logger.warning(f"OpenAI datasheet repair failed for {doc_name}: {exc}")
@@ -73,6 +74,24 @@ class DatasheetRepairService:
         fact_count = len(intelligence.get("facts") or [])
         confidence = optional_float(intelligence.get("confidence")) or 0.0
         return pin_count == 0 or fact_count < 2 or confidence < 0.82 or pinout_has_gaps(intelligence)
+
+    def repair_decision_reason(self, doc_name: str, intelligence: dict) -> str:
+        component_name = str(intelligence.get("componentName") or doc_name).strip()
+        pin_count = len((intelligence.get("pinout") or {}).get("pins") or [])
+        fact_count = len(intelligence.get("facts") or [])
+        confidence = optional_float(intelligence.get("confidence")) or 0.0
+        triggers: list[str] = []
+        if pin_count == 0:
+            triggers.append("no deterministic pinout was found")
+        elif pinout_has_gaps(intelligence):
+            triggers.append("deterministic pinout has missing pin numbers")
+        if fact_count < 2:
+            triggers.append(f"only {fact_count} deterministic facts were found")
+        if confidence < 0.82:
+            triggers.append(f"local confidence {confidence:.2f} is below 0.82")
+        if not triggers:
+            triggers.append("local datasheet intelligence needed enrichment")
+        return f"Datasheet intelligence repair for {component_name}: {', '.join(triggers)}."
 
     def source_ingest_scope(self, source: str) -> dict:
         rel_path = self.rel_path(source)

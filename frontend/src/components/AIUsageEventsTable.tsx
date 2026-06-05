@@ -26,6 +26,8 @@ export function AIUsageEventsTable({ events }: { events: AIUsageEvent[] }) {
               <th>Task</th>
               <th>Round</th>
               <th>Model</th>
+              <th>Why</th>
+              <th>Time</th>
               <th>Tokens</th>
               <th>Cost</th>
               <th>Status</th>
@@ -40,13 +42,15 @@ export function AIUsageEventsTable({ events }: { events: AIUsageEvent[] }) {
                 <td>{event.taskLabel}</td>
                 <td>{event.roundNumber} / {event.roundCount}</td>
                 <td>{event.modelName}</td>
+                <td className="usage-reason">{event.decisionReason || event.contextType || "n/a"}</td>
+                <td>{event.latencyMs ? `${(event.latencyMs / 1000).toFixed(2)}s` : "n/a"}</td>
                 <td>{formatInteger(event.inputTokens + event.cachedInputTokens + event.outputTokens)}</td>
                 <td>{money(event.estimatedCost)}</td>
                 <td>{event.success ? "OK" : event.errorMessage || "Failed"}</td>
               </tr>
             )) : (
               <tr>
-                <td colSpan={9}>No audited AI calls yet.</td>
+                <td colSpan={11}>No audited AI calls yet.</td>
               </tr>
             )}
           </tbody>
