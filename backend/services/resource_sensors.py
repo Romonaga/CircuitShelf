@@ -37,7 +37,7 @@ def read_text_file(path: str) -> str | None:
     try:
         with open(path, "r", encoding="utf-8") as handle:
             return handle.read().strip()
-    except OSError:
+    except (OSError, TypeError, UnicodeDecodeError):
         return None
 
 

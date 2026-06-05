@@ -29,6 +29,7 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
   const process = resources?.process;
   const peaks = resources?.peaks;
   const batches = status?.runtimeBatches;
+  const llmQueue = status?.localLlmQueue;
   const workers = status?.ingestWorkerBudget;
   const workerCapacity = workers?.documentWorkerCapacity ?? workers?.activeDocumentWorkers;
   const ingest = status?.ingest;
@@ -79,6 +80,12 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
         <span><small>Workers</small><strong>{formatInteger(workers?.activeDocumentWorkers)} / {formatInteger(workerCapacity)}</strong></span>
         <span><small>Emb</small><strong>{formatInteger(batches?.embedding?.active)}</strong></span>
         <span><small>Rank</small><strong>{formatInteger(batches?.reranker?.active)}</strong></span>
+        <span>
+          <small>LLM</small>
+          <strong title={`Waiting ${formatInteger(llmQueue?.waiting)} | keep alive ${llmQueue?.keepAlive ?? "n/a"}`}>
+            {formatInteger(llmQueue?.active)} / {formatInteger(llmQueue?.maxConcurrent)}
+          </strong>
+        </span>
       </div>
       {detailed ? (
         <div className="sidebar-system-detail">
@@ -102,6 +109,9 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
             <span><small>Worker slots</small><strong>{formatInteger(workerCapacity)}</strong></span>
             <span><small>Today workers</small><strong>{formatInteger(peaks?.activeDocumentWorkers)}</strong></span>
             <span><small>Today GPU temp</small><strong>{peaks?.gpuTemperatureC == null ? "n/a" : `${formatNumber(peaks.gpuTemperatureC)} C`}</strong></span>
+            <span><small>LLM waiting</small><strong>{formatInteger(llmQueue?.waiting)}</strong></span>
+            <span><small>LLM done</small><strong>{formatInteger(llmQueue?.completed)}</strong></span>
+            <span><small>LLM keep alive</small><strong>{llmQueue?.keepAlive ?? "n/a"}</strong></span>
           </div>
           <div className="system-batch-detail">
             <div>

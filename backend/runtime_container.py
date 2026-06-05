@@ -101,6 +101,9 @@ class CircuitShelfRuntime:
         self.llm_temperature = config.get("LLM_TEMPERATURE", 0.2)
         self.llm_num_predict = config.get("LLM_NUM_PREDICT", 3072)
         self.llm_num_ctx = config.get("LLM_NUM_CTX")
+        self.local_llm_max_concurrent = config.get("LOCAL_LLM_MAX_CONCURRENT", 1)
+        self.local_llm_queue_timeout_seconds = config.get("LOCAL_LLM_QUEUE_TIMEOUT_SECONDS", 300)
+        self.ollama_keep_alive = config.get("OLLAMA_KEEP_ALIVE", "30s")
         self.cross_encoder_model = config.get("CROSS_ENCODER_MODEL")
         self.model_device = resolve_model_device(config)
         self.llm_model_options = config.get("LLM_MODEL_OPTIONS")
@@ -318,6 +321,21 @@ class CircuitShelfRuntime:
             query_retry_delay=self.query_retry_delay,
             max_chat_history_turns=self.max_chat_history_turns,
             max_chat_history_chars=self.max_chat_history_chars,
+            max_concurrent_requests=self.local_llm_max_concurrent,
+            queue_timeout_seconds=self.local_llm_queue_timeout_seconds,
+            keep_alive=self.ollama_keep_alive,
+        )
+        self.runtime_settings.register_callback(
+            "LOCAL_LLM_MAX_CONCURRENT",
+            lambda value: self.ollama_chat_client.configure_runtime(max_concurrent_requests=int(value or 1)),
+        )
+        self.runtime_settings.register_callback(
+            "LOCAL_LLM_QUEUE_TIMEOUT_SECONDS",
+            lambda value: self.ollama_chat_client.configure_runtime(queue_timeout_seconds=float(value or 0)),
+        )
+        self.runtime_settings.register_callback(
+            "OLLAMA_KEEP_ALIVE",
+            lambda value: self.ollama_chat_client.configure_runtime(keep_alive=value),
         )
         self.rag_service = RagService(
             state=self.state,
@@ -364,6 +382,7 @@ class CircuitShelfRuntime:
             active_document_worker_count_fn=self.ingest_progress.active_document_worker_count,
             index_status=self.index_status,
             ingest_status_provider=self.ingest_status_provider,
+            local_llm_status_provider=self.ollama_chat_client.status,
         )
         self.document_management_service = DocumentManagementService(
             vector_store=stores.vector_store,

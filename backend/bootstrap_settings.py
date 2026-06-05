@@ -37,6 +37,21 @@ DEFAULT_APP_SETTINGS = [
     ),
     ("RESPONSE_FINALIZER_MIN_CONFIDENCE", 0.80, "Retrieval confidence threshold used by low-confidence finalizer modes."),
     ("RESPONSE_FINALIZER_MAX_CONTEXT_CHARS", 7000, "Maximum source-summary characters sent to the response finalizer."),
+    (
+        "LOCAL_LLM_MAX_CONCURRENT",
+        1,
+        "Maximum concurrent local Ollama chat requests. Use 1 for one local GPU so requests queue instead of competing.",
+    ),
+    (
+        "LOCAL_LLM_QUEUE_TIMEOUT_SECONDS",
+        300,
+        "Seconds a local Ollama request may wait for the local model queue before failing.",
+    ),
+    (
+        "OLLAMA_KEEP_ALIVE",
+        "30s",
+        "How long Ollama keeps the chat model loaded after a request. Use 0 to unload immediately; longer values improve follow-up speed.",
+    ),
 ]
 
 

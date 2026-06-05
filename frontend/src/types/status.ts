@@ -11,6 +11,7 @@ export interface StatusPayload {
   databasePool?: DatabasePoolStatus;
   ingestWorkerBudget?: IngestWorkerBudget;
   runtimeBatches?: RuntimeBatches;
+  localLlmQueue?: LocalLlmQueueStatus;
   systemResources?: SystemResources;
   ingest?: IngestStatus;
 }
@@ -43,6 +44,19 @@ export interface RuntimeBatchStatus {
 export interface RuntimeBatches {
   embedding: RuntimeBatchStatus;
   reranker: RuntimeBatchStatus;
+}
+
+export interface LocalLlmQueueStatus {
+  enabled: boolean;
+  maxConcurrent?: number;
+  queueTimeoutSeconds?: number;
+  active?: number;
+  waiting?: number;
+  completed?: number;
+  timedOut?: number;
+  lastWaitSeconds?: number;
+  keepAlive?: string | number | null;
+  error?: string | null;
 }
 
 export interface SystemResources {
