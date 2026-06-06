@@ -3395,16 +3395,45 @@ nav {
 }
 
 .ingest-status-grid {
-  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
-  padding: 9px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  padding: 8px;
   border: 1px solid #d8e8ef;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.72);
 }
 
 .ingest-status-grid span {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 2px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.ingest-status-grid small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ingest-status-grid strong {
+  align-self: end;
   min-width: 0;
   overflow: hidden;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1.22;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3434,15 +3463,16 @@ nav {
   border-radius: 8px;
   background: #ffffff;
   overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .ingest-file-grid-heading,
 .ingest-file-row {
   display: grid;
-  grid-template-columns: minmax(140px, 0.68fr) 82px 112px 82px 82px minmax(230px, 0.92fr);
-  gap: 8px;
+  grid-template-columns: minmax(220px, 1.15fr) 86px 120px 88px 92px minmax(160px, 0.85fr);
+  gap: 10px;
   align-items: center;
-  min-width: 0;
+  min-width: 840px;
 }
 
 .ingest-file-grid-heading {
@@ -3533,6 +3563,7 @@ nav {
 
 .ingest-table-number {
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .ingest-change-list {
@@ -5193,6 +5224,7 @@ nav {
 :root[data-theme="dark"] .pinout-panel,
 :root[data-theme="dark"] .document-pin-card,
 :root[data-theme="dark"] .ingest-status-grid,
+:root[data-theme="dark"] .ingest-status-grid span,
 :root[data-theme="dark"] .ingest-file-grid-heading,
 :root[data-theme="dark"] .ingest-change-list span,
 :root[data-theme="dark"] .ingest-gpu-budget span,
