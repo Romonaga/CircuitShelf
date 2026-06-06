@@ -194,6 +194,7 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
         stats: dict[str, Any],
         sample_text: str,
         enabled: bool,
+        decision_reason: str | None = None,
     ) -> dict[str, Any] | None:
         if not enabled:
             return None
@@ -211,7 +212,8 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             user_id=user_id,
             task_type="ingestion_assist",
             context_type="document_ingest",
-            decision_reason=f"Ingestion review enabled for {source_path}; sampled chunks and extraction stats were sent for quality review.",
+            decision_reason=decision_reason
+            or f"Ingestion review enabled for {source_path}; sampled chunks and extraction stats were sent for quality review.",
         )
         if self._record_budget_block_if_needed(event_base, settings):
             return None

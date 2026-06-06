@@ -1,6 +1,7 @@
 import os
 
 from backend.ingestion.chunking_util import ChunkingUtils
+from backend.services.ingestion_ai_review_service import IngestionAiReviewService
 from backend.services.state_manager import StateManager
 from backend.ingestion.tokenize_util import TokenUtils
 
@@ -13,15 +14,25 @@ class IngestContextService:
         trace_logger,
         state,
         vector_store,
+        ai_provider_store,
         openai_assist_service,
+        query_local_llm,
+        local_model_name: str | None,
         training_dir: str,
     ):
         self.config = config
         self.trace_logger = trace_logger
         self.state = state
         self.vector_store = vector_store
-        self.openai_assist_service = openai_assist_service
         self.training_dir = training_dir
+        self.ai_review_service = IngestionAiReviewService(
+            config=config,
+            trace_logger=trace_logger,
+            ai_provider_store=ai_provider_store,
+            openai_assist_service=openai_assist_service,
+            query_local_llm=query_local_llm,
+            local_model_name=local_model_name,
+        )
 
     def source_ingest_scope(self, source: str) -> dict:
         scope = self.vector_store.ingest_scope_overrides([source]).get(source)
@@ -52,23 +63,22 @@ class IngestContextService:
         return "\n\n".join(samples)[:max_chars]
 
     def maybe_review_ingestion_with_openai(self, source: str, ingested_state, document_stats: dict | None):
-        if not self.config.get("INGEST_OPENAI_ASSIST_ENABLED", False):
-            return None
         scope = self.source_ingest_scope(source)
         stats = (document_stats or {}).get(source, {})
-        result = self.openai_assist_service.review_ingestion(
+        result = self.ai_review_service.review(
             source_path=source,
             is_global=bool(scope["is_global"]),
             entity_id=scope.get("entity_id"),
             user_id=scope.get("created_by_user_id"),
             stats=stats,
             sample_text=self.sample_ingested_text(ingested_state, source),
-            enabled=True,
+            openai_enabled=bool(self.config.get("INGEST_OPENAI_ASSIST_ENABLED", False)),
         )
         if result:
             self.trace_logger.debug(
-                f"🤖 OpenAI ingestion review stored for {source} "
-                f"using {result.get('paidBy')} billing (${float(result.get('estimatedCost') or 0):.6f})."
+                f"🤖 Ingestion AI review stored for {source} "
+                f"provider={result.get('provider')} paid_by={result.get('paidBy')} "
+                f"cost=${float(result.get('estimatedCost') or 0):.6f}."
             )
         return result
 

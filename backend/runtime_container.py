@@ -193,7 +193,10 @@ class CircuitShelfRuntime:
             trace_logger=self.trace_logger,
             state=self.state,
             vector_store=stores.vector_store,
+            ai_provider_store=stores.ai_provider_store,
             openai_assist_service=stores.openai_assist_service,
+            query_local_llm=self.query_ollama_chat_with_retry,
+            local_model_name=self.llm_model_name,
             training_dir=self.training_dir,
         )
         self.ingestion_pipeline = IngestionPipeline(

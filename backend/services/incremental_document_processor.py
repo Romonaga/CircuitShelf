@@ -222,7 +222,9 @@ class IncrementalDocumentProcessor:
         ai_part = "ai=none"
         if ai_review:
             cost = self._float_value(ai_review.get("estimatedCost"))
-            ai_part = f"ai={ai_review.get('paidBy') or 'unknown'} cost=${cost:.6f}"
+            provider = ai_review.get("provider") or "ai"
+            paid_by = ai_review.get("paidBy") or "unknown"
+            ai_part = f"ai={provider}/{paid_by} cost=${cost:.6f}"
         return (
             "✅ Document ingest complete: "
             f"{source} | status=needs_review | total={total_elapsed:.2f}s "

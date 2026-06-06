@@ -20,9 +20,14 @@ DEFAULT_APP_SETTINGS = [
     ("PDF_EMBEDDED_IMAGE_OCR_MIN_HEIGHT", 80, "Minimum embedded PDF image height queued for OCR."),
     ("PDF_EMBEDDED_IMAGE_OCR_MIN_AREA", 6400, "Minimum embedded PDF image pixel area queued for OCR."),
     (
+        "INGEST_LOCAL_AI_REVIEW_ENABLED",
+        True,
+        "Use the local Ollama model as the first ingestion QA pass when deterministic extraction detects component/datasheet risk.",
+    ),
+    (
         "INGEST_OPENAI_ASSIST_ENABLED",
         False,
-        "Use OpenAI during ingestion to review extraction quality. Corpus uses the system key; entity documents use entity then user key fallback.",
+        "Escalate ingestion QA to OpenAI only after deterministic/local review says paid repair is useful. Corpus uses the system key; entity documents use entity then user key fallback.",
     ),
     (
         "DATASHEET_OPENAI_REPAIR_ENABLED",
@@ -37,6 +42,7 @@ DEFAULT_APP_SETTINGS = [
     ),
     ("RESPONSE_FINALIZER_MIN_CONFIDENCE", 0.80, "Retrieval confidence threshold used by low-confidence finalizer modes."),
     ("RESPONSE_FINALIZER_MAX_CONTEXT_CHARS", 7000, "Maximum source-summary characters sent to the response finalizer."),
+    ("RERANK_MAX_CONTEXT_CHUNKS", 15, "Maximum reranked text chunks sent into one RAG answer prompt after cross-encoder scoring."),
     (
         "LOCAL_LLM_MAX_CONCURRENT",
         1,

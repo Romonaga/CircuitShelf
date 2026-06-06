@@ -29,7 +29,9 @@ class Reranker:
             batch_size=batch_size,
             show_progress_bar=False,
             device=self.device,
-        ).tolist()
+        )
+        if hasattr(raw_scores, "tolist"):
+            raw_scores = raw_scores.tolist()
         scores = self.normalize_rerank_scores(raw_scores)
 
         # Fuse vector-distance and reranker scores.
@@ -60,7 +62,8 @@ class Reranker:
         second_score = filtered[1][3] if len(filtered) > 1 else 0
         confidence = self.chunker.compute_confidence(top_score, second_score, method="sigmoid_margin")
 
-        selected = [(idx, dist) for idx, dist, _, _ in filtered]
+        max_context_chunks = max(1, int(self.config.get("RERANK_MAX_CONTEXT_CHUNKS", 15)))
+        selected = [(idx, dist) for idx, dist, _, _ in filtered[:max_context_chunks]]
         return self.build_chunk_payload(selected), f"{confidence:.2f}", profile
 
     def normalize_rerank_scores(self, scores):

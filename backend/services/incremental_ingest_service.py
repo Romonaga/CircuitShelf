@@ -374,7 +374,9 @@ class IncrementalIngestService:
                 cost = float(ai_review.get("estimatedCost") or 0.0)
             except (TypeError, ValueError):
                 cost = 0.0
-            ai_part = f"ai={ai_review.get('paidBy') or 'unknown'} cost=${cost:.6f}"
+            provider = ai_review.get("provider") or "ai"
+            paid_by = ai_review.get("paidBy") or "unknown"
+            ai_part = f"ai={provider}/{paid_by} cost=${cost:.6f}"
         self.trace_logger.info(
             "✅ Document reindex complete: "
             f"{source} | status=needs_review | total={time.time() - started:.2f}s | "

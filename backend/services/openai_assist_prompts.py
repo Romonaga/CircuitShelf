@@ -21,6 +21,13 @@ INGESTION_REVIEW_INSTRUCTIONS = (
     "Focus on extraction quality, not circuit design advice."
 )
 
+LOCAL_INGESTION_REVIEW_SYSTEM_PROMPT = (
+    "You are CircuitShelf's local ingestion QA reviewer for electronics documents. "
+    "Return compact JSON only. Be conservative: do not invent pinouts, ratings, or "
+    "component facts. Your job is to decide whether deterministic extraction is good "
+    "enough or needs paid cloud repair."
+)
+
 DATASHEET_REPAIR_INSTRUCTIONS = (
     "You are CircuitShelf's deterministic datasheet intelligence repair assistant. "
     "Return only compact JSON. Prefer explicit pin-function tables and pin diagrams. "
@@ -55,6 +62,31 @@ def build_ingestion_review_prompt(
         "quality, useful, warnings, suggestedReviewFocus. Do not infer facts not present in the sample.\n\n"
         f"Source: {source_path}\n"
         f"Scope: {'global corpus' if is_global else 'entity private'}\n"
+        f"Stats: {json.dumps(stats, sort_keys=True)}\n\n"
+        f"Sample extracted text:\n{sample_text[:6000]}"
+    )
+
+
+def build_local_ingestion_review_prompt(
+    *,
+    source_path: str,
+    stats: dict[str, Any],
+    sample_text: str,
+    deterministic_reasons: list[str],
+) -> str:
+    return (
+        "Review this CircuitShelf ingestion result before any paid cloud call is used. "
+        "Return compact JSON with keys: quality, useful, confidence, warnings, "
+        "suggestedReviewFocus, escalateToOpenAI, reason. "
+        "quality must be one of good, usable, weak, poor. "
+        "useful and escalateToOpenAI must be booleans. "
+        "confidence must be 0.0-1.0. "
+        "Escalate only when the document appears to be an electronics component/device "
+        "datasheet and the extracted text is missing important pinout/fact evidence, "
+        "or when OCR/text extraction looks too weak to trust. "
+        "Do not ask for OpenAI just to polish wording.\n\n"
+        f"Source: {source_path}\n"
+        f"Deterministic review reasons: {json.dumps(deterministic_reasons)}\n"
         f"Stats: {json.dumps(stats, sort_keys=True)}\n\n"
         f"Sample extracted text:\n{sample_text[:6000]}"
     )
