@@ -67,7 +67,7 @@ class PdfDocumentExtractor:
                 duplicateImageCandidates=0,
             )
         if self.trace_logger:
-            self.trace_logger.info(
+            self.trace_logger.debug(
                 f"PDF extraction for {base_name}: {len(layout_pages)} pages, "
                 f"{sum(1 for page in layout_pages if page.tables)} pages with tables, "
                 f"{len(embedded_images.images)} embedded images and {len(render_requests)} rendered pages queued for OCR."

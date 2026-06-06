@@ -66,7 +66,7 @@ class IngestContextService:
             enabled=True,
         )
         if result:
-            self.trace_logger.info(
+            self.trace_logger.debug(
                 f"🤖 OpenAI ingestion review stored for {source} "
                 f"using {result.get('paidBy')} billing (${float(result.get('estimatedCost') or 0):.6f})."
             )

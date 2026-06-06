@@ -31,7 +31,7 @@ def release_accelerator_memory(logger=None) -> bool:
         except Exception:
             pass
         if logger:
-            logger.info("🧹 Released unused CUDA allocator memory.")
+            logger.debug("Released unused CUDA allocator memory.")
         return True
     except Exception as exc:
         if logger:

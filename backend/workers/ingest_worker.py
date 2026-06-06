@@ -118,7 +118,8 @@ class IngestWorkerRunner:
     def _run_job(self, job: dict[str, Any]):
         job_id = int(job["id"])
         reason = job.get("reason") or "queued"
-        self.trace_logger.info(f"▶️ Ingest worker claimed job {job_id}: {reason}")
+        if reason != "watch":
+            self.trace_logger.info(f"▶️ Ingest worker claimed job {job_id}: {reason}")
         started = time.time()
         try:
             if str(reason).startswith("reindex:"):
@@ -132,7 +133,11 @@ class IngestWorkerRunner:
             result = snapshot.get("lastResult") or "completed"
             status = "skipped" if result in {"no_changes", "already_running"} else "completed"
             self.job_store.finish(job_id, status=status, details=snapshot)
-            self.trace_logger.info(f"✅ Ingest worker finished job {job_id}: {reason} in {time.time() - started:.2f}s")
+            if status != "skipped" or reason != "watch":
+                self.trace_logger.info(
+                    f"✅ Ingest worker finished job {job_id}: {reason} "
+                    f"status={status} result={result} duration={time.time() - started:.2f}s"
+                )
         except Exception as exc:
             snapshot = self.runtime.ingest_progress.snapshot()
             self.job_store.finish(job_id, status="failed", error=str(exc), details=snapshot)

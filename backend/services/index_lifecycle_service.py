@@ -97,7 +97,8 @@ class IndexLifecycleService:
             changes = manifest.diff(previous_manifest, current_manifest)
             self.set_index_status(lastChanges=self.file_changes_payload(changes))
             if not changes.has_changes:
-                self.trace_logger.info(f"✅ Index check found no training changes for {reason}.")
+                if reason != "watch":
+                    self.trace_logger.info(f"✅ Index check found no training changes for {reason}.")
                 work_label = "Index check: no changes"
                 work_status = "skipped"
                 work_details = self.file_changes_payload(changes)
@@ -124,8 +125,12 @@ class IndexLifecycleService:
             build_result, final_details = self.run_incremental_ingest(changes, current_manifest)
             duration = time.time() - start_time
             self.trace_logger.info(
-                f"✅ Incremental index check completed in {duration:.2f} sec. "
-                f"Chunks: {len(self.state.get_chunks())}, embeddings: {len(self.state.get_embeddings())}"
+                f"✅ Ingest run finished: reason={reason} duration={duration:.2f}s "
+                f"files={len(changes.changed_or_added)} chunks={int(final_details.get('chunks') or 0)} "
+                f"dropped={int(final_details.get('droppedChunks') or 0)} "
+                f"images={int(final_details.get('storedImages') or final_details.get('extractedImages') or 0)} "
+                f"failed={int(final_details.get('failedDocuments') or 0)} "
+                f"catalog_chunks={len(self.state.get_chunks())} embeddings={len(self.state.get_embeddings())}"
             )
             result = "updated"
             if build_result:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import threading
 import time
 
 import numpy as np
@@ -66,8 +65,6 @@ class IncrementalDocumentProcessor:
                 current_file=source,
                 file_details=start_details,
             )
-            thread_id = threading.get_ident()
-            self.trace_logger.info(f"Thread-{thread_id} started for {source} ({active_count} active document workers)")
             start = time.time()
 
             def detail_progress(**details):
@@ -85,7 +82,6 @@ class IncrementalDocumentProcessor:
                 ingest_token_utils.normalize_token_distribution()
 
             elapsed = time.time() - start
-            self.trace_logger.info(f"Thread-{thread_id} extracted {source} in {elapsed:.2f}s")
             self.update_index_progress(
                 stage="processing_documents",
                 current_file=source,
@@ -96,6 +92,9 @@ class IncrementalDocumentProcessor:
                 "state": ingested_state,
                 "token_utils": ingest_token_utils,
                 "chunker": ingest_chunker,
+                "extractElapsedSeconds": elapsed,
+                "activeDocumentWorkersAtStart": active_count,
+                "fileSizeBytes": start_details.get("fileSizeBytes"),
             }
         except Exception as exc:
             self.trace_logger.error(f"Error processing {source}: {exc}")
@@ -107,6 +106,7 @@ class IncrementalDocumentProcessor:
         source = extracted["source"]
         ingested_state = extracted["state"]
         ingest_chunker = extracted["chunker"]
+        persist_started = time.time()
 
         raw_chunk_counts, raw_image_counts, raw_ocr_image_counts = self._raw_document_counts(ingested_state, source)
         self.update_index_progress(
@@ -182,7 +182,17 @@ class IncrementalDocumentProcessor:
             finished_file=source,
             details={**final_details, "lastCompletedDocument": source},
         )
-        self.trace_logger.info(f"{source} is ready for review.")
+        persist_elapsed = time.time() - persist_started
+        self.trace_logger.info(
+            self._document_summary_line(
+                source=source,
+                extracted=extracted,
+                build_result=build_result,
+                details=final_details,
+                persist_elapsed=persist_elapsed,
+                ai_review=ai_review,
+            )
+        )
         return build_result, final_details
 
     def mark_source_ready_for_review(self, source):
@@ -204,3 +214,50 @@ class IncrementalDocumentProcessor:
             image_asset_belongs_to_document=self.image_asset_belongs_to_document,
         )
         return raw_chunk_counts, raw_image_counts, raw_ocr_image_counts
+
+    def _document_summary_line(self, *, source, extracted, build_result, details, persist_elapsed, ai_review):
+        extract_elapsed = self._float_value(extracted.get("extractElapsedSeconds"))
+        total_elapsed = extract_elapsed + persist_elapsed
+        file_size = self._format_bytes(extracted.get("fileSizeBytes"))
+        ai_part = "ai=none"
+        if ai_review:
+            cost = self._float_value(ai_review.get("estimatedCost"))
+            ai_part = f"ai={ai_review.get('paidBy') or 'unknown'} cost=${cost:.6f}"
+        return (
+            "✅ Document ingest complete: "
+            f"{source} | status=needs_review | total={total_elapsed:.2f}s "
+            f"extract={extract_elapsed:.2f}s save={persist_elapsed:.2f}s | "
+            f"size={file_size} workers={self._int_value(extracted.get('activeDocumentWorkersAtStart'))} | "
+            f"chunks={build_result.chunks}/{self._int_value(details.get('rawChunks'))} "
+            f"dropped={build_result.dropped_chunks} | "
+            f"images={self._int_value(details.get('storedImages'))}/{self._int_value(details.get('extractedImages'))} "
+            f"ocr={self._int_value(details.get('ocrImageTexts'))} "
+            f"indexed_image_text={self._int_value(details.get('indexedImageTexts'))} | "
+            f"{ai_part}"
+        )
+
+    @staticmethod
+    def _int_value(value) -> int:
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _float_value(value) -> float:
+        try:
+            return float(value or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @classmethod
+    def _format_bytes(cls, value) -> str:
+        size = cls._float_value(value)
+        if size <= 0:
+            return "n/a"
+        units = ("B", "KB", "MB", "GB")
+        index = 0
+        while size >= 1024 and index < len(units) - 1:
+            size /= 1024
+            index += 1
+        return f"{size:.1f}{units[index]}"

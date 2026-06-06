@@ -153,7 +153,7 @@ class IngestionPipeline:
     def _apply_profile(self, document: ExtractedDocument) -> None:
         document.profile = classify_document(document.source_path, document.pages)
         profile = document.profile
-        self.trace_logger.info(
+        self.trace_logger.debug(
             f"Ingest profile for {os.path.basename(document.source_path)}: "
             f"{profile.document_type} ({profile.confidence:.2f})"
             + (f", component {profile.component_name}" if profile.component_name else "")

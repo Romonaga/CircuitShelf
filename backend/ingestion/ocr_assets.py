@@ -94,7 +94,7 @@ class OcrAssetProcessor:
         if workers <= 1:
             return [self._run_job(job) for job in jobs]
 
-        self.trace_logger.info(
+        self.trace_logger.debug(
             f"OCR processing {len(jobs)} images with {workers} workers "
             f"({self.detected_cpu_count()} cores, reserving {self.reserved_core_count(self.detected_cpu_count())})"
         )

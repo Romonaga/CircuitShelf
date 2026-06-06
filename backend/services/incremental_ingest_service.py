@@ -1,4 +1,5 @@
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
+import time
 
 import numpy as np
 
@@ -276,6 +277,7 @@ class IncrementalIngestService:
         return build_result, final_details
 
     def reindex_review_source(self, source):
+        started = time.time()
         manifest = self.build_ingest_manifest()
         current_manifest = manifest.scan()
         if source not in current_manifest:
@@ -364,5 +366,23 @@ class IncrementalIngestService:
         image_result = self.persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=[source])
         self.update_index_progress(stage="readying_review", details={**self.summarize_document_ingest_stats(document_stats), **image_result})
         self.mark_source_ready_for_review(source)
-        self.maybe_review_ingestion_with_openai(source, ingested_state, document_stats)
+        ai_review = self.maybe_review_ingestion_with_openai(source, ingested_state, document_stats)
+        final_details = {**self.summarize_document_ingest_stats(document_stats), **image_result}
+        ai_part = "ai=none"
+        if ai_review:
+            try:
+                cost = float(ai_review.get("estimatedCost") or 0.0)
+            except (TypeError, ValueError):
+                cost = 0.0
+            ai_part = f"ai={ai_review.get('paidBy') or 'unknown'} cost=${cost:.6f}"
+        self.trace_logger.info(
+            "✅ Document reindex complete: "
+            f"{source} | status=needs_review | total={time.time() - started:.2f}s | "
+            f"chunks={build_result.chunks}/{int(final_details.get('rawChunks') or 0)} "
+            f"dropped={build_result.dropped_chunks} | "
+            f"images={int(final_details.get('storedImages') or 0)}/{int(final_details.get('extractedImages') or 0)} "
+            f"ocr={int(final_details.get('ocrImageTexts') or 0)} "
+            f"indexed_image_text={int(final_details.get('indexedImageTexts') or 0)} | "
+            f"{ai_part}"
+        )
         return build_result

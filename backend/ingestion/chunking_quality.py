@@ -185,7 +185,7 @@ class ChunkQualityMixin:
                     f"Preview: {chunk[:80].strip()}"
                 )
 
-        self.trace_logger.info(f"🧹 Chunk filtering complete. Kept {len(filtered_chunks)} | Dropped {dropped_count}")
+        self.trace_logger.debug(f"Chunk filtering complete. Kept {len(filtered_chunks)} | Dropped {dropped_count}")
         return filtered_chunks, filtered_sources, filtered_metadata
 
     def compute_confidence(self, top_score, second_score, method="sigmoid_margin", alpha=4.0, beta=2.0, min_floor=0.2):
