@@ -3439,7 +3439,7 @@ nav {
 .ingest-file-grid-heading,
 .ingest-file-row {
   display: grid;
-  grid-template-columns: minmax(130px, 0.68fr) 112px 82px 82px minmax(275px, 0.92fr);
+  grid-template-columns: minmax(140px, 0.68fr) 82px 112px 82px 82px minmax(230px, 0.92fr);
   gap: 8px;
   align-items: center;
   min-width: 0;

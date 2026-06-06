@@ -1,5 +1,5 @@
 import type { IngestStatus, RuntimeBatchStatus } from "../../types";
-import { formatInteger } from "../format";
+import { formatBytes, formatInteger } from "../format";
 
 export type IngestProgress = Record<string, string | number | boolean | null | undefined>;
 
@@ -83,6 +83,7 @@ export function formatDetailLabel(key: string): string {
     droppedChunks: "Dropped chunks",
     currentDocument: "Document",
     documentPhase: "Document phase",
+    fileSizeBytes: "File size",
     pdfPage: "PDF page",
     pdfPages: "PDF pages",
     extractedImages: "Extracted images",
@@ -135,6 +136,18 @@ export function pageProgress(progress: IngestProgress): string {
   }
   if (page) {
     return formatDetailValue(page);
+  }
+  return "n/a";
+}
+
+export function fileSizeProgress(progress: IngestProgress): string {
+  const value = progress.fileSizeBytes;
+  if (typeof value === "number") {
+    return formatBytes(value);
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? formatBytes(parsed) : value;
   }
   return "n/a";
 }

@@ -54,12 +54,17 @@ class IncrementalDocumentProcessor:
     def extract_document(self, source):
         ingested_state, ingest_token_utils, ingest_chunker = self.build_ingest_context()
         fpath = source if os.path.isabs(source) else os.path.join(self.training_dir, source)
+        start_details = {"documentPhase": "Starting"}
+        try:
+            start_details["fileSizeBytes"] = os.path.getsize(fpath)
+        except OSError:
+            pass
         active_count = self.begin_document_worker()
         try:
             self.update_index_progress(
                 stage="processing_documents",
                 current_file=source,
-                file_details={"documentPhase": "Starting"},
+                file_details=start_details,
             )
             thread_id = threading.get_ident()
             self.trace_logger.info(f"Thread-{thread_id} started for {source} ({active_count} active document workers)")
