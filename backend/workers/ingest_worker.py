@@ -66,6 +66,7 @@ class IngestWorkerRunner:
         self.runtime.runtime_status_reporter.start_resource_sampler()
         self._recover_abandoned_jobs()
         self.runtime.ingest_progress.schedule_next_check()
+        self.runtime.unload_idle_gpu_models()
         release_accelerator_memory(self.trace_logger)
 
     def _recover_abandoned_jobs(self):
@@ -143,4 +144,5 @@ class IngestWorkerRunner:
             self.job_store.finish(job_id, status="failed", error=str(exc), details=snapshot)
             self.trace_logger.error(f"❌ Ingest worker failed job {job_id}: {reason}: {exc}")
         finally:
+            self.runtime.unload_idle_gpu_models()
             release_accelerator_memory(self.trace_logger)

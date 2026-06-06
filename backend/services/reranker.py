@@ -1,18 +1,39 @@
 from sentence_transformers import CrossEncoder
 
+from backend.services.model_runtime import release_accelerator_memory
+
 
 class Reranker:
-    def __init__(self, config, state, chunker, trace_logger, *, device=None, batch_size_resolver=None):
+    def __init__(self, config, state, chunker, trace_logger, *, device=None, batch_size_resolver=None, lazy=False):
         self.config = config
         self.state = state
         self.chunker = chunker
         self.trace_logger = trace_logger
         self.device = device
         self.batch_size_resolver = batch_size_resolver
+        self.lazy = bool(lazy)
 
         self.rerank_profiles = config.get("RERANK_PROFILES")
         self.model_name = config.get("CROSS_ENCODER_MODEL")
-        self.cross_encoder = CrossEncoder(self.model_name, device=device)
+        self.cross_encoder = None if self.lazy else CrossEncoder(self.model_name, device=device)
+
+    @property
+    def resident(self) -> bool:
+        return self.cross_encoder is not None
+
+    def _ensure_cross_encoder(self):
+        if self.cross_encoder is None:
+            self.trace_logger.info(f"🧠 Cold-loading reranker model on device: {self.device}")
+            self.cross_encoder = CrossEncoder(self.model_name, device=self.device)
+        return self.cross_encoder
+
+    def unload(self) -> bool:
+        if self.cross_encoder is None:
+            return False
+        self.cross_encoder = None
+        self.trace_logger.info("🧹 Unloaded idle reranker model from ingest worker.")
+        release_accelerator_memory(self.trace_logger)
+        return True
 
     def rerank_chunks(self, dedup_hits, question):
         if not dedup_hits:
@@ -24,7 +45,7 @@ class Reranker:
         combined_inputs = [[question, t] for t in texts]
 
         batch_size = self.effective_batch_size()
-        raw_scores = self.cross_encoder.predict(
+        raw_scores = self._ensure_cross_encoder().predict(
             combined_inputs,
             batch_size=batch_size,
             show_progress_bar=False,

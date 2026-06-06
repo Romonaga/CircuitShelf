@@ -33,7 +33,7 @@ class BootstrappedRuntime:
     api_dependencies: ApiDependencies
 
 
-def bootstrap_runtime(*, ingest_status_callback=None, ingest_status_provider=None) -> BootstrappedRuntime:
+def bootstrap_runtime(*, ingest_status_callback=None, ingest_status_provider=None, lazy_gpu_models: bool = False) -> BootstrappedRuntime:
     config, trace_logger = SystemInit.load_config_and_logger()
     state = StateManager(use_lock=True, cache_capacity=200, trace_logger=trace_logger)
     database = Database(database_url_from_config(config), trace_logger)
@@ -67,6 +67,7 @@ def bootstrap_runtime(*, ingest_status_callback=None, ingest_status_provider=Non
         trace_log_helper=trace_log_helper,
         ingest_status_callback=ingest_status_callback,
         ingest_status_provider=ingest_status_provider,
+        lazy_gpu_models=lazy_gpu_models,
     )
 
     auth_dependencies = AuthDependencyService(

@@ -1,7 +1,5 @@
 from dataclasses import dataclass
 
-from sentence_transformers import SentenceTransformer
-
 import backend.services.bench_tools as bench_tools
 from backend.services.app_runtime_helpers import conversation_title_from_question, sanitize_for_json
 from backend.services.document_intelligence_service import DocumentIntelligenceService
@@ -30,7 +28,7 @@ from backend.services.runtime_status_service import (
     effective_embedding_batch_size as runtime_effective_embedding_batch_size,
     effective_rerank_batch_size as runtime_effective_rerank_batch_size,
 )
-from backend.services.model_runtime import resolve_model_device
+from backend.services.model_runtime import LazySentenceTransformer, release_accelerator_memory, resolve_model_device
 from backend.services.source_metadata import (
     build_source_payload,
     display_source_name,
@@ -73,6 +71,7 @@ class CircuitShelfRuntime:
     ingest_status_callback: object | None = None
     ingest_status_provider: object | None = None
     enable_inprocess_ingest_watch: bool = False
+    lazy_gpu_models: bool = False
 
     def __post_init__(self):
         self._load_config_values()
@@ -142,8 +141,14 @@ class CircuitShelfRuntime:
             config=self.config,
             trace_logger=self.trace_logger,
         )
-        self.trace_logger.info(f"🧠 Loading embedding and reranker models on device: {self.model_device}")
-        self.embedder = SentenceTransformer(self.embed_model_name, device=self.model_device)
+        if self.lazy_gpu_models:
+            self.trace_logger.info(f"🧠 Ingest runtime will cold-load GPU models on demand: {self.model_device}")
+            self.embedder = LazySentenceTransformer(self.embed_model_name, device=self.model_device, logger=self.trace_logger)
+        else:
+            from sentence_transformers import SentenceTransformer
+
+            self.trace_logger.info(f"🧠 Loading embedding and reranker models on device: {self.model_device}")
+            self.embedder = SentenceTransformer(self.embed_model_name, device=self.model_device)
         self.reranker_engine = Reranker(
             self.config,
             self.state,
@@ -151,6 +156,7 @@ class CircuitShelfRuntime:
             self.trace_logger,
             device=self.model_device,
             batch_size_resolver=self.effective_rerank_batch_size,
+            lazy=self.lazy_gpu_models,
         )
         self.runtime_settings.register_callback(
             "RERANK_PROFILES",
@@ -386,6 +392,7 @@ class CircuitShelfRuntime:
             index_status=self.index_status,
             ingest_status_provider=self.ingest_status_provider,
             local_llm_status_provider=self.ollama_chat_client.status,
+            gpu_model_residency_provider=self.gpu_model_residency,
         )
         self.document_management_service = DocumentManagementService(
             vector_store=stores.vector_store,
@@ -474,3 +481,20 @@ class CircuitShelfRuntime:
 
     def get_or_build_index(self):
         return self.index_lifecycle_service.get_or_build_index()
+
+    def gpu_model_residency(self):
+        return {
+            "lazy": bool(self.lazy_gpu_models),
+            "embeddingResident": bool(getattr(self.embedder, "resident", True)),
+            "rerankerResident": bool(getattr(self.reranker_engine, "resident", True)),
+        }
+
+    def unload_idle_gpu_models(self) -> bool:
+        released = False
+        if self.lazy_gpu_models and hasattr(self.embedder, "unload"):
+            released = bool(self.embedder.unload()) or released
+        if self.lazy_gpu_models and hasattr(self.reranker_engine, "unload"):
+            released = bool(self.reranker_engine.unload()) or released
+        if released:
+            release_accelerator_memory(self.trace_logger)
+        return released

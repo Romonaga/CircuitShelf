@@ -37,3 +37,38 @@ def release_accelerator_memory(logger=None) -> bool:
         if logger:
             logger.warning(f"⚠️ CUDA memory cleanup skipped: {exc}")
         return False
+
+
+class LazySentenceTransformer:
+    """Load the embedding model only while a burst of work needs it."""
+
+    def __init__(self, model_name: str, *, device: str, logger=None):
+        self.model_name = model_name
+        self.device = device
+        self.logger = logger
+        self._model = None
+
+    @property
+    def resident(self) -> bool:
+        return self._model is not None
+
+    def _ensure_model(self):
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+
+            if self.logger:
+                self.logger.info(f"🧠 Cold-loading embedding model on device: {self.device}")
+            self._model = SentenceTransformer(self.model_name, device=self.device)
+        return self._model
+
+    def encode(self, *args, **kwargs):
+        return self._ensure_model().encode(*args, **kwargs)
+
+    def unload(self) -> bool:
+        if self._model is None:
+            return False
+        self._model = None
+        if self.logger:
+            self.logger.info("🧹 Unloaded idle embedding model from ingest worker.")
+        release_accelerator_memory(self.logger)
+        return True

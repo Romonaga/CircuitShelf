@@ -11,6 +11,7 @@ enable_native_fault_diagnostics()
 boot = bootstrap_runtime(
     ingest_status_callback=lambda status: boot.stores.ingest_job_store.save_status(status) if "boot" in globals() else None,
     ingest_status_provider=lambda: boot.stores.ingest_job_store.get_status() if "boot" in globals() else {},
+    lazy_gpu_models=True,
 )
 
 

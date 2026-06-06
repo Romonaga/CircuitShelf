@@ -38,6 +38,7 @@ class RuntimeStatusReporter:
         index_status: dict,
         ingest_status_provider=None,
         local_llm_status_provider=None,
+        gpu_model_residency_provider=None,
     ):
         self.config = config
         self.state = state
@@ -57,6 +58,7 @@ class RuntimeStatusReporter:
         self.index_status = index_status
         self.ingest_status_provider = ingest_status_provider
         self.local_llm_status_provider = local_llm_status_provider
+        self.gpu_model_residency_provider = gpu_model_residency_provider
         self._sampler_stop = threading.Event()
         self._sampler_thread: threading.Thread | None = None
 
@@ -95,6 +97,7 @@ class RuntimeStatusReporter:
                 model_device=self.model_device_name,
                 gpu_status=system_resources.get("gpu", {}),
             ),
+            "gpuModels": self._gpu_model_residency(),
             "localLlmQueue": self._local_llm_status(),
             "systemResources": system_resources,
             "ingest": ingest_status,
@@ -121,6 +124,16 @@ class RuntimeStatusReporter:
             return status
         except Exception:
             return {"enabled": False, "error": "unavailable"}
+
+    def _gpu_model_residency(self) -> dict[str, Any]:
+        if not self.gpu_model_residency_provider:
+            return {"available": False}
+        try:
+            status = dict(self.gpu_model_residency_provider() or {})
+            status["available"] = True
+            return status
+        except Exception:
+            return {"available": False, "error": "unavailable"}
 
     def _active_document_workers_from_status(self, ingest_status: dict[str, Any]) -> int:
         if not ingest_status.get("running"):
