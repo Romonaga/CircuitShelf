@@ -4314,6 +4314,71 @@ nav {
   border-color: var(--line);
 }
 
+.status-grid .status-stat {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.status-grid .status-stat span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.status-grid .status-stat strong {
+  color: var(--text);
+  font-size: 1.25rem;
+}
+
+.local-gpu-queue-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.local-gpu-queue-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.compact-table-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 110px 80px 90px 100px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+
+.compact-table-row:last-child {
+  border-bottom: 0;
+}
+
+.compact-table-head {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(65, 199, 178, 0.08);
+}
+
+.compact-table-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .collapsible-section {
   border: 1px solid var(--line);
   border-radius: 8px;

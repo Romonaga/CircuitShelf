@@ -28,6 +28,12 @@ from backend.services.runtime_status_service import (
     effective_embedding_batch_size as runtime_effective_embedding_batch_size,
     effective_rerank_batch_size as runtime_effective_rerank_batch_size,
 )
+from backend.services.gpu_work_queue import (
+    GpuQueuedEmbedder,
+    LocalGpuWorkCoordinator,
+    detect_local_gpu_count,
+    resolve_local_gpu_slots,
+)
 from backend.services.model_runtime import LazySentenceTransformer, release_accelerator_memory, resolve_model_device
 from backend.services.source_metadata import (
     build_source_payload,
@@ -102,6 +108,7 @@ class CircuitShelfRuntime:
         self.llm_num_ctx = config.get("LLM_NUM_CTX")
         self.local_llm_max_concurrent = config.get("LOCAL_LLM_MAX_CONCURRENT", 1)
         self.local_llm_queue_timeout_seconds = config.get("LOCAL_LLM_QUEUE_TIMEOUT_SECONDS", 300)
+        self.local_gpu_queue_timeout_seconds = config.get("LOCAL_GPU_QUEUE_TIMEOUT_SECONDS", 300)
         self.ollama_keep_alive = config.get("OLLAMA_KEEP_ALIVE", "30s")
         self.cross_encoder_model = config.get("CROSS_ENCODER_MODEL")
         self.model_device = resolve_model_device(config)
@@ -141,14 +148,31 @@ class CircuitShelfRuntime:
             config=self.config,
             trace_logger=self.trace_logger,
         )
+        self.local_gpu_priority = 50 if self.lazy_gpu_models else 10
+        self.local_gpu_owner = "ingest" if self.lazy_gpu_models else "web"
+        self.detected_local_gpus = detect_local_gpu_count()
+        self.local_gpu_slots = resolve_local_gpu_slots(self.config, detected_gpus=self.detected_local_gpus)
+        self.local_gpu_coordinator = LocalGpuWorkCoordinator(
+            database=self.database,
+            logger=self.trace_logger,
+            slot_count=self.local_gpu_slots,
+            detected_gpu_count=self.detected_local_gpus,
+            queue_timeout_seconds=self.local_gpu_queue_timeout_seconds,
+        )
         if self.lazy_gpu_models:
             self.trace_logger.info(f"🧠 Ingest runtime will cold-load GPU models on demand: {self.model_device}")
-            self.embedder = LazySentenceTransformer(self.embed_model_name, device=self.model_device, logger=self.trace_logger)
+            raw_embedder = LazySentenceTransformer(self.embed_model_name, device=self.model_device, logger=self.trace_logger)
         else:
             from sentence_transformers import SentenceTransformer
 
             self.trace_logger.info(f"🧠 Loading embedding and reranker models on device: {self.model_device}")
-            self.embedder = SentenceTransformer(self.embed_model_name, device=self.model_device)
+            raw_embedder = SentenceTransformer(self.embed_model_name, device=self.model_device)
+        self.embedder = GpuQueuedEmbedder(
+            raw_embedder,
+            self.local_gpu_coordinator,
+            priority=self.local_gpu_priority,
+            owner=self.local_gpu_owner,
+        )
         self.reranker_engine = Reranker(
             self.config,
             self.state,
@@ -157,6 +181,9 @@ class CircuitShelfRuntime:
             device=self.model_device,
             batch_size_resolver=self.effective_rerank_batch_size,
             lazy=self.lazy_gpu_models,
+            gpu_coordinator=self.local_gpu_coordinator,
+            gpu_priority=self.local_gpu_priority,
+            gpu_owner=self.local_gpu_owner,
         )
         self.runtime_settings.register_callback(
             "RERANK_PROFILES",
@@ -333,6 +360,9 @@ class CircuitShelfRuntime:
             max_concurrent_requests=self.local_llm_max_concurrent,
             queue_timeout_seconds=self.local_llm_queue_timeout_seconds,
             keep_alive=self.ollama_keep_alive,
+            gpu_coordinator=self.local_gpu_coordinator,
+            gpu_priority=5,
+            gpu_owner="web",
         )
         self.runtime_settings.register_callback(
             "LOCAL_LLM_MAX_CONCURRENT",
@@ -393,6 +423,7 @@ class CircuitShelfRuntime:
             ingest_status_provider=self.ingest_status_provider,
             local_llm_status_provider=self.ollama_chat_client.status,
             gpu_model_residency_provider=self.gpu_model_residency,
+            local_gpu_queue_provider=self.local_gpu_coordinator.status,
         )
         self.document_management_service = DocumentManagementService(
             vector_store=stores.vector_store,
@@ -485,6 +516,8 @@ class CircuitShelfRuntime:
     def gpu_model_residency(self):
         return {
             "lazy": bool(self.lazy_gpu_models),
+            "gpuSlots": self.local_gpu_slots,
+            "detectedGpus": self.detected_local_gpus,
             "embeddingResident": bool(getattr(self.embedder, "resident", True)),
             "rerankerResident": bool(getattr(self.reranker_engine, "resident", True)),
         }

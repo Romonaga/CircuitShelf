@@ -2,6 +2,7 @@ import type { StatusPayload } from "../types";
 import { formatNumber, formatObject } from "../libs/format";
 import { useLogTail } from "../hooks/useLogTail";
 import { IngestStatusPanel } from "./IngestStatusPanel";
+import { LocalGpuQueuePanel } from "./LocalGpuQueuePanel";
 import { LogTailPanel } from "./LogTailPanel";
 import { RuntimeBatchPanel } from "./RuntimeBatchPanel";
 import { SectionHeader } from "./SectionHeader";
@@ -9,7 +10,7 @@ import { Stat } from "./Stat";
 import { CollapsibleSection } from "./CollapsibleSection";
 import { useUserPreference } from "../hooks/useUserPreference";
 
-type StatusSectionId = "catalog" | "cache" | "database" | "runtime" | "ingestion" | "rawIngest" | "logs";
+type StatusSectionId = "catalog" | "cache" | "database" | "runtime" | "gpuQueue" | "ingestion" | "rawIngest" | "logs";
 type StatusSectionPreference = Partial<Record<StatusSectionId, boolean>>;
 
 const statusSectionDefaults: StatusSectionPreference = {
@@ -17,6 +18,7 @@ const statusSectionDefaults: StatusSectionPreference = {
   cache: true,
   database: true,
   runtime: false,
+  gpuQueue: false,
   ingestion: false,
   rawIngest: true,
   logs: false
@@ -97,6 +99,14 @@ export function StatusView({
         onToggle={() => toggleSection("runtime")}
       >
         <RuntimeBatchPanel batches={status?.runtimeBatches} />
+      </CollapsibleSection>
+      <CollapsibleSection
+        title="Local GPU queue"
+        description="Shared local GPU slots used by Ollama, embeddings, and reranking."
+        collapsed={Boolean(collapsedSections.gpuQueue)}
+        onToggle={() => toggleSection("gpuQueue")}
+      >
+        <LocalGpuQueuePanel queue={status?.localGpuQueue} />
       </CollapsibleSection>
       <CollapsibleSection
         title="Ingestion"

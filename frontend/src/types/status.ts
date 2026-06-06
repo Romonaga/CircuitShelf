@@ -11,6 +11,7 @@ export interface StatusPayload {
   databasePool?: DatabasePoolStatus;
   ingestWorkerBudget?: IngestWorkerBudget;
   runtimeBatches?: RuntimeBatches;
+  localGpuQueue?: LocalGpuQueueStatus;
   localLlmQueue?: LocalLlmQueueStatus;
   systemResources?: SystemResources;
   ingest?: IngestStatus;
@@ -56,6 +57,39 @@ export interface LocalLlmQueueStatus {
   timedOut?: number;
   lastWaitSeconds?: number;
   keepAlive?: string | number | null;
+  error?: string | null;
+}
+
+export interface LocalGpuQueueItem {
+  taskId: string;
+  taskType: string;
+  priority: number;
+  owner?: string | null;
+  processId?: number | null;
+  slotIndex?: number | null;
+  status: string;
+  waitSeconds?: number | null;
+  durationSeconds?: number | null;
+  error?: string | null;
+  details?: Record<string, unknown>;
+  createdAt?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface LocalGpuQueueStatus {
+  enabled: boolean;
+  slots?: number;
+  detectedGpus?: number;
+  processId?: number;
+  queueTimeoutSeconds?: number;
+  active?: number;
+  queued?: number;
+  completed?: number;
+  failed?: number;
+  timedOut?: number;
+  recent?: LocalGpuQueueItem[];
   error?: string | null;
 }
 

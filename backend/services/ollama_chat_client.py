@@ -85,6 +85,9 @@ class OllamaChatClient:
         max_concurrent_requests: int = 1,
         queue_timeout_seconds: float = 300,
         keep_alive: str | int | None = "30s",
+        gpu_coordinator=None,
+        gpu_priority: int = 10,
+        gpu_owner: str = "web",
     ):
         self.config = config
         self.trace_logger = trace_logger
@@ -99,6 +102,9 @@ class OllamaChatClient:
         self.max_chat_history_turns = max_chat_history_turns
         self.max_chat_history_chars = max_chat_history_chars
         self.keep_alive = keep_alive
+        self.gpu_coordinator = gpu_coordinator
+        self.gpu_priority = int(gpu_priority)
+        self.gpu_owner = gpu_owner
         self.request_gate = LocalLlmRequestGate(
             max_concurrent=max_concurrent_requests,
             queue_timeout_seconds=queue_timeout_seconds,
@@ -122,6 +128,7 @@ class OllamaChatClient:
         return {
             **self.request_gate.status(),
             "keepAlive": self.keep_alive,
+            "coordinatedByLocalGpuQueue": bool(self.gpu_coordinator),
         }
 
     def chat_with_retry(self, prompt, model_name, chat_history=None, retries=None, delay=None, system_prompt=None):
@@ -159,6 +166,21 @@ class OllamaChatClient:
         if self.keep_alive not in (None, ""):
             payload["keep_alive"] = self.keep_alive
 
+        if self.gpu_coordinator:
+            try:
+                with self.gpu_coordinator.lease(
+                    task_type="local_llm",
+                    priority=self.gpu_priority,
+                    owner=self.gpu_owner,
+                    details={"model": model_name or "default"},
+                    timeout_seconds=self.request_gate.status()["queueTimeoutSeconds"],
+                ):
+                    return self._post_chat_with_retry(url, headers, payload, retries, delay)
+            except TimeoutError:
+                timeout = self.request_gate.status()["queueTimeoutSeconds"]
+                self.trace_logger.warning(f"⚠️ Local GPU queue timed out local LLM after {timeout:.1f}s.")
+                return f"[LLM busy: local GPU queue timed out after {timeout:.0f}s]"
+
         waited = self.request_gate.acquire()
         if waited is None:
             timeout = self.request_gate.status()["queueTimeoutSeconds"]
@@ -168,33 +190,36 @@ class OllamaChatClient:
             self.trace_logger.info(f"⏳ Local LLM request waited {waited:.2f}s for the GPU/model queue.")
 
         try:
-            for attempt in range(retries):
-                try:
-                    response = requests.post(url, headers=headers, json=payload, timeout=self.post_timeout)
-                    response.raise_for_status()
-
-                    json_data = response.json()
-                    result = json_data.get("message", {}).get("content", "").strip()
-                    done_reason = json_data.get("done_reason", "")
-                    if done_reason in {"length", "max_tokens"}:
-                        self.trace_logger.warning(
-                            "⚠️ Ollama response stopped at generation limit. "
-                            f"Increase LLM_NUM_PREDICT above {self.default_num_predict} if this answer needs more room."
-                        )
-                        result = (
-                            f"{result}\n\n"
-                            "> Response stopped at the model generation limit. "
-                            "Increase the answer token limit and ask again if this is incomplete."
-                        )
-
-                    self.trace_logger.debug(f"✅ LLM call success: {result[:80]}...")
-                    return result
-
-                except RequestException as exc:
-                    self.trace_logger.warning(f"⚠️ LLM call failed (attempt {attempt + 1}/{retries}) | {exc}")
-                    if attempt < retries - 1:
-                        time.sleep(delay)
-                    else:
-                        return "[LLM error]"
+            return self._post_chat_with_retry(url, headers, payload, retries, delay)
         finally:
             self.request_gate.release()
+
+    def _post_chat_with_retry(self, url, headers, payload, retries, delay):
+        for attempt in range(retries):
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=self.post_timeout)
+                response.raise_for_status()
+
+                json_data = response.json()
+                result = json_data.get("message", {}).get("content", "").strip()
+                done_reason = json_data.get("done_reason", "")
+                if done_reason in {"length", "max_tokens"}:
+                    self.trace_logger.warning(
+                        "⚠️ Ollama response stopped at generation limit. "
+                        f"Increase LLM_NUM_PREDICT above {self.default_num_predict} if this answer needs more room."
+                    )
+                    result = (
+                        f"{result}\n\n"
+                        "> Response stopped at the model generation limit. "
+                        "Increase the answer token limit and ask again if this is incomplete."
+                    )
+
+                self.trace_logger.debug(f"✅ LLM call success: {result[:80]}...")
+                return result
+
+            except RequestException as exc:
+                self.trace_logger.warning(f"⚠️ LLM call failed (attempt {attempt + 1}/{retries}) | {exc}")
+                if attempt < retries - 1:
+                    time.sleep(delay)
+                else:
+                    return "[LLM error]"

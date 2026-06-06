@@ -4,7 +4,20 @@ from backend.services.model_runtime import release_accelerator_memory
 
 
 class Reranker:
-    def __init__(self, config, state, chunker, trace_logger, *, device=None, batch_size_resolver=None, lazy=False):
+    def __init__(
+        self,
+        config,
+        state,
+        chunker,
+        trace_logger,
+        *,
+        device=None,
+        batch_size_resolver=None,
+        lazy=False,
+        gpu_coordinator=None,
+        gpu_priority: int = 30,
+        gpu_owner: str = "web",
+    ):
         self.config = config
         self.state = state
         self.chunker = chunker
@@ -12,6 +25,9 @@ class Reranker:
         self.device = device
         self.batch_size_resolver = batch_size_resolver
         self.lazy = bool(lazy)
+        self.gpu_coordinator = gpu_coordinator
+        self.gpu_priority = int(gpu_priority)
+        self.gpu_owner = gpu_owner
 
         self.rerank_profiles = config.get("RERANK_PROFILES")
         self.model_name = config.get("CROSS_ENCODER_MODEL")
@@ -45,12 +61,7 @@ class Reranker:
         combined_inputs = [[question, t] for t in texts]
 
         batch_size = self.effective_batch_size()
-        raw_scores = self._ensure_cross_encoder().predict(
-            combined_inputs,
-            batch_size=batch_size,
-            show_progress_bar=False,
-            device=self.device,
-        )
+        raw_scores = self._predict(combined_inputs, batch_size)
         if hasattr(raw_scores, "tolist"):
             raw_scores = raw_scores.tolist()
         scores = self.normalize_rerank_scores(raw_scores)
@@ -125,6 +136,28 @@ class Reranker:
         if self.batch_size_resolver:
             return max(1, int(self.batch_size_resolver()))
         return max(1, int(self.config.get("RERANK_BATCH_SIZE", 32)))
+
+    def _predict(self, combined_inputs, batch_size):
+        gpu_coordinator = getattr(self, "gpu_coordinator", None)
+        if not gpu_coordinator:
+            return self._ensure_cross_encoder().predict(
+                combined_inputs,
+                batch_size=batch_size,
+                show_progress_bar=False,
+                device=self.device,
+            )
+        with gpu_coordinator.lease(
+            task_type="rerank",
+            priority=getattr(self, "gpu_priority", 30),
+            owner=getattr(self, "gpu_owner", "web"),
+            details={"pairs": len(combined_inputs), "batchSize": batch_size},
+        ):
+            return self._ensure_cross_encoder().predict(
+                combined_inputs,
+                batch_size=batch_size,
+                show_progress_bar=False,
+                device=self.device,
+            )
 
     @staticmethod
     def normalized_weights(weights):

@@ -54,6 +54,16 @@ DEFAULT_APP_SETTINGS = [
         "Seconds a local Ollama request may wait for the local model queue before failing.",
     ),
     (
+        "LOCAL_GPU_QUEUE_SLOTS",
+        "auto",
+        "Local GPU work slots. Use auto to match detected NVIDIA GPUs; set a number only when intentionally overriding.",
+    ),
+    (
+        "LOCAL_GPU_QUEUE_TIMEOUT_SECONDS",
+        300,
+        "Seconds local GPU work may wait for a GPU slot before failing.",
+    ),
+    (
         "OLLAMA_KEEP_ALIVE",
         "30s",
         "How long Ollama keeps the chat model loaded after a request. Use 0 to unload immediately; longer values improve follow-up speed.",
