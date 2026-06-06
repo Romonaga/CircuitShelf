@@ -28,7 +28,7 @@ export function UploadProgressPanel({ filesCount, progress }: { filesCount: numb
       <div className="upload-progress-stats">
         {progress.totalBatches ? (
           <span>
-            <small>Batches</small>
+            <small>Upload groups</small>
             <strong>
               {formatInteger(progress.completedBatches ?? 0)} / {formatInteger(progress.totalBatches)}
             </strong>
