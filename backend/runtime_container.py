@@ -52,7 +52,7 @@ from backend.ingestion.worker_sizing import (
 )
 from backend.services.inventory_import import parse_inventory_import
 from backend.services.log_retention import cleanup_old_logs
-from backend.services.log_tail import tail_text_file
+from backend.services.log_tail import tail_recent_trace_logs
 from backend.ingestion.ocr_utils import run_ocr
 from backend.ingestion.pinout_extractor import extract_pinout_map
 from backend.services.reranker import Reranker
@@ -93,7 +93,7 @@ class CircuitShelfRuntime:
         self.prompt_dir = config.get("PROMPT_DIR", "prompts")
         self.training_dir = config.get("TRAINING_DIR", "training")
         self.trace_log_file = config.get("TRACE_LOG_FILE", "logs/trace.log")
-        self.log_retention_days = config.get("LOG_RETENTION_DAYS", 14)
+        self.log_retention_days = config.get("LOG_RETENTION_DAYS", 7)
         self.tesseract_temp_max_age_seconds = 3600
         self.embed_model_name = config.get("EMBED_MODEL_NAME")
         self.llm_model_name = config.get("LLM_MODEL_NAME")
@@ -404,7 +404,7 @@ class CircuitShelfRuntime:
         self.extract_pinout_map = extract_pinout_map
         self.display_source_name = display_source_name
         self.sanitize_for_json = sanitize_for_json
-        self.tail_text_file = tail_text_file
+        self.tail_text_file = tail_recent_trace_logs
         self.parse_inventory_import = parse_inventory_import
 
     def supported_training_extensions(self):

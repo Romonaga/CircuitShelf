@@ -9,7 +9,7 @@ DEFAULT_APP_SETTINGS = [
     ("STATUS_POLL_ACTIVE_INTERVAL_SECONDS", 3, "Browser status refresh interval while indexing is running."),
     ("SESSION_TIMEOUT_SECONDS", 28800, "Seconds of idle time before a browser login session expires."),
     ("INGEST_WATCH_INTERVAL_SECONDS", 300, "Seconds between automatic document-change checks."),
-    ("LOG_RETENTION_DAYS", 14, "Days to keep trace log files. Set to 0 to disable automatic cleanup."),
+    ("LOG_RETENTION_DAYS", 7, "Days to keep trace log files. Set to 0 to disable automatic cleanup."),
     ("PDF_RENDER_VECTOR_PAGES", True, "Render vector-heavy PDF pages as searchable images."),
     ("PDF_RENDER_MAX_PAGES_PER_DOC", 8, "Maximum rendered visual PDF pages stored per document."),
     ("PDF_RENDER_MIN_DRAWINGS", 100, "Minimum vector drawing count before a PDF page is considered visual."),
