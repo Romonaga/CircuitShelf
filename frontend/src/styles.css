@@ -3457,6 +3457,7 @@ nav {
 }
 
 .ingest-file-grid {
+  --ingest-file-columns: minmax(220px, 1.35fr) 84px 132px 82px 92px 132px;
   max-height: 340px;
   padding: 0;
   border: 1px solid var(--line);
@@ -3469,10 +3470,10 @@ nav {
 .ingest-file-grid-heading,
 .ingest-file-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1.15fr) 86px 120px 88px 92px minmax(160px, 0.85fr);
-  gap: 10px;
+  grid-template-columns: var(--ingest-file-columns);
+  gap: 8px;
   align-items: center;
-  min-width: 840px;
+  min-width: 760px;
 }
 
 .ingest-file-grid-heading {
@@ -3502,11 +3503,16 @@ nav {
   background: #fbfdff;
 }
 
-.ingest-file-row strong,
-.ingest-file-row span {
+.ingest-file-cell {
+  display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ingest-file-row strong,
+.ingest-file-row > span {
   font-size: 0.76rem;
   line-height: 1.25;
 }
@@ -3516,12 +3522,26 @@ nav {
   font-weight: 800;
 }
 
-.ingest-file-row span {
+.ingest-file-row > span {
   color: var(--muted);
 }
 
+.ingest-file-grid-heading .ingest-file-cell-size,
+.ingest-file-grid-heading .ingest-file-cell-page,
+.ingest-file-grid-heading .ingest-file-cell-chunks,
+.ingest-file-grid-heading .ingest-file-cell-images {
+  text-align: right;
+}
+
+.ingest-file-cell-phase {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
 .ingest-phase-badge {
-  justify-self: start;
+  display: inline-block;
+  min-width: 0;
   max-width: 100%;
   padding: 3px 7px;
   border: 1px solid #ccdff0;
