@@ -148,6 +148,7 @@ class Reranker:
             )
         with gpu_coordinator.lease(
             task_type="rerank",
+            resource_class="cuda_batch",
             priority=getattr(self, "gpu_priority", 30),
             owner=getattr(self, "gpu_owner", "web"),
             details={"pairs": len(combined_inputs), "batchSize": batch_size},

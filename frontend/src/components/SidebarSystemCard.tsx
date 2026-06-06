@@ -31,6 +31,8 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
   const batches = status?.runtimeBatches;
   const llmQueue = status?.localLlmQueue;
   const gpuQueue = status?.localGpuQueue;
+  const cudaQueue = gpuQueue?.byResource?.cuda_batch;
+  const localLlmGpuQueue = gpuQueue?.byResource?.local_llm;
   const workers = status?.ingestWorkerBudget;
   const workerCapacity = workers?.documentWorkerCapacity ?? workers?.activeDocumentWorkers;
   const ingest = status?.ingest;
@@ -79,7 +81,12 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
       />
       <div className="sidebar-system-pills">
         <span><small>Workers</small><strong>{formatInteger(workers?.activeDocumentWorkers)} / {formatInteger(workerCapacity)}</strong></span>
-        <span><small>GPUQ</small><strong>{formatInteger(gpuQueue?.active)} / {formatInteger(gpuQueue?.slots)}</strong></span>
+        <span>
+          <small>CUDA</small>
+          <strong title={`Queued ${formatInteger(cudaQueue?.queued)} | completed ${formatInteger(cudaQueue?.completed)}`}>
+            {formatInteger(cudaQueue?.running)} / {formatInteger(gpuQueue?.cudaSlots)}
+          </strong>
+        </span>
         <span><small>Emb</small><strong>{formatInteger(batches?.embedding?.active)}</strong></span>
         <span><small>Rank</small><strong>{formatInteger(batches?.reranker?.active)}</strong></span>
         <span>
@@ -111,8 +118,10 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
             <span><small>Worker slots</small><strong>{formatInteger(workerCapacity)}</strong></span>
             <span><small>Today workers</small><strong>{formatInteger(peaks?.activeDocumentWorkers)}</strong></span>
             <span><small>Today GPU temp</small><strong>{peaks?.gpuTemperatureC == null ? "n/a" : `${formatNumber(peaks.gpuTemperatureC)} C`}</strong></span>
-            <span><small>GPU queued</small><strong>{formatInteger(gpuQueue?.queued)}</strong></span>
-            <span><small>GPU slots</small><strong>{formatInteger(gpuQueue?.slots)}</strong></span>
+            <span><small>CUDA queued</small><strong>{formatInteger(cudaQueue?.queued)}</strong></span>
+            <span><small>CUDA lanes</small><strong>{formatInteger(gpuQueue?.cudaSlots)}</strong></span>
+            <span><small>LLM GPU queued</small><strong>{formatInteger(localLlmGpuQueue?.queued)}</strong></span>
+            <span><small>LLM GPU slots</small><strong>{formatInteger(gpuQueue?.llmSlots)}</strong></span>
             <span><small>LLM waiting</small><strong>{formatInteger(llmQueue?.waiting)}</strong></span>
             <span><small>LLM done</small><strong>{formatInteger(llmQueue?.completed)}</strong></span>
             <span><small>LLM keep alive</small><strong>{llmQueue?.keepAlive ?? "n/a"}</strong></span>

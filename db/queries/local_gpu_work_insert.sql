@@ -1,5 +1,6 @@
 INSERT INTO local_gpu_work_items (
     task_id,
+    resource_class,
     task_type,
     priority,
     owner,
@@ -7,6 +8,7 @@ INSERT INTO local_gpu_work_items (
     details
 ) VALUES (
     %s::uuid,
+    %s,
     %s,
     %s,
     %s,

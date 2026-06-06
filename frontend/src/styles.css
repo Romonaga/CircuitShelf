@@ -3573,6 +3573,12 @@ nav {
   color: #5b3f8f;
 }
 
+.ingest-phase-badge.ai {
+  border-color: #b9d6ff;
+  background: #eef6ff;
+  color: #1d4f91;
+}
+
 .ingest-phase-badge.visual {
   border-color: #f3d4a7;
   background: #fff7e9;
@@ -5369,6 +5375,7 @@ nav {
 :root[data-theme="dark"] .ingest-phase-badge.ocr,
 :root[data-theme="dark"] .ingest-phase-badge.save,
 :root[data-theme="dark"] .ingest-phase-badge.embed,
+:root[data-theme="dark"] .ingest-phase-badge.ai,
 :root[data-theme="dark"] .ingest-phase-badge.visual,
 :root[data-theme="dark"] .ingest-phase-badge.waiting {
   color: var(--text);

@@ -169,7 +169,16 @@ class IncrementalDocumentProcessor:
             progress_file=source,
         )
         self.mark_source_ready_for_review(source)
-        ai_review = self.maybe_review_ingestion_with_openai(source, ingested_state, document_stats)
+        ai_review = self.maybe_review_ingestion_with_openai(
+            source,
+            ingested_state,
+            document_stats,
+            progress_callback=lambda **details: self.update_index_progress(
+                stage="processing_documents",
+                current_file=source,
+                file_details=details,
+            ),
+        )
         final_details = {
             **self.summarize_document_ingest_stats(document_stats),
             **image_result,

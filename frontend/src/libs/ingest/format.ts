@@ -194,6 +194,9 @@ export function phaseTone(progress: IngestProgress): string {
   if (phase.includes("embed")) {
     return "embed";
   }
+  if (phase.includes("ai") || phase.includes("openai") || phase.includes("llm")) {
+    return "ai";
+  }
   if (phase.includes("visual") || phase.includes("render")) {
     return "visual";
   }
@@ -222,6 +225,8 @@ export function compactPhase(progress: IngestProgress): string {
     embedding_chunks: "Embedding",
     persisting_chunks: "Saving text",
     persisting_images: "Saving images",
+    local_ai_review: "Local AI",
+    openai_ingestion_review: "OpenAI",
     waiting_to_save: "Extracted",
     extracted_waiting_for_db_save: "Extracted",
     queued_for_db_save: "DB queued",

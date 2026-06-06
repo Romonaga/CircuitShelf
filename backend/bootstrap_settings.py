@@ -54,9 +54,14 @@ DEFAULT_APP_SETTINGS = [
         "Seconds a local Ollama request may wait for the local model queue before failing.",
     ),
     (
-        "LOCAL_GPU_QUEUE_SLOTS",
+        "LOCAL_GPU_LLM_SLOTS",
         "auto",
-        "Local GPU work slots. Use auto to match detected NVIDIA GPUs; set a number only when intentionally overriding.",
+        "Local LLM GPU slots. Auto means one local Ollama generation lane per detected GPU.",
+    ),
+    (
+        "LOCAL_GPU_CUDA_SLOTS",
+        "auto",
+        "CUDA batch work lanes for embedding and reranking. Auto uses a conservative per-GPU batch lane count.",
     ),
     (
         "LOCAL_GPU_QUEUE_TIMEOUT_SECONDS",

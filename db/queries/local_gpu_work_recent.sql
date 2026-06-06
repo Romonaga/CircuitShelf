@@ -1,4 +1,5 @@
 SELECT task_id::text,
+       resource_class,
        task_type,
        priority,
        owner,

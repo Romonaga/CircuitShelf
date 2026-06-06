@@ -13,6 +13,10 @@ from db.sql import load_query
 
 
 GPU_QUEUE_LOCK_BASE = 1964000
+GPU_QUEUE_LOCK_OFFSETS = {
+    "local_llm": 0,
+    "cuda_batch": 1000,
+}
 
 
 def detect_local_gpu_count() -> int:
@@ -44,22 +48,49 @@ def detect_local_gpu_count() -> int:
     return 1
 
 
-def resolve_local_gpu_slots(config: Any, *, detected_gpus: int | None = None) -> int:
-    configured = str(config.get("LOCAL_GPU_QUEUE_SLOTS", "auto") or "auto").strip().lower()
+def _resolve_slot_count(
+    config: Any,
+    key: str,
+    *,
+    detected_gpus: int | None = None,
+    auto_multiplier: int = 1,
+    auto_max: int | None = None,
+) -> int:
+    configured = str(config.get(key, "auto") or "auto").strip().lower()
     if configured not in {"", "auto", "detected"}:
         try:
             return max(1, int(configured))
         except ValueError:
             pass
-    return max(1, int(detected_gpus or detect_local_gpu_count()))
+    detected = max(1, int(detected_gpus or detect_local_gpu_count()))
+    slots = max(1, detected * max(1, int(auto_multiplier or 1)))
+    if auto_max is not None:
+        slots = min(slots, max(1, int(auto_max)))
+    return slots
+
+
+def resolve_local_gpu_llm_slots(config: Any, *, detected_gpus: int | None = None) -> int:
+    return _resolve_slot_count(config, "LOCAL_GPU_LLM_SLOTS", detected_gpus=detected_gpus)
+
+
+def resolve_local_gpu_cuda_slots(config: Any, *, detected_gpus: int | None = None) -> int:
+    return _resolve_slot_count(
+        config,
+        "LOCAL_GPU_CUDA_SLOTS",
+        detected_gpus=detected_gpus,
+        auto_multiplier=2,
+        auto_max=4,
+    )
 
 
 @dataclass(frozen=True)
 class LocalGpuLease:
     task_id: str
+    resource_class: str
     task_type: str
     priority: int
     slot_index: int
+    slot_count: int
     wait_seconds: float
 
 
@@ -76,6 +107,8 @@ class LocalGpuWorkCoordinator:
         database,
         logger=None,
         slot_count: int | None = None,
+        llm_slot_count: int | None = None,
+        cuda_slot_count: int | None = None,
         detected_gpu_count: int | None = None,
         queue_timeout_seconds: float = 300,
         stale_running_after_seconds: int = 7200,
@@ -83,17 +116,34 @@ class LocalGpuWorkCoordinator:
     ):
         self.database = database
         self.logger = logger
-        self.detected_gpu_count = max(1, int(detected_gpu_count or slot_count or 1))
-        self.slot_count = max(1, int(slot_count or 1))
+        fallback_slots = max(1, int(slot_count or 1))
+        self.detected_gpu_count = max(1, int(detected_gpu_count or fallback_slots or 1))
+        self.llm_slot_count = max(1, int(llm_slot_count or fallback_slots))
+        self.cuda_slot_count = max(1, int(cuda_slot_count or fallback_slots))
         self.queue_timeout_seconds = max(1.0, float(queue_timeout_seconds or 300))
         self.stale_running_after_seconds = max(60, int(stale_running_after_seconds or 7200))
         self.poll_seconds = max(0.02, float(poll_seconds or 0.1))
         self.process_id = os.getpid()
         self._cleaned_abandoned = False
 
-    def configure(self, *, slot_count: int | None = None, queue_timeout_seconds: float | None = None) -> None:
+    @property
+    def slot_count(self) -> int:
+        return self.llm_slot_count
+
+    def configure(
+        self,
+        *,
+        slot_count: int | None = None,
+        llm_slot_count: int | None = None,
+        cuda_slot_count: int | None = None,
+        queue_timeout_seconds: float | None = None,
+    ) -> None:
         if slot_count is not None:
-            self.slot_count = max(1, int(slot_count or 1))
+            self.llm_slot_count = max(1, int(slot_count or 1))
+        if llm_slot_count is not None:
+            self.llm_slot_count = max(1, int(llm_slot_count or 1))
+        if cuda_slot_count is not None:
+            self.cuda_slot_count = max(1, int(cuda_slot_count or 1))
         if queue_timeout_seconds is not None:
             self.queue_timeout_seconds = max(1.0, float(queue_timeout_seconds or 300))
 
@@ -103,33 +153,38 @@ class LocalGpuWorkCoordinator:
         *,
         task_type: str,
         priority: int,
+        resource_class: str | None = None,
         owner: str | None = None,
         details: dict[str, Any] | None = None,
         timeout_seconds: float | None = None,
     ) -> Iterator[LocalGpuLease]:
         task_id = str(uuid.uuid4())
         priority = int(priority)
+        resource_class = self._normalize_resource_class(resource_class or self._default_resource_class(task_type))
         timeout = self.queue_timeout_seconds if timeout_seconds is None else max(1.0, float(timeout_seconds))
         self.cleanup_abandoned_once()
-        self._insert_task(task_id, task_type, priority, owner, details or {})
+        self._insert_task(task_id, resource_class, task_type, priority, owner, details or {})
 
         conn = None
         lock_key = None
         lease: LocalGpuLease | None = None
         try:
-            conn, slot_index, wait_seconds = self._wait_for_slot(task_id, timeout)
-            lock_key = self._lock_key(slot_index)
+            conn, slot_index, wait_seconds = self._wait_for_slot(task_id, resource_class, timeout)
+            slot_count = self._slot_count_for(resource_class)
+            lock_key = self._lock_key(resource_class, slot_index)
             lease = LocalGpuLease(
                 task_id=task_id,
+                resource_class=resource_class,
                 task_type=task_type,
                 priority=priority,
                 slot_index=slot_index,
+                slot_count=slot_count,
                 wait_seconds=wait_seconds,
             )
             if wait_seconds > 0.25 and self.logger:
                 self.logger.info(
-                    f"⏳ Local GPU work waited {wait_seconds:.2f}s: {task_type} "
-                    f"(priority {priority}, slot {slot_index + 1}/{self.slot_count})."
+                    f"⏳ Local GPU {resource_class} work waited {wait_seconds:.2f}s: {task_type} "
+                    f"(priority {priority}, slot {slot_index + 1}/{slot_count})."
                 )
             yield lease
             self._finish_task(conn, task_id, "completed", None)
@@ -165,13 +220,24 @@ class LocalGpuWorkCoordinator:
             return {
                 "enabled": False,
                 "error": str(exc),
-                "slots": self.slot_count,
+                "slots": self.llm_slot_count,
+                "llmSlots": self.llm_slot_count,
+                "cudaSlots": self.cuda_slot_count,
                 "detectedGpus": self.detected_gpu_count,
             }
-        counts = {row["status"]: int(row["count"] or 0) for row in count_rows}
+        counts: dict[str, int] = {}
+        counts_by_resource: dict[str, dict[str, int]] = {}
+        for row in count_rows:
+            status = str(row["status"])
+            resource = str(row.get("resource_class") or "unknown")
+            count = int(row["count"] or 0)
+            counts[status] = counts.get(status, 0) + count
+            counts_by_resource.setdefault(resource, {})[status] = count
         return {
             "enabled": True,
-            "slots": self.slot_count,
+            "slots": self.llm_slot_count,
+            "llmSlots": self.llm_slot_count,
+            "cudaSlots": self.cuda_slot_count,
             "detectedGpus": self.detected_gpu_count,
             "processId": self.process_id,
             "queueTimeoutSeconds": self.queue_timeout_seconds,
@@ -180,6 +246,7 @@ class LocalGpuWorkCoordinator:
             "completed": counts.get("completed", 0),
             "failed": counts.get("failed", 0),
             "timedOut": counts.get("timed_out", 0),
+            "byResource": counts_by_resource,
             "recent": [self._row_to_payload(row) for row in recent_rows],
         }
 
@@ -200,6 +267,7 @@ class LocalGpuWorkCoordinator:
     def _insert_task(
         self,
         task_id: str,
+        resource_class: str,
         task_type: str,
         priority: int,
         owner: str | None,
@@ -208,11 +276,12 @@ class LocalGpuWorkCoordinator:
         with self.database.connection() as conn:
             conn.execute(
                 load_query("local_gpu_work_insert.sql"),
-                (task_id, task_type, priority, owner, self.process_id, json.dumps(details)),
+                (task_id, resource_class, task_type, priority, owner, self.process_id, json.dumps(details)),
             )
 
-    def _wait_for_slot(self, task_id: str, timeout_seconds: float):
+    def _wait_for_slot(self, task_id: str, resource_class: str, timeout_seconds: float):
         started = time.monotonic()
+        slot_count = self._slot_count_for(resource_class)
         while True:
             elapsed = time.monotonic() - started
             if elapsed >= timeout_seconds:
@@ -222,9 +291,9 @@ class LocalGpuWorkCoordinator:
                 time.sleep(self.poll_seconds)
                 continue
 
-            for slot_index in range(self.slot_count):
+            for slot_index in range(slot_count):
                 conn = self.database._connection_pool().getconn()
-                lock_key = self._lock_key(slot_index)
+                lock_key = self._lock_key(resource_class, slot_index)
                 try:
                     row = conn.execute(load_query("local_gpu_advisory_try_lock.sql"), (lock_key,)).fetchone()
                     if not row or not row.get("acquired"):
@@ -236,7 +305,7 @@ class LocalGpuWorkCoordinator:
                         (
                             slot_index,
                             self.process_id,
-                            json.dumps({"slotCount": self.slot_count}),
+                            json.dumps({"slotCount": slot_count, "resourceClass": resource_class}),
                             task_id,
                         ),
                     ).fetchone()
@@ -273,13 +342,27 @@ class LocalGpuWorkCoordinator:
                 self.logger.warning(f"⚠️ Could not mark local GPU work {task_id} as {status}.")
 
     @staticmethod
-    def _lock_key(slot_index: int) -> int:
-        return GPU_QUEUE_LOCK_BASE + int(slot_index)
+    def _default_resource_class(task_type: str) -> str:
+        return "cuda_batch" if str(task_type or "").lower() in {"embedding", "rerank"} else "local_llm"
+
+    @staticmethod
+    def _normalize_resource_class(resource_class: str) -> str:
+        value = str(resource_class or "local_llm").strip().lower()
+        return value if value in GPU_QUEUE_LOCK_OFFSETS else "local_llm"
+
+    def _slot_count_for(self, resource_class: str) -> int:
+        return self.cuda_slot_count if resource_class == "cuda_batch" else self.llm_slot_count
+
+    @staticmethod
+    def _lock_key(resource_class: str, slot_index: int) -> int:
+        offset = GPU_QUEUE_LOCK_OFFSETS.get(resource_class, 0)
+        return GPU_QUEUE_LOCK_BASE + offset + int(slot_index)
 
     @staticmethod
     def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         return {
             "taskId": row.get("task_id"),
+            "resourceClass": row.get("resource_class"),
             "taskType": row.get("task_type"),
             "priority": row.get("priority"),
             "owner": row.get("owner"),
@@ -312,6 +395,7 @@ class GpuQueuedEmbedder:
         count = len(texts) if hasattr(texts, "__len__") else None
         with self.coordinator.lease(
             task_type="embedding",
+            resource_class="cuda_batch",
             priority=self.priority,
             owner=self.owner,
             details={"items": count},

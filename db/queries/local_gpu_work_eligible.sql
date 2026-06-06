@@ -3,6 +3,7 @@ SELECT coalesce((
         SELECT 1
           FROM local_gpu_work_items other
          WHERE other.status = 'queued'
+           AND other.resource_class = current_item.resource_class
            AND (
                 other.priority < current_item.priority
                 OR (

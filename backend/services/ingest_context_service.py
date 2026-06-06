@@ -62,7 +62,7 @@ class IngestContextService:
                 break
         return "\n\n".join(samples)[:max_chars]
 
-    def maybe_review_ingestion_with_openai(self, source: str, ingested_state, document_stats: dict | None):
+    def maybe_review_ingestion_with_openai(self, source: str, ingested_state, document_stats: dict | None, progress_callback=None):
         scope = self.source_ingest_scope(source)
         stats = (document_stats or {}).get(source, {})
         result = self.ai_review_service.review(
@@ -73,6 +73,7 @@ class IngestContextService:
             stats=stats,
             sample_text=self.sample_ingested_text(ingested_state, source),
             openai_enabled=bool(self.config.get("INGEST_OPENAI_ASSIST_ENABLED", False)),
+            progress_callback=progress_callback,
         )
         if result:
             self.trace_logger.debug(

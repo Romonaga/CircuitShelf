@@ -62,6 +62,7 @@ export interface LocalLlmQueueStatus {
 
 export interface LocalGpuQueueItem {
   taskId: string;
+  resourceClass?: string | null;
   taskType: string;
   priority: number;
   owner?: string | null;
@@ -81,6 +82,8 @@ export interface LocalGpuQueueItem {
 export interface LocalGpuQueueStatus {
   enabled: boolean;
   slots?: number;
+  llmSlots?: number;
+  cudaSlots?: number;
   detectedGpus?: number;
   processId?: number;
   queueTimeoutSeconds?: number;
@@ -89,6 +92,7 @@ export interface LocalGpuQueueStatus {
   completed?: number;
   failed?: number;
   timedOut?: number;
+  byResource?: Record<string, Record<string, number>>;
   recent?: LocalGpuQueueItem[];
   error?: string | null;
 }

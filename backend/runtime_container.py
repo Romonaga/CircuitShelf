@@ -32,7 +32,8 @@ from backend.services.gpu_work_queue import (
     GpuQueuedEmbedder,
     LocalGpuWorkCoordinator,
     detect_local_gpu_count,
-    resolve_local_gpu_slots,
+    resolve_local_gpu_cuda_slots,
+    resolve_local_gpu_llm_slots,
 )
 from backend.services.model_runtime import LazySentenceTransformer, release_accelerator_memory, resolve_model_device
 from backend.services.source_metadata import (
@@ -151,13 +152,31 @@ class CircuitShelfRuntime:
         self.local_gpu_priority = 50 if self.lazy_gpu_models else 10
         self.local_gpu_owner = "ingest" if self.lazy_gpu_models else "web"
         self.detected_local_gpus = detect_local_gpu_count()
-        self.local_gpu_slots = resolve_local_gpu_slots(self.config, detected_gpus=self.detected_local_gpus)
+        self.local_gpu_llm_slots = resolve_local_gpu_llm_slots(self.config, detected_gpus=self.detected_local_gpus)
+        self.local_gpu_cuda_slots = resolve_local_gpu_cuda_slots(self.config, detected_gpus=self.detected_local_gpus)
         self.local_gpu_coordinator = LocalGpuWorkCoordinator(
             database=self.database,
             logger=self.trace_logger,
-            slot_count=self.local_gpu_slots,
+            llm_slot_count=self.local_gpu_llm_slots,
+            cuda_slot_count=self.local_gpu_cuda_slots,
             detected_gpu_count=self.detected_local_gpus,
             queue_timeout_seconds=self.local_gpu_queue_timeout_seconds,
+        )
+        self.runtime_settings.register_callback(
+            "LOCAL_GPU_LLM_SLOTS",
+            lambda value: self.local_gpu_coordinator.configure(
+                llm_slot_count=resolve_local_gpu_llm_slots(self.config, detected_gpus=self.detected_local_gpus)
+            ),
+        )
+        self.runtime_settings.register_callback(
+            "LOCAL_GPU_CUDA_SLOTS",
+            lambda value: self.local_gpu_coordinator.configure(
+                cuda_slot_count=resolve_local_gpu_cuda_slots(self.config, detected_gpus=self.detected_local_gpus)
+            ),
+        )
+        self.runtime_settings.register_callback(
+            "LOCAL_GPU_QUEUE_TIMEOUT_SECONDS",
+            lambda value: self.local_gpu_coordinator.configure(queue_timeout_seconds=float(value or 300)),
         )
         if self.lazy_gpu_models:
             self.trace_logger.info(f"🧠 Ingest runtime will cold-load GPU models on demand: {self.model_device}")
@@ -475,6 +494,10 @@ class CircuitShelfRuntime:
         retries=None,
         delay=None,
         system_prompt=None,
+        gpu_priority=None,
+        gpu_owner=None,
+        gpu_resource_class="local_llm",
+        keep_alive=None,
     ):
         return self.ollama_chat_client.chat_with_retry(
             prompt,
@@ -483,6 +506,10 @@ class CircuitShelfRuntime:
             retries=retries,
             delay=delay,
             system_prompt=system_prompt,
+            gpu_priority=gpu_priority,
+            gpu_owner=gpu_owner,
+            gpu_resource_class=gpu_resource_class,
+            keep_alive=keep_alive,
         )
 
     def image_asset_count_for_document(self, doc_source):
@@ -516,7 +543,9 @@ class CircuitShelfRuntime:
     def gpu_model_residency(self):
         return {
             "lazy": bool(self.lazy_gpu_models),
-            "gpuSlots": self.local_gpu_slots,
+            "gpuSlots": self.local_gpu_llm_slots,
+            "llmGpuSlots": self.local_gpu_llm_slots,
+            "cudaGpuSlots": self.local_gpu_cuda_slots,
             "detectedGpus": self.detected_local_gpus,
             "embeddingResident": bool(getattr(self.embedder, "resident", True)),
             "rerankerResident": bool(getattr(self.reranker_engine, "resident", True)),

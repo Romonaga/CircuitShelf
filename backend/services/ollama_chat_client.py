@@ -131,7 +131,19 @@ class OllamaChatClient:
             "coordinatedByLocalGpuQueue": bool(self.gpu_coordinator),
         }
 
-    def chat_with_retry(self, prompt, model_name, chat_history=None, retries=None, delay=None, system_prompt=None):
+    def chat_with_retry(
+        self,
+        prompt,
+        model_name,
+        chat_history=None,
+        retries=None,
+        delay=None,
+        system_prompt=None,
+        gpu_priority: int | None = None,
+        gpu_owner: str | None = None,
+        gpu_resource_class: str = "local_llm",
+        keep_alive=None,
+    ):
         retries = int(self.query_retries if retries is None else retries)
         delay = float(self.query_retry_delay if delay is None else delay)
 
@@ -163,15 +175,17 @@ class OllamaChatClient:
             ),
             "options": options,
         }
-        if self.keep_alive not in (None, ""):
-            payload["keep_alive"] = self.keep_alive
+        effective_keep_alive = self.keep_alive if keep_alive is None else keep_alive
+        if effective_keep_alive not in (None, ""):
+            payload["keep_alive"] = effective_keep_alive
 
         if self.gpu_coordinator:
             try:
                 with self.gpu_coordinator.lease(
                     task_type="local_llm",
-                    priority=self.gpu_priority,
-                    owner=self.gpu_owner,
+                    resource_class=gpu_resource_class,
+                    priority=self.gpu_priority if gpu_priority is None else int(gpu_priority),
+                    owner=gpu_owner or self.gpu_owner,
                     details={"model": model_name or "default"},
                     timeout_seconds=self.request_gate.status()["queueTimeoutSeconds"],
                 ):

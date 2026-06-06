@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Any, Callable
 
 from backend.ingestion.document_classifier import detect_component_candidates, is_plausible_component
@@ -39,12 +40,15 @@ class IngestionAiReviewService:
         stats: dict[str, Any],
         sample_text: str,
         openai_enabled: bool,
+        progress_callback: Callable[..., None] | None = None,
     ) -> dict[str, Any] | None:
         decision = self.decision(source_path=source_path, stats=stats, sample_text=sample_text)
         if not decision["shouldReview"]:
             self.trace_logger.debug(f"🤖 Ingestion AI review skipped for {source_path}: {decision['reason']}")
             return None
 
+        if progress_callback:
+            progress_callback(documentPhase="Local AI review")
         local_review = self.run_local_review(
             source_path=source_path,
             stats=stats,
@@ -52,7 +56,14 @@ class IngestionAiReviewService:
             deterministic_reasons=decision["reasons"],
         )
         if local_review:
-            self.record_local_review(source_path, local_review)
+            self.record_local_review(
+                source_path,
+                local_review,
+                is_global=is_global,
+                entity_id=entity_id,
+                user_id=user_id,
+                decision_reason=decision["reason"],
+            )
 
         escalation_reason = self.escalation_reason(decision, local_review)
         if not openai_enabled:
@@ -85,6 +96,8 @@ class IngestionAiReviewService:
                 }
             return None
 
+        if progress_callback:
+            progress_callback(documentPhase="OpenAI ingestion review")
         openai_result = self.openai_assist_service.review_ingestion(
             source_path=source_path,
             is_global=is_global,
@@ -179,19 +192,30 @@ class IngestionAiReviewService:
         if not self.query_local_llm or not self.local_model_name:
             return None
         try:
+            system_prompt = LOCAL_INGESTION_REVIEW_SYSTEM_PROMPT
+            prompt = build_local_ingestion_review_prompt(
+                source_path=source_path,
+                stats=stats,
+                sample_text=sample_text,
+                deterministic_reasons=deterministic_reasons,
+            )
+            started_at = time.time()
             raw = self.query_local_llm(
-                build_local_ingestion_review_prompt(
-                    source_path=source_path,
-                    stats=stats,
-                    sample_text=sample_text,
-                    deterministic_reasons=deterministic_reasons,
-                ),
+                prompt,
                 self.local_model_name,
                 chat_history=[],
-                system_prompt=LOCAL_INGESTION_REVIEW_SYSTEM_PROMPT,
+                system_prompt=system_prompt,
+                gpu_priority=80,
+                gpu_owner="ingest-ai",
+                gpu_resource_class="local_llm",
+                keep_alive=0,
             )
             parsed = parse_json_object(raw)
-            return normalize_local_review(parsed, raw)
+            review = normalize_local_review(parsed, raw)
+            review["_inputTokenEstimate"] = estimate_local_tokens(system_prompt) + estimate_local_tokens(prompt)
+            review["_outputTokenEstimate"] = estimate_local_tokens(raw)
+            review["_latencyMs"] = int((time.time() - started_at) * 1000)
+            return review
         except Exception as exc:
             self.trace_logger.warning(f"Local ingestion review failed for {source_path}: {exc}")
             return {
@@ -204,10 +228,22 @@ class IngestionAiReviewService:
                 "reason": "local ingestion review failed",
             }
 
-    def record_local_review(self, source_path: str, review: dict[str, Any]) -> None:
+    def record_local_review(
+        self,
+        source_path: str,
+        review: dict[str, Any],
+        *,
+        is_global: bool,
+        entity_id: int | None,
+        user_id: int | None,
+        decision_reason: str,
+    ) -> None:
         if not self.ai_provider_store:
             return
         try:
+            input_tokens = int(review.get("_inputTokenEstimate") or 0)
+            output_tokens = int(review.get("_outputTokenEstimate") or 0)
+            latency_ms = int(review.get("_latencyMs") or 0)
             self.ai_provider_store.record_document_ingest_ai_review(
                 source_path=source_path,
                 provider="ollama",
@@ -217,6 +253,22 @@ class IngestionAiReviewService:
                 review_json=review,
                 estimated_cost=0.0,
             )
+            if hasattr(self.ai_provider_store, "record_ai_assist_event"):
+                self.ai_provider_store.record_ai_assist_event(
+                    entity_id=None if is_global else entity_id,
+                    user_id=user_id,
+                    provider="ollama",
+                    task_type="ingestion_assist",
+                    model_name=self.local_model_name or "local",
+                    context_type="document_ingest",
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    estimated_cost=0.0,
+                    paid_by="local",
+                    success=True,
+                    decision_reason=f"Local ingestion review ran for {source_path}: {decision_reason}",
+                    latency_ms=latency_ms,
+                )
         except Exception as exc:
             self.trace_logger.debug(f"Local ingestion review audit skipped for {source_path}: {exc}")
 
@@ -270,3 +322,10 @@ def optional_float(value) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def estimate_local_tokens(text: str | None) -> int:
+    value = str(text or "")
+    if not value:
+        return 0
+    return max(1, int(len(value) / 4))
