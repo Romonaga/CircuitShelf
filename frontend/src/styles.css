@@ -3467,6 +3467,10 @@ nav {
   scrollbar-gutter: stable;
 }
 
+.ingest-status-panel.expanded .ingest-file-grid {
+  max-height: clamp(420px, 56vh, 760px);
+}
+
 .ingest-file-grid-heading,
 .ingest-file-row {
   display: grid;

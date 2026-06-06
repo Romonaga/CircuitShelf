@@ -12,13 +12,15 @@ export function IngestStatusPanel({
   workerBudget,
   runtimeBatches,
   pendingReview,
-  onOpenReview
+  onOpenReview,
+  display = "standard"
 }: {
   ingest?: IngestStatus | null;
   workerBudget?: IngestWorkerBudget | null;
   runtimeBatches?: RuntimeBatches | null;
   pendingReview?: number;
   onOpenReview?: () => void;
+  display?: "standard" | "expanded";
 }) {
   if (!ingest) {
     return null;
@@ -30,9 +32,14 @@ export function IngestStatusPanel({
   const totalFiles = ingest.totalFiles ?? 0;
   const processedFiles = ingest.processedFiles ?? 0;
   const fileRows = activeFileRows(ingest);
+  const className = [
+    "ingest-status-panel",
+    display === "expanded" ? "expanded" : "",
+    hasError ? "error" : isRunning ? "running" : ""
+  ].filter(Boolean).join(" ");
 
   return (
-    <div className={hasError ? "ingest-status-panel error" : isRunning ? "ingest-status-panel running" : "ingest-status-panel"}>
+    <div className={className}>
       <IngestStatusHeader running={isRunning} pendingReview={pending} reason={ingest.lastReason} onOpenReview={onOpenReview} />
       <IngestDetailGrid ingest={ingest} />
       <IngestWorkerBudgetPanel workerBudget={workerBudget} runtimeBatches={runtimeBatches} />

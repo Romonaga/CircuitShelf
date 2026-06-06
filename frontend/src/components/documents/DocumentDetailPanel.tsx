@@ -63,6 +63,7 @@ export function DocumentDetailPanel({
     <div className="chunk-panel document-detail-panel">
       {isAdmin ? (
         <IngestStatusPanel
+          display="expanded"
           ingest={status?.ingest}
           workerBudget={status?.ingestWorkerBudget}
           runtimeBatches={status?.runtimeBatches}
