@@ -58,7 +58,7 @@ from backend.ingestion.worker_sizing import (
 from backend.services.inventory_import import parse_inventory_import
 from backend.services.log_retention import cleanup_old_logs
 from backend.services.log_tail import tail_recent_trace_logs
-from backend.ingestion.ocr_utils import run_ocr
+from backend.ingestion.ocr_engines import run_selected_ocr
 from backend.ingestion.pinout_extractor import extract_pinout_map
 from backend.services.reranker import Reranker
 from backend.services.response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT
@@ -254,7 +254,7 @@ class CircuitShelfRuntime:
         self.ingestion_pipeline = IngestionPipeline(
             config=self.config,
             trace_logger=self.trace_logger,
-            run_ocr=run_ocr,
+            run_ocr=run_selected_ocr,
             detected_cpu_count=detected_cpu_count,
             reserved_core_count=reserved_core_count,
             usable_core_count=usable_core_count,

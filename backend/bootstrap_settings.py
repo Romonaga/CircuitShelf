@@ -19,6 +19,12 @@ DEFAULT_APP_SETTINGS = [
     ("PDF_EMBEDDED_IMAGE_OCR_MIN_WIDTH", 80, "Minimum embedded PDF image width queued for OCR."),
     ("PDF_EMBEDDED_IMAGE_OCR_MIN_HEIGHT", 80, "Minimum embedded PDF image height queued for OCR."),
     ("PDF_EMBEDDED_IMAGE_OCR_MIN_AREA", 6400, "Minimum embedded PDF image pixel area queued for OCR."),
+    ("OCR_ENGINE", "tesseract", "OCR engine used during ingestion: tesseract or paddleocr."),
+    ("OCR_ENGINE_FALLBACK", True, "Fall back to Tesseract when the selected OCR engine is unavailable or fails."),
+    ("PADDLEOCR_USE_GPU", True, "Use PaddleOCR GPU inference when OCR_ENGINE is paddleocr."),
+    ("PADDLEOCR_DEVICE", "gpu", "PaddleOCR device hint: gpu or cpu. Leave gpu for CUDA-backed OCR testing."),
+    ("PADDLEOCR_LANG", "en", "PaddleOCR recognition language code."),
+    ("PADDLEOCR_ENGINE", "", "Optional PaddleOCR inference backend override. Leave blank for the default backend."),
     (
         "INGEST_LOCAL_AI_REVIEW_ENABLED",
         True,

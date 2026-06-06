@@ -2,6 +2,7 @@ import unittest
 import logging
 from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -9,6 +10,7 @@ from backend.ingestion import IngestionPipeline
 from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsset
 from backend.ingestion.ocr_assets import OcrAssetProcessor
 from backend.ingestion.pdf.embedded_image_extractor import EmbeddedPdfImageExtractor
+from backend.ingestion.ocr_engines import _extract_paddle_text_and_confidence, run_selected_ocr
 from backend.ingestion.ocr_utils import parse_tesseract_tsv, should_skip_image, should_skip_image_dimensions
 
 
@@ -153,6 +155,76 @@ class OcrUtilsTests(unittest.TestCase):
 
         self.assertFalse(skip)
         self.assertEqual(reason, "")
+
+    def test_unsupported_ocr_engine_returns_skipped_result(self):
+        image = Image.new("RGB", (120, 80), "white")
+
+        result = run_selected_ocr(
+            image,
+            {
+                "OCR_ENGINE": "unknown",
+                "OCR_MIN_IMAGE_WIDTH": 20,
+                "OCR_MIN_IMAGE_HEIGHT": 20,
+                "OCR_MIN_IMAGE_AREA": 900,
+            },
+        )
+
+        self.assertTrue(result.skipped)
+        self.assertIn("unsupported OCR engine", result.skip_reason)
+
+    def test_paddleocr_failure_falls_back_to_tesseract_when_enabled(self):
+        image = Image.new("RGB", (120, 80), "white")
+
+        with (
+            patch("backend.ingestion.ocr_engines._run_paddle_ocr", side_effect=RuntimeError("missing paddle")),
+            patch("backend.ingestion.ocr_engines.run_tesseract_ocr", return_value=SimpleNamespace(text="fallback text", confidence=90.0, skipped=False, skip_reason="")),
+        ):
+            result = run_selected_ocr(
+                image,
+                {
+                    "OCR_ENGINE": "paddleocr",
+                    "OCR_ENGINE_FALLBACK": True,
+                    "OCR_MIN_IMAGE_WIDTH": 20,
+                    "OCR_MIN_IMAGE_HEIGHT": 20,
+                    "OCR_MIN_IMAGE_AREA": 900,
+                },
+            )
+
+        self.assertFalse(result.skipped)
+        self.assertEqual(result.text, "fallback text")
+
+    def test_paddleocr_failure_can_be_reported_without_fallback(self):
+        image = Image.new("RGB", (120, 80), "white")
+
+        with patch("backend.ingestion.ocr_engines._run_paddle_ocr", side_effect=RuntimeError("missing paddle")):
+            result = run_selected_ocr(
+                image,
+                {
+                    "OCR_ENGINE": "paddleocr",
+                    "OCR_ENGINE_FALLBACK": False,
+                    "OCR_MIN_IMAGE_WIDTH": 20,
+                    "OCR_MIN_IMAGE_HEIGHT": 20,
+                    "OCR_MIN_IMAGE_AREA": 900,
+                },
+            )
+
+        self.assertTrue(result.skipped)
+        self.assertIn("paddleocr failed", result.skip_reason)
+
+    def test_paddleocr_result_normalization_handles_current_json_shape(self):
+        text, confidence = _extract_paddle_text_and_confidence(
+            [
+                {
+                    "res": {
+                        "rec_texts": ["VCC", "GND"],
+                        "rec_scores": [0.96, 0.84],
+                    }
+                }
+            ]
+        )
+
+        self.assertEqual(text, "VCC GND")
+        self.assertAlmostEqual(confidence, 90.0)
 
     def test_pdf_embedded_image_config_accepts_config_wrapper(self):
         extractor = EmbeddedPdfImageExtractor(
