@@ -16,23 +16,35 @@ export function SettingsView() {
 
   return (
     <section className="view-grid settings-grid">
-      <SettingsListPanel
-        busy={settings.busy}
-        error={settings.error}
-        filter={settings.filter}
-        groupFilter={settings.groupFilter}
-        groupedSettings={settings.groupedSettings}
-        groups={settings.groups}
-        hiddenAdvancedCount={settings.hiddenAdvancedCount}
-        selected={settings.selected}
-        settingsCount={settings.settingsCount}
-        showAdvanced={settings.showAdvanced}
-        visibleCount={settings.visibleCount}
-        onFilterChange={settings.setFilter}
-        onGroupFilterChange={settings.setGroupFilter}
-        onSelectSetting={settings.selectSetting}
-        onShowAdvancedChange={settings.setShowAdvanced}
-      />
+      <div className="settings-primary-stack">
+        <SettingsListPanel
+          busy={settings.busy}
+          error={settings.error}
+          filter={settings.filter}
+          groupFilter={settings.groupFilter}
+          groupedSettings={settings.groupedSettings}
+          groups={settings.groups}
+          hiddenAdvancedCount={settings.hiddenAdvancedCount}
+          selected={settings.selected}
+          settingsCount={settings.settingsCount}
+          showAdvanced={settings.showAdvanced}
+          visibleCount={settings.visibleCount}
+          onFilterChange={settings.setFilter}
+          onGroupFilterChange={settings.setGroupFilter}
+          onSelectSetting={settings.selectSetting}
+          onShowAdvancedChange={settings.setShowAdvanced}
+        />
+        <SettingsEditorPanel
+          busy={settings.busy}
+          draftValue={settings.draftValue}
+          message={settings.message}
+          saving={settings.saving}
+          selected={settings.selected}
+          onDraftValueChange={settings.setDraftValue}
+          onLoadSettings={() => void settings.loadSettings()}
+          onSubmit={(event) => void settings.submit(event)}
+        />
+      </div>
 
       <div className="settings-editor-stack">
         <PasswordPolicyPanel
@@ -51,16 +63,6 @@ export function SettingsView() {
           canManage
           showKeyPolicy={false}
           showBudget={false}
-        />
-        <SettingsEditorPanel
-          busy={settings.busy}
-          draftValue={settings.draftValue}
-          message={settings.message}
-          saving={settings.saving}
-          selected={settings.selected}
-          onDraftValueChange={settings.setDraftValue}
-          onLoadSettings={() => void settings.loadSettings()}
-          onSubmit={(event) => void settings.submit(event)}
         />
       </div>
     </section>
