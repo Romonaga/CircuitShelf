@@ -34,6 +34,7 @@ from backend.services.gpu_work_queue import (
     detect_local_gpu_count,
     resolve_local_gpu_cuda_slots,
     resolve_local_gpu_llm_slots,
+    resolve_local_gpu_ocr_slots,
 )
 from backend.services.model_runtime import LazySentenceTransformer, release_accelerator_memory, resolve_model_device
 from backend.services.source_metadata import (
@@ -154,11 +155,13 @@ class CircuitShelfRuntime:
         self.detected_local_gpus = detect_local_gpu_count()
         self.local_gpu_llm_slots = resolve_local_gpu_llm_slots(self.config, detected_gpus=self.detected_local_gpus)
         self.local_gpu_cuda_slots = resolve_local_gpu_cuda_slots(self.config, detected_gpus=self.detected_local_gpus)
+        self.local_gpu_ocr_slots = resolve_local_gpu_ocr_slots(self.config, detected_gpus=self.detected_local_gpus)
         self.local_gpu_coordinator = LocalGpuWorkCoordinator(
             database=self.database,
             logger=self.trace_logger,
             llm_slot_count=self.local_gpu_llm_slots,
             cuda_slot_count=self.local_gpu_cuda_slots,
+            ocr_slot_count=self.local_gpu_ocr_slots,
             detected_gpu_count=self.detected_local_gpus,
             queue_timeout_seconds=self.local_gpu_queue_timeout_seconds,
         )
@@ -166,6 +169,7 @@ class CircuitShelfRuntime:
             {
                 "LOCAL_GPU_LLM_SLOTS",
                 "LOCAL_GPU_CUDA_SLOTS",
+                "LOCAL_GPU_OCR_SLOTS",
                 "LOCAL_GPU_QUEUE_TIMEOUT_SECONDS",
             },
             lambda _key, _value: self.apply_gpu_runtime_settings(),
@@ -258,10 +262,12 @@ class CircuitShelfRuntime:
     def apply_gpu_runtime_settings(self):
         self.local_gpu_llm_slots = resolve_local_gpu_llm_slots(self.config, detected_gpus=self.detected_local_gpus)
         self.local_gpu_cuda_slots = resolve_local_gpu_cuda_slots(self.config, detected_gpus=self.detected_local_gpus)
+        self.local_gpu_ocr_slots = resolve_local_gpu_ocr_slots(self.config, detected_gpus=self.detected_local_gpus)
         self.local_gpu_queue_timeout_seconds = float(self.config.get("LOCAL_GPU_QUEUE_TIMEOUT_SECONDS", 300) or 300)
         self.local_gpu_coordinator.configure(
             llm_slot_count=self.local_gpu_llm_slots,
             cuda_slot_count=self.local_gpu_cuda_slots,
+            ocr_slot_count=self.local_gpu_ocr_slots,
             queue_timeout_seconds=self.local_gpu_queue_timeout_seconds,
         )
 
@@ -299,11 +305,13 @@ class CircuitShelfRuntime:
             return run_selected_ocr(image, ocr_config)
 
         width, height = image.size
+        ocr_slots = max(1, int(getattr(self, "local_gpu_ocr_slots", 1) or 1))
         with self.local_gpu_coordinator.lease(
             task_type="paddleocr",
-            resource_class="cuda_batch",
-            priority=self.local_gpu_priority,
+            resource_class="ocr_cuda",
+            priority=max(60, int(self.local_gpu_priority or 50)),
             owner=self.local_gpu_owner,
+            admission_max_pending=max(ocr_slots * 3, ocr_slots),
             details={
                 "engine": "paddleocr",
                 "device": "gpu",
@@ -679,6 +687,7 @@ class CircuitShelfRuntime:
             "gpuSlots": self.local_gpu_llm_slots,
             "llmGpuSlots": self.local_gpu_llm_slots,
             "cudaGpuSlots": self.local_gpu_cuda_slots,
+            "ocrGpuSlots": self.local_gpu_ocr_slots,
             "detectedGpus": self.detected_local_gpus,
             "embeddingResident": bool(getattr(self.embedder, "resident", True)),
             "rerankerResident": bool(getattr(self.reranker_engine, "resident", True)),

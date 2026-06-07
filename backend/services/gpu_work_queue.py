@@ -16,6 +16,7 @@ GPU_QUEUE_LOCK_BASE = 1964000
 GPU_QUEUE_LOCK_OFFSETS = {
     "local_llm": 0,
     "cuda_batch": 1000,
+    "ocr_cuda": 2000,
 }
 GPU_QUEUE_ADMISSION_LOCK_BASE = GPU_QUEUE_LOCK_BASE + 900000
 
@@ -84,6 +85,16 @@ def resolve_local_gpu_cuda_slots(config: Any, *, detected_gpus: int | None = Non
     )
 
 
+def resolve_local_gpu_ocr_slots(config: Any, *, detected_gpus: int | None = None) -> int:
+    return _resolve_slot_count(
+        config,
+        "LOCAL_GPU_OCR_SLOTS",
+        detected_gpus=detected_gpus,
+        auto_multiplier=4,
+        auto_max=8,
+    )
+
+
 @dataclass(frozen=True)
 class LocalGpuLease:
     task_id: str
@@ -110,6 +121,7 @@ class LocalGpuWorkCoordinator:
         slot_count: int | None = None,
         llm_slot_count: int | None = None,
         cuda_slot_count: int | None = None,
+        ocr_slot_count: int | None = None,
         detected_gpu_count: int | None = None,
         queue_timeout_seconds: float = 300,
         stale_running_after_seconds: int = 7200,
@@ -121,6 +133,7 @@ class LocalGpuWorkCoordinator:
         self.detected_gpu_count = max(1, int(detected_gpu_count or fallback_slots or 1))
         self.llm_slot_count = max(1, int(llm_slot_count or fallback_slots))
         self.cuda_slot_count = max(1, int(cuda_slot_count or fallback_slots))
+        self.ocr_slot_count = max(1, int(ocr_slot_count or self.cuda_slot_count))
         self.queue_timeout_seconds = max(1.0, float(queue_timeout_seconds or 300))
         self.stale_running_after_seconds = max(60, int(stale_running_after_seconds or 7200))
         self.poll_seconds = max(0.02, float(poll_seconds or 0.1))
@@ -137,6 +150,7 @@ class LocalGpuWorkCoordinator:
         slot_count: int | None = None,
         llm_slot_count: int | None = None,
         cuda_slot_count: int | None = None,
+        ocr_slot_count: int | None = None,
         queue_timeout_seconds: float | None = None,
     ) -> None:
         if slot_count is not None:
@@ -145,6 +159,8 @@ class LocalGpuWorkCoordinator:
             self.llm_slot_count = max(1, int(llm_slot_count or 1))
         if cuda_slot_count is not None:
             self.cuda_slot_count = max(1, int(cuda_slot_count or 1))
+        if ocr_slot_count is not None:
+            self.ocr_slot_count = max(1, int(ocr_slot_count or 1))
         if queue_timeout_seconds is not None:
             self.queue_timeout_seconds = max(1.0, float(queue_timeout_seconds or 300))
 
@@ -259,6 +275,7 @@ class LocalGpuWorkCoordinator:
                 "slots": self.llm_slot_count,
                 "llmSlots": self.llm_slot_count,
                 "cudaSlots": self.cuda_slot_count,
+                "ocrSlots": self.ocr_slot_count,
                 "detectedGpus": self.detected_gpu_count,
             }
         counts: dict[str, int] = {}
@@ -274,6 +291,7 @@ class LocalGpuWorkCoordinator:
             "slots": self.llm_slot_count,
             "llmSlots": self.llm_slot_count,
             "cudaSlots": self.cuda_slot_count,
+            "ocrSlots": self.ocr_slot_count,
             "detectedGpus": self.detected_gpu_count,
             "processId": self.process_id,
             "queueTimeoutSeconds": self.queue_timeout_seconds,
@@ -479,7 +497,12 @@ class LocalGpuWorkCoordinator:
 
     @staticmethod
     def _default_resource_class(task_type: str) -> str:
-        return "cuda_batch" if str(task_type or "").lower() in {"embedding", "rerank"} else "local_llm"
+        normalized = str(task_type or "").lower()
+        if normalized == "paddleocr":
+            return "ocr_cuda"
+        if normalized in {"embedding", "rerank"}:
+            return "cuda_batch"
+        return "local_llm"
 
     @staticmethod
     def _normalize_resource_class(resource_class: str) -> str:
@@ -487,7 +510,11 @@ class LocalGpuWorkCoordinator:
         return value if value in GPU_QUEUE_LOCK_OFFSETS else "local_llm"
 
     def _slot_count_for(self, resource_class: str) -> int:
-        return self.cuda_slot_count if resource_class == "cuda_batch" else self.llm_slot_count
+        if resource_class == "cuda_batch":
+            return self.cuda_slot_count
+        if resource_class == "ocr_cuda":
+            return self.ocr_slot_count
+        return self.llm_slot_count
 
     @staticmethod
     def _lock_key(resource_class: str, slot_index: int) -> int:

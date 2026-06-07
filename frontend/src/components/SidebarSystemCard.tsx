@@ -32,6 +32,7 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
   const llmQueue = status?.localLlmQueue;
   const gpuQueue = status?.localGpuQueue;
   const cudaQueue = gpuQueue?.byResource?.cuda_batch;
+  const ocrGpuQueue = gpuQueue?.byResource?.ocr_cuda;
   const localLlmGpuQueue = gpuQueue?.byResource?.local_llm;
   const workers = status?.ingestWorkerBudget;
   const workerCapacity = workers?.documentWorkerCapacity ?? workers?.activeDocumentWorkers;
@@ -87,6 +88,12 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
             {formatInteger(cudaQueue?.running)} / {formatInteger(gpuQueue?.cudaSlots)}
           </strong>
         </span>
+        <span>
+          <small>OCR</small>
+          <strong title={`Queued ${formatInteger(ocrGpuQueue?.queued)} | completed ${formatInteger(ocrGpuQueue?.completed)}`}>
+            {formatInteger(ocrGpuQueue?.running)} / {formatInteger(gpuQueue?.ocrSlots)}
+          </strong>
+        </span>
         <span><small>Emb</small><strong>{formatInteger(batches?.embedding?.active)}</strong></span>
         <span><small>Rank</small><strong>{formatInteger(batches?.reranker?.active)}</strong></span>
         <span>
@@ -120,6 +127,8 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
             <span><small>Today GPU temp</small><strong>{peaks?.gpuTemperatureC == null ? "n/a" : `${formatNumber(peaks.gpuTemperatureC)} C`}</strong></span>
             <span><small>CUDA queued</small><strong>{formatInteger(cudaQueue?.queued)}</strong></span>
             <span><small>CUDA lanes</small><strong>{formatInteger(gpuQueue?.cudaSlots)}</strong></span>
+            <span><small>OCR queued</small><strong>{formatInteger(ocrGpuQueue?.queued)}</strong></span>
+            <span><small>OCR lanes</small><strong>{formatInteger(gpuQueue?.ocrSlots)}</strong></span>
             <span><small>LLM GPU queued</small><strong>{formatInteger(localLlmGpuQueue?.queued)}</strong></span>
             <span><small>LLM GPU slots</small><strong>{formatInteger(gpuQueue?.llmSlots)}</strong></span>
             <span><small>LLM waiting</small><strong>{formatInteger(llmQueue?.waiting)}</strong></span>

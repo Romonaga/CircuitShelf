@@ -4,6 +4,7 @@ import { formatInteger, formatNumber } from "../libs/format";
 const RESOURCE_LABELS: Record<string, string> = {
   cuda_batch: "CUDA batch",
   local_llm: "Local LLM",
+  ocr_cuda: "OCR CUDA",
 };
 
 const TASK_LABELS: Record<string, string> = {
@@ -53,6 +54,7 @@ function resourceRows(queue: LocalGpuQueueStatus) {
   const configured = [
     ["local_llm", queue.llmSlots],
     ["cuda_batch", queue.cudaSlots],
+    ["ocr_cuda", queue.ocrSlots],
   ] as const;
   const extras = Object.keys(byResource)
     .filter((key) => !configured.some(([configuredKey]) => configuredKey === key))
@@ -83,6 +85,10 @@ export function LocalGpuQueuePanel({ queue }: { queue?: LocalGpuQueueStatus | nu
         <div className="status-stat">
           <span>CUDA slots</span>
           <strong>{formatInteger(queue.cudaSlots)}</strong>
+        </div>
+        <div className="status-stat">
+          <span>OCR slots</span>
+          <strong>{formatInteger(queue.ocrSlots)}</strong>
         </div>
         <div className="status-stat">
           <span>Active</span>

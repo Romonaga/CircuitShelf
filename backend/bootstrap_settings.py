@@ -81,6 +81,11 @@ DEFAULT_APP_SETTINGS = [
         "CUDA batch work lanes for embedding and reranking. Auto uses a conservative per-GPU batch lane count.",
     ),
     (
+        "LOCAL_GPU_OCR_SLOTS",
+        "auto",
+        "PaddleOCR CUDA lanes. Auto allows more OCR page workers than model-generation lanes while keeping ingestion lower priority.",
+    ),
+    (
         "LOCAL_GPU_QUEUE_TIMEOUT_SECONDS",
         300,
         "Seconds local GPU work may wait for a GPU slot before failing.",

@@ -84,6 +84,7 @@ export interface LocalGpuQueueStatus {
   slots?: number;
   llmSlots?: number;
   cudaSlots?: number;
+  ocrSlots?: number;
   detectedGpus?: number;
   processId?: number;
   queueTimeoutSeconds?: number;

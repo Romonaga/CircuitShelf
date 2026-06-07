@@ -37,6 +37,7 @@ RUNTIME_TABLES = [
     "ai_assist_events",
     "performance_resource_samples",
     "performance_work_runs",
+    "local_gpu_work_items",
     "ingest_jobs",
     "ingest_run_documents",
     "ingest_runs",
