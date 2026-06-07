@@ -236,7 +236,7 @@ class OcrUtilsTests(unittest.TestCase):
         image = Image.new("RGB", (120, 80), "white")
 
         completed = SimpleNamespace(returncode=0, stdout='{"text":"VCC GND","confidence":91.5}\n', stderr="")
-        with patch("backend.ingestion.ocr_engines.subprocess.run", return_value=completed) as run_mock:
+        with patch("backend.ingestion.ocr_engines._run_external_ocr_command", return_value=completed) as run_mock:
             result = run_selected_ocr(
                 image,
                 {

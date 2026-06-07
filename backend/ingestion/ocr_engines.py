@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
+import signal
 import subprocess
-import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -115,12 +116,9 @@ def _run_external_paddle_ocr(image: Image.Image, config: dict[str, Any], python_
         engine = str(_config_value(config, "PADDLEOCR_ENGINE", "") or "").strip()
         if engine:
             command.extend(["--engine", engine])
-        completed = subprocess.run(
+        completed = _run_external_ocr_command(
             command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=float(_config_value(config, "PADDLEOCR_TIMEOUT_SECONDS", 120) or 120),
+            timeout_seconds=float(_config_value(config, "PADDLEOCR_TIMEOUT_SECONDS", 120) or 120),
         )
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "unknown error").strip()
@@ -130,6 +128,35 @@ def _run_external_paddle_ocr(image: Image.Image, config: dict[str, Any], python_
     except (IndexError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"external paddleocr returned invalid JSON: {completed.stdout[:500]}") from exc
     return OcrResult(text=str(payload.get("text") or ""), confidence=_safe_float(payload.get("confidence")))
+
+
+def _run_external_ocr_command(command: list[str], *, timeout_seconds: float) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+        text=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=max(5.0, timeout_seconds))
+    except subprocess.TimeoutExpired:
+        _terminate_process_group(process)
+        stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(command, timeout_seconds, output=stdout, stderr=stderr)
+    except BaseException:
+        _terminate_process_group(process)
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout=stdout, stderr=stderr)
+
+
+def _terminate_process_group(process: subprocess.Popen[str]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    except Exception:
+        process.kill()
 
 
 def _paddle_engine(config: dict[str, Any]) -> Any:

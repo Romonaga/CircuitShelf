@@ -21,6 +21,9 @@ Restart=on-failure
 RestartSec=10
 TimeoutStopSec=60
 KillSignal=SIGTERM
+KillMode=control-group
+SendSIGKILL=yes
+FinalKillSignal=SIGKILL
 AllowedCPUs=0-7
 CPUQuota=800%
 
