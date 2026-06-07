@@ -70,12 +70,23 @@ def _run_paddle_ocr_with_fallback(image: Image.Image, config: dict[str, Any]) ->
     except Exception as exc:
         fallback = bool(_config_value(config, "OCR_ENGINE_FALLBACK", True))
         if fallback:
-            return run_tesseract_ocr(image, config)
+            result = run_tesseract_ocr(image, config)
+            return OcrResult(
+                text=result.text,
+                confidence=result.confidence,
+                skipped=result.skipped,
+                skip_reason=result.skip_reason,
+                engine=getattr(result, "engine", "tesseract"),
+                fallback_from="paddleocr",
+                error=str(exc)[:500],
+            )
         return OcrResult(
             text="",
             confidence=None,
             skipped=True,
             skip_reason=f"paddleocr failed: {str(exc)[:240]}",
+            engine="paddleocr",
+            error=str(exc)[:500],
         )
 
 
@@ -96,7 +107,7 @@ def _run_paddle_ocr(image: Image.Image, config: dict[str, Any]) -> OcrResult:
             raw_result = ocr.ocr(input_image, cls=True)
 
     text, confidence = _extract_paddle_text_and_confidence(raw_result)
-    return OcrResult(text=text, confidence=confidence)
+    return OcrResult(text=text, confidence=confidence, engine=f"paddleocr/{_paddle_device(config)}")
 
 
 def _run_external_paddle_ocr(image: Image.Image, config: dict[str, Any], python_path: str) -> OcrResult:
@@ -127,7 +138,11 @@ def _run_external_paddle_ocr(image: Image.Image, config: dict[str, Any], python_
         payload = json.loads(completed.stdout.strip().splitlines()[-1])
     except (IndexError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"external paddleocr returned invalid JSON: {completed.stdout[:500]}") from exc
-    return OcrResult(text=str(payload.get("text") or ""), confidence=_safe_float(payload.get("confidence")))
+    return OcrResult(
+        text=str(payload.get("text") or ""),
+        confidence=_safe_float(payload.get("confidence")),
+        engine=f"paddleocr/{_paddle_device(config)}",
+    )
 
 
 def _run_external_ocr_command(command: list[str], *, timeout_seconds: float) -> subprocess.CompletedProcess[str]:

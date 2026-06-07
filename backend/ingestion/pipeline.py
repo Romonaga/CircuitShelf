@@ -61,7 +61,7 @@ class IngestionPipeline:
     def process_file_by_type(self, fpath, target_state, trace_logger, chunker, token_utils, progress_callback=None):
         document = self.document_extractor.extract_by_type(fpath, chunker, progress_callback)
         if document is None:
-            return
+            return None
 
         self._apply_profile(document)
         if progress_callback:
@@ -69,8 +69,9 @@ class IngestionPipeline:
                 currentDocument=os.path.basename(fpath),
                 documentPhase="Chunking extracted text",
                 documentType=document.profile.document_type if document.profile else "unknown",
-            )
+        )
         self._store_extracted_document(document, target_state, chunker, token_utils)
+        return document
 
     def load_documents_parallel(
         self,

@@ -51,6 +51,9 @@ class OcrAssetProcessor:
                 "reason": result.skip_reason,
                 "confidence": result.confidence,
                 "skipped": True,
+                "engine": getattr(result, "engine", "unknown"),
+                "fallbackFrom": getattr(result, "fallback_from", ""),
+                "error": getattr(result, "error", ""),
             }
 
         cleaned_text = self.chunker.clean_ocr_text(result.text)
@@ -63,6 +66,9 @@ class OcrAssetProcessor:
             "reason": reason,
             "confidence": result.confidence,
             "skipped": False,
+            "engine": getattr(result, "engine", "unknown"),
+            "fallbackFrom": getattr(result, "fallback_from", ""),
+            "error": getattr(result, "error", ""),
         }
 
     def image_bytes_to_png_bytes(self, image_bytes: bytes, image_id: str = "image") -> bytes:

@@ -71,7 +71,7 @@ class IncrementalDocumentProcessor:
             def detail_progress(**details):
                 self.update_index_progress(stage="processing_documents", current_file=source, file_details=details)
 
-            self.process_file_by_type(
+            document = self.process_file_by_type(
                 fpath,
                 ingested_state,
                 self.trace_logger,
@@ -96,6 +96,7 @@ class IncrementalDocumentProcessor:
                 "extractElapsedSeconds": elapsed,
                 "activeDocumentWorkersAtStart": active_count,
                 "fileSizeBytes": start_details.get("fileSizeBytes"),
+                "ocrStats": getattr(document, "ocr_stats", {}) if document is not None else {},
             }
         except Exception as exc:
             self.trace_logger.error(f"Error processing {source}: {exc}")
@@ -184,6 +185,7 @@ class IncrementalDocumentProcessor:
             **self.summarize_document_ingest_stats(document_stats),
             **image_result,
             **selected_ocr_mode(self.config),
+            **(extracted.get("ocrStats") or {}),
         }
         if ai_review:
             final_details["aiIngestionReviews"] = 1
@@ -245,7 +247,9 @@ class IncrementalDocumentProcessor:
             f"dropped={build_result.dropped_chunks} | "
             f"images={self._int_value(details.get('storedImages'))}/{self._int_value(details.get('extractedImages'))} "
             f"ocr={self._int_value(details.get('ocrImageTexts'))} "
-            f"indexed_image_text={self._int_value(details.get('indexedImageTexts'))} | "
+            f"indexed_image_text={self._int_value(details.get('indexedImageTexts'))} "
+            f"ocr_engine={details.get('ocrEngineBreakdown') or details.get('ocrMode') or 'n/a'} "
+            f"ocr_fallbacks={self._int_value(details.get('ocrFallbacks'))} | "
             f"{ai_part}"
         )
 

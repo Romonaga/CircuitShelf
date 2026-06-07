@@ -25,6 +25,9 @@ class OcrResult:
     confidence: float | None
     skipped: bool = False
     skip_reason: str = ""
+    engine: str = "tesseract"
+    fallback_from: str = ""
+    error: str = ""
 
 
 def should_skip_image(image: Image.Image, config: dict[str, Any]) -> tuple[bool, str]:
@@ -142,7 +145,7 @@ def parse_tesseract_tsv(tsv_text: str) -> tuple[str, float | None]:
 
 
 def _ocr_failure_result(reason: str) -> OcrResult:
-    return OcrResult(text="", confidence=None, skipped=True, skip_reason=reason)
+    return OcrResult(text="", confidence=None, skipped=True, skip_reason=reason, engine="tesseract", error=reason)
 
 
 def run_ocr(image: Image.Image, config: dict[str, Any]) -> OcrResult:

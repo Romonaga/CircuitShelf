@@ -83,6 +83,7 @@ class DocumentExtractor:
             source_path=fpath,
             pages=[ExtractedPage(page_number=1, text=asset.ocr_text)],
             assets=[asset],
+            ocr_stats=PdfDocumentExtractor._ocr_stats([result]),
         )
 
     def extract_docx_textbox_images(self, fpath: str, chunker) -> list[ImageAsset]:
@@ -90,7 +91,8 @@ class DocumentExtractor:
         assets: list[ImageAsset] = []
         try:
             image_jobs = self._docx_textbox_image_jobs(fpath, base_doc)
-            for result in self._ocr_assets(chunker).run_jobs(image_jobs):
+            results = self._ocr_assets(chunker).run_jobs(image_jobs)
+            for result in results:
                 ocr_result = result["ocr_result"]
                 if not ocr_result["accepted"]:
                     continue
@@ -106,6 +108,10 @@ class DocumentExtractor:
                         ocr_confidence=ocr_result.get("confidence"),
                         source_kind="textbox",
                     )
+                )
+            if results:
+                self.trace_logger.debug(
+                    f"DOCX OCR stats for {base_doc}: {PdfDocumentExtractor._ocr_stats(results)}"
                 )
         except Exception as exc:
             self.trace_logger.warning(f"Failed to extract DOCX textbox images from {fpath}: {exc}")

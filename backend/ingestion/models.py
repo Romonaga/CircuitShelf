@@ -52,6 +52,7 @@ class ExtractedDocument:
     pages: list[ExtractedPage] = field(default_factory=list)
     assets: list[ImageAsset] = field(default_factory=list)
     profile: DocumentProfile | None = None
+    ocr_stats: dict = field(default_factory=dict)
 
     @property
     def text_sample(self) -> str:

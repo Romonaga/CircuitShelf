@@ -73,11 +73,34 @@ class PdfDocumentExtractor:
                 f"{len(embedded_images.images)} embedded images and {len(render_requests)} rendered pages queued for OCR."
             )
 
+        ocr_results = self.ocr_assets.run_jobs(image_jobs)
         assets = [
             self._asset_from_ocr_result(result, base_name, page_text_by_number)
-            for result in self.ocr_assets.run_jobs(image_jobs)
+            for result in ocr_results
         ]
-        return ExtractedDocument(source_path=path, pages=pages, assets=assets)
+        return ExtractedDocument(source_path=path, pages=pages, assets=assets, ocr_stats=self._ocr_stats(ocr_results))
+
+    @staticmethod
+    def _ocr_stats(results: list[dict]) -> dict[str, int | str]:
+        stats: dict[str, int | str] = {
+            "ocrJobs": len(results),
+            "ocrAccepted": 0,
+            "ocrSkipped": 0,
+            "ocrFallbacks": 0,
+        }
+        engines: dict[str, int] = {}
+        for result in results:
+            ocr_result = result.get("ocr_result") or {}
+            engine = str(ocr_result.get("engine") or "unknown")
+            engines[engine] = engines.get(engine, 0) + 1
+            if ocr_result.get("accepted"):
+                stats["ocrAccepted"] = int(stats["ocrAccepted"]) + 1
+            if ocr_result.get("skipped"):
+                stats["ocrSkipped"] = int(stats["ocrSkipped"]) + 1
+            if ocr_result.get("fallbackFrom"):
+                stats["ocrFallbacks"] = int(stats["ocrFallbacks"]) + 1
+        stats["ocrEngineBreakdown"] = ", ".join(f"{name}:{count}" for name, count in sorted(engines.items()))
+        return stats
 
     @staticmethod
     def _asset_from_ocr_result(result: dict, base_name: str, page_text_by_number: dict[int, str]) -> ImageAsset:
