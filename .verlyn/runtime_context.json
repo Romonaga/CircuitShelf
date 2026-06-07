@@ -1,0 +1,39 @@
+{
+  "schema_family": "assistant_runtime_context",
+  "schema_version": 1,
+  "product": "Verlyn",
+  "summary": "Compact assistant/runtime guidance that separates system governance, editable project rules, and detailed startup docs.",
+  "file_roles": {
+    "CONTRIBUTING.md": "Authoritative human commit and branch protocol.",
+    "AGENTS.md": "Repo-wide system governance, routing, verification, and completion policy.",
+    ".verlyn/runtime_context.json": "Compact runtime summary for assistants and compressed sessions.",
+    "RULES.md": "Editable project-specific guidance for people and assistants.",
+    "Documentation/guides/VERLYN_ASSISTANT_STARTUP.md": "Detailed assistant startup order, API usage, and helper-path guidance.",
+    "Documentation/guides/VERLYN_AGENT_WORKFLOW.md": "Assistant session loop after startup is complete."
+  },
+  "startup_read_order": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "RULES.md",
+    ".verlyn/runtime_context.json",
+    "Documentation/AI_USAGE_POLICY.md",
+    "Documentation/guides/VERLYN_ASSISTANT_STARTUP.md",
+    "Documentation/guides/VERLYN_AGENT_WORKFLOW.md"
+  ],
+  "control_path_priority": [
+    "Repo-local helper commands in scripts/verlyn_workflow.py",
+    "Verlyn API routes when helpers do not expose the exact mutation",
+    "Raw verlyn CLI only when the helper does not wrap the capability yet",
+    "Direct edits to workflow files only when the product path is blocked or the change is explicitly repairing that path"
+  ],
+  "workflow_defaults": [
+    "Treat Verlyn-managed changes and tasks as the active workflow source of truth.",
+    "Use RULES.md for editable project guidance and keep AGENTS.md authoritative for system policy.",
+    "After session compaction, compressed-summary recovery, or other resume paths, reread AGENTS.md, RULES.md, .verlyn/runtime_context.json, Documentation/AI_USAGE_POLICY.md, and Documentation/guides/VERLYN_ASSISTANT_STARTUP.md before continuing.",
+    "Run python scripts/verlyn_workflow.py assistant-startup --json after resume so the governed startup contract is reloaded and the visible governance receipt is refreshed.",
+    "The first user-facing response after compaction or resume must explicitly say that governance was reloaded and required repo rules were reread; hidden helper JSON or receipt files are not enough.",
+    "Run python scripts/verlyn_workflow.py assert-edit-route before manual code edits; use a recorded active change route or an explicit direct-work exception instead of relying on memory.",
+    "Update Documentation/guides/VERLYN_ASSISTANT_STARTUP.md when workflow, API, auth/session, startup order, or helper behavior changes.",
+    "Prefer reusable components and shared helpers when the same UI or workflow pattern appears in multiple places."
+  ]
+}
