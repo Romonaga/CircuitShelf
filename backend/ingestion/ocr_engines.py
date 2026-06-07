@@ -236,9 +236,12 @@ def _normalized_engine(config: dict[str, Any]) -> str:
 
 def _paddle_device(config: dict[str, Any]) -> str:
     configured = str(_config_value(config, "PADDLEOCR_DEVICE", "") or "").strip().lower()
-    if configured in {"cpu", "gpu"}:
-        return configured
-    return "gpu" if bool(_config_value(config, "PADDLEOCR_USE_GPU", True)) else "cpu"
+    requested_gpu = configured == "gpu"
+    if configured not in {"cpu", "gpu"}:
+        requested_gpu = bool(_config_value(config, "PADDLEOCR_USE_GPU", False))
+    if requested_gpu and bool(_config_value(config, "PADDLEOCR_GPU_EXPERIMENTAL_ENABLED", False)):
+        return "gpu"
+    return "cpu"
 
 
 def _config_value(config: dict[str, Any], key: str, default: Any = None) -> Any:

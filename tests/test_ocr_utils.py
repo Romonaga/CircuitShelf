@@ -173,9 +173,18 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertIn("unsupported OCR engine", result.skip_reason)
 
     def test_paddleocr_gpu_engine_reports_local_gpu_use(self):
-        self.assertTrue(ocr_uses_local_gpu({"OCR_ENGINE": "paddleocr", "PADDLEOCR_DEVICE": "gpu"}))
+        self.assertTrue(ocr_uses_local_gpu({
+            "OCR_ENGINE": "paddleocr",
+            "PADDLEOCR_DEVICE": "gpu",
+            "PADDLEOCR_GPU_EXPERIMENTAL_ENABLED": True,
+        }))
+        self.assertFalse(ocr_uses_local_gpu({"OCR_ENGINE": "paddleocr", "PADDLEOCR_DEVICE": "gpu"}))
         self.assertFalse(ocr_uses_local_gpu({"OCR_ENGINE": "paddleocr", "PADDLEOCR_DEVICE": "cpu"}))
-        self.assertFalse(ocr_uses_local_gpu({"OCR_ENGINE": "tesseract", "PADDLEOCR_DEVICE": "gpu"}))
+        self.assertFalse(ocr_uses_local_gpu({
+            "OCR_ENGINE": "tesseract",
+            "PADDLEOCR_DEVICE": "gpu",
+            "PADDLEOCR_GPU_EXPERIMENTAL_ENABLED": True,
+        }))
 
     def test_paddleocr_failure_falls_back_to_tesseract_when_enabled(self):
         image = Image.new("RGB", (120, 80), "white")
