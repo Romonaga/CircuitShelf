@@ -35,6 +35,7 @@ export function IngestStatusPanel({
   const className = [
     "ingest-status-panel",
     display === "expanded" ? "expanded" : "",
+    fileRows.length ? "with-file-progress" : "",
     hasError ? "error" : isRunning ? "running" : ""
   ].filter(Boolean).join(" ");
 

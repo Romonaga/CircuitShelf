@@ -1060,7 +1060,8 @@ nav {
 }
 
 .docs-grid {
-  grid-template-columns: 430px minmax(0, 1fr);
+  grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
+  align-items: start;
 }
 
 .settings-grid {
@@ -3938,11 +3939,23 @@ nav {
 }
 
 .document-detail-panel {
+  min-height: calc(100vh - 170px);
   grid-template-rows: none;
   grid-auto-rows: max-content;
   align-content: start;
   overflow: auto;
   padding-bottom: 22px;
+}
+
+.document-detail-panel > .ingest-status-panel.expanded.with-file-progress {
+  min-height: clamp(640px, calc(100vh - 190px), 1080px);
+  grid-template-rows: auto auto auto auto minmax(420px, 1fr) auto auto;
+}
+
+.document-detail-panel > .ingest-status-panel.expanded.with-file-progress .ingest-file-grid {
+  height: 100%;
+  min-height: 420px;
+  max-height: none;
 }
 
 .document-detail-panel .intelligence-panel {
