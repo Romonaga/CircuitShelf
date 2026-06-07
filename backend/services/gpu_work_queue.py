@@ -264,6 +264,7 @@ class LocalGpuWorkCoordinator:
         try:
             with self.database.connection() as conn:
                 count_rows = conn.execute(load_query("local_gpu_work_counts.sql"), (window,)).fetchall()
+                live_count_rows = conn.execute(load_query("local_gpu_work_live_by_resource_counts.sql")).fetchall()
                 recent_rows = conn.execute(
                     load_query("local_gpu_work_recent.sql"),
                     (window, max(1, int(recent_limit))),
@@ -281,6 +282,14 @@ class LocalGpuWorkCoordinator:
         counts: dict[str, int] = {}
         counts_by_resource: dict[str, dict[str, int]] = {}
         for row in count_rows:
+            status = str(row["status"])
+            resource = str(row.get("resource_class") or "unknown")
+            count = int(row["count"] or 0)
+            if status in {"queued", "running"}:
+                continue
+            counts[status] = counts.get(status, 0) + count
+            counts_by_resource.setdefault(resource, {})[status] = count
+        for row in live_count_rows:
             status = str(row["status"])
             resource = str(row.get("resource_class") or "unknown")
             count = int(row["count"] or 0)
