@@ -2,6 +2,8 @@ import os
 import threading
 import time
 
+from backend.services.upload_session_guard import active_upload_sessions
+
 
 class IndexLifecycleService:
     def __init__(
@@ -91,6 +93,28 @@ class IndexLifecycleService:
         )
         start_time = time.time()
         try:
+            active_uploads = active_upload_sessions(self.training_dir)
+            if active_uploads:
+                if reason != "watch":
+                    self.trace_logger.info(
+                        f"⏳ Index check deferred for {reason}; {len(active_uploads)} upload session(s) still active."
+                    )
+                work_label = "Index check: upload active"
+                work_status = "skipped"
+                work_details = {"reason": "upload_in_progress", "activeUploadSessions": len(active_uploads)}
+                return self.set_index_status(
+                    running=False,
+                    stage="idle",
+                    currentFiles=[],
+                    fileProgress={},
+                    processedFiles=0,
+                    totalFiles=0,
+                    lastFinishedAt=self.utc_now_iso(),
+                    lastResult="upload_in_progress",
+                    lastChanges=None,
+                    details=work_details,
+                )
+
             manifest = self.build_ingest_manifest()
             current_manifest = manifest.scan()
             previous_manifest = self.vector_store.load_document_records()

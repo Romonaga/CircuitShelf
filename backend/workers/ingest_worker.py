@@ -132,7 +132,7 @@ class IngestWorkerRunner:
                 self.runtime.index_lifecycle_service.check_for_training_changes(reason=reason)
             snapshot = self.runtime.ingest_progress.snapshot()
             result = snapshot.get("lastResult") or "completed"
-            status = "skipped" if result in {"no_changes", "already_running"} else "completed"
+            status = "skipped" if result in {"no_changes", "already_running", "upload_in_progress"} else "completed"
             self.job_store.finish(job_id, status=status, details=snapshot)
             if status != "skipped" or reason != "watch":
                 self.trace_logger.info(

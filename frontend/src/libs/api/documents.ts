@@ -28,10 +28,7 @@ export function uploadDocuments(
 ): Promise<UploadDocumentsResponse> {
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   const batches = splitUploadBatches(files);
-  if (batches.length > 1) {
-    return uploadDocumentBatches(batches, overwrite, scope, totalBytes, CONCURRENT_UPLOADS, onProgress);
-  }
-  return uploadDocumentBatch(files, overwrite, scope, false, totalBytes, 0, performance.now(), onProgress);
+  return uploadDocumentBatches(batches, overwrite, scope, totalBytes, CONCURRENT_UPLOADS, onProgress);
 }
 
 function splitUploadBatches(files: File[]): File[][] {
@@ -64,6 +61,7 @@ async function uploadDocumentBatches(
   concurrency: number,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadDocumentsResponse> {
+  const uploadSession = createUploadSessionId();
   const startedAt = performance.now();
   const aggregate: UploadDocumentsResponse = {
     ok: true,
@@ -113,6 +111,7 @@ async function uploadDocumentBatches(
           overwrite,
           scope,
           true,
+          uploadSession,
           batchTotals[index],
           0,
           startedAt,
@@ -144,10 +143,16 @@ async function uploadDocumentBatches(
 
   await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
 
-  if (aggregate.count > 0) {
-    aggregate.indexing = await triggerIndexCheck();
-  }
+  const completion = await completeUploadSession(scope, uploadSession, aggregate.count);
+  aggregate.indexing = completion.indexing;
   return aggregate;
+}
+
+function createUploadSessionId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function uploadDocumentBatch(
@@ -155,6 +160,7 @@ function uploadDocumentBatch(
   overwrite: boolean,
   scope: string,
   deferIndex: boolean,
+  uploadSession: string,
   totalBytes: number,
   completedBytes: number,
   startedAt: number,
@@ -163,7 +169,11 @@ function uploadDocumentBatch(
   const body = new FormData();
   files.forEach((file) => body.append("files", file, file.webkitRelativePath || file.name));
   const session = readSessionToken();
-  const path = `/api/documents/upload-batch?overwrite=${overwrite ? "true" : "false"}&scope=${encodeURIComponent(scope)}&defer_index=${deferIndex ? "true" : "false"}`;
+  const path =
+    `/api/documents/upload-batch?overwrite=${overwrite ? "true" : "false"}` +
+    `&scope=${encodeURIComponent(scope)}` +
+    `&defer_index=${deferIndex ? "true" : "false"}` +
+    `&upload_session=${encodeURIComponent(uploadSession)}`;
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -214,6 +224,21 @@ function uploadDocumentBatch(
     xhr.onabort = () => reject(new Error("Upload was cancelled."));
     xhr.send(body);
   });
+}
+
+export function completeUploadSession(
+  scope: string,
+  uploadSession: string,
+  uploadedCount: number
+): Promise<{ ok: boolean; indexing: { started: boolean; status?: unknown } }> {
+  const startIndex = uploadedCount > 0;
+  return requestJson<{ ok: boolean; indexing: { started: boolean; status?: unknown } }>(
+    `/api/documents/upload-complete?scope=${encodeURIComponent(scope)}` +
+      `&upload_session=${encodeURIComponent(uploadSession)}` +
+      `&uploaded_count=${encodeURIComponent(String(uploadedCount))}` +
+      `&start_index=${startIndex ? "true" : "false"}`,
+    { method: "POST" }
+  );
 }
 
 export function removeIndexedDocument(source: string): Promise<RemoveDocumentResponse> {

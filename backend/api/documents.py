@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from backend.api.dependencies import ApiDependencies
 from backend.services.document_detail_builder import DocumentDetailBuilder
 from backend.services.document_upload_writer import write_uploaded_documents
+from backend.services.upload_session_guard import complete_upload_session, mark_upload_session_active
 
 
 def create_router(
@@ -108,6 +109,7 @@ def create_router(
         overwrite: bool = Query(False),
         scope: str = Query("entity"),
         defer_index: bool = Query(False),
+        upload_session: str | None = Query(None),
     ):
         entity_id = None
         created_by_user_id = None
@@ -124,6 +126,7 @@ def create_router(
             entity_id = entity.entity_id
             created_by_user_id = deps.user_id_for_user(user)
 
+        mark_upload_session_active(training_dir, upload_session)
         try:
             upload_result = await write_uploaded_documents([file], overwrite, training_dir, supported_training_extensions())
         except ValueError as exc:
@@ -165,6 +168,7 @@ def create_router(
         overwrite: bool = Query(False),
         scope: str = Query("entity"),
         defer_index: bool = Query(False),
+        upload_session: str | None = Query(None),
     ):
         entity_id = None
         created_by_user_id = None
@@ -181,6 +185,7 @@ def create_router(
             entity_id = entity.entity_id
             created_by_user_id = deps.user_id_for_user(user)
 
+        mark_upload_session_active(training_dir, upload_session)
         try:
             upload_result = await write_uploaded_documents(files, overwrite, training_dir, supported_training_extensions())
         except ValueError as exc:
@@ -213,6 +218,34 @@ def create_router(
             "bytes": sum(item["bytes"] for item in uploaded_files),
             "indexing": index_job,
         }
+
+    @router.post("/api/documents/upload-complete")
+    async def upload_complete(
+        req: Request,
+        scope: str = Query("entity"),
+        upload_session: str = Query(...),
+        uploaded_count: int = Query(0),
+        start_index: bool = Query(True),
+    ):
+        created_by_user_id = None
+        if scope == "global":
+            user, error = deps.require_system_admin_user(req)
+            if error:
+                return error
+            created_by_user_id = deps.user_id_for_user(user)
+        else:
+            user, _, error = deps.require_entity_admin(req)
+            if error:
+                return error
+            created_by_user_id = deps.user_id_for_user(user)
+
+        complete_upload_session(training_dir, upload_session)
+        index_job = (
+            start_index_check(f"upload-batch:{max(0, uploaded_count)}", requested_by_user_id=created_by_user_id)
+            if start_index and uploaded_count > 0
+            else {"started": False}
+        )
+        return {"ok": True, "indexing": index_job}
 
     @router.get("/api/document")
     async def document_detail_query(req: Request, source: str, scope: str = Query("visible")):
