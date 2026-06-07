@@ -3,6 +3,14 @@ import { getSettings, updateSetting } from "../libs/api";
 import { errorMessage } from "../libs/errors";
 import type { AppSetting, SettingValue } from "../types";
 
+const PADDLEOCR_SETTING_KEYS = new Set([
+  "PADDLEOCR_DEVICE",
+  "PADDLEOCR_LANG",
+  "PADDLEOCR_ENGINE",
+  "PADDLEOCR_PYTHON",
+  "PADDLEOCR_TIMEOUT_SECONDS"
+]);
+
 export interface SettingsGroup {
   key: string;
   label: string;
@@ -41,9 +49,14 @@ export function useSystemSettings() {
     return Array.from(seen, ([key, group]) => ({ key, ...group }));
   }, [settings]);
 
+  const settingsByKey = useMemo(() => new Map(settings.map((setting) => [setting.key, setting])), [settings]);
+
   const filteredSettings = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     return settings.filter((setting) => {
+      if (!settingVisibleInContext(setting, settingsByKey)) {
+        return false;
+      }
       if (!showAdvanced && setting.advanced) {
         return false;
       }
@@ -55,7 +68,7 @@ export function useSystemSettings() {
       }
       return `${setting.key} ${setting.label} ${setting.description} ${setting.groupLabel}`.toLowerCase().includes(needle);
     });
-  }, [filter, groupFilter, settings, showAdvanced]);
+  }, [filter, groupFilter, settings, settingsByKey, showAdvanced]);
 
   const groupedSettings = useMemo<SettingsGroup[]>(() => {
     const byGroup = new Map<string, SettingsGroup>();
@@ -154,4 +167,12 @@ export function useSystemSettings() {
     visibleCount: filteredSettings.length,
     selectSetting
   };
+}
+
+function settingVisibleInContext(setting: AppSetting, settingsByKey: Map<string, AppSetting>) {
+  if (!PADDLEOCR_SETTING_KEYS.has(setting.key)) {
+    return true;
+  }
+  const engine = String(settingsByKey.get("OCR_ENGINE")?.value ?? "").trim().toLowerCase();
+  return engine === "paddleocr";
 }

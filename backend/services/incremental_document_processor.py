@@ -5,6 +5,7 @@ import time
 
 import numpy as np
 
+from backend.ingestion.ocr_engines import selected_ocr_mode
 from backend.ingestion.index_builder import IndexBuilder
 
 
@@ -182,6 +183,7 @@ class IncrementalDocumentProcessor:
         final_details = {
             **self.summarize_document_ingest_stats(document_stats),
             **image_result,
+            **selected_ocr_mode(self.config),
         }
         if ai_review:
             final_details["aiIngestionReviews"] = 1

@@ -47,6 +47,18 @@ def ocr_uses_local_gpu(config: dict[str, Any]) -> bool:
     return _normalized_engine(config) == "paddleocr" and _paddle_device(config) == "gpu"
 
 
+def selected_ocr_mode(config: dict[str, Any]) -> dict[str, str]:
+    """Return the effective OCR engine/device labels used for telemetry."""
+
+    engine = _normalized_engine(config)
+    device = _paddle_device(config) if engine == "paddleocr" else "cpu"
+    return {
+        "ocrEngine": engine,
+        "ocrDevice": device,
+        "ocrMode": f"{engine}/{device}",
+    }
+
+
 def _run_paddle_ocr_with_fallback(image: Image.Image, config: dict[str, Any]) -> OcrResult:
     skip, reason = should_skip_image(image, config)
     if skip:
@@ -236,11 +248,8 @@ def _normalized_engine(config: dict[str, Any]) -> str:
 
 def _paddle_device(config: dict[str, Any]) -> str:
     configured = str(_config_value(config, "PADDLEOCR_DEVICE", "") or "").strip().lower()
-    requested_gpu = configured == "gpu"
-    if configured not in {"cpu", "gpu"}:
-        requested_gpu = bool(_config_value(config, "PADDLEOCR_USE_GPU", False))
-    if requested_gpu and bool(_config_value(config, "PADDLEOCR_GPU_EXPERIMENTAL_ENABLED", False)):
-        return "gpu"
+    if configured in {"cpu", "gpu"}:
+        return configured
     return "cpu"
 
 

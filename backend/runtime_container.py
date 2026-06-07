@@ -518,8 +518,6 @@ class CircuitShelfRuntime:
                 "INDEX_IMAGE_OCR_AS_TEXT",
                 "OCR_ENGINE",
                 "OCR_ENGINE_FALLBACK",
-                "PADDLEOCR_USE_GPU",
-                "PADDLEOCR_GPU_EXPERIMENTAL_ENABLED",
                 "PADDLEOCR_DEVICE",
                 "PADDLEOCR_LANG",
                 "PADDLEOCR_ENGINE",

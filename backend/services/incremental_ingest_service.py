@@ -3,6 +3,7 @@ import time
 
 import numpy as np
 
+from backend.ingestion.ocr_engines import selected_ocr_mode
 from backend.ingestion.index_builder import IndexBuildResult, IndexBuilder
 from backend.services.incremental_document_processor import IncrementalDocumentProcessor
 
@@ -146,6 +147,7 @@ class IncrementalIngestService:
                     "activeWorkers": max_workers,
                     "persistWorkers": save_workers,
                     "queuedSaveDocuments": 0,
+                    **selected_ocr_mode(self.config),
                 },
             )
 
@@ -168,6 +170,7 @@ class IncrementalIngestService:
                         "completedDocuments": completed_documents,
                         "persistWorkers": save_workers,
                         "queuedSaveDocuments": len(pending_persists),
+                        **selected_ocr_mode(self.config),
                         **aggregate_details,
                         "failedDocuments": len(failed_files),
                     }
@@ -256,6 +259,7 @@ class IncrementalIngestService:
 
             final_details = {
                 **final_details,
+                **selected_ocr_mode(self.config),
                 "documents": len(changed_rel_paths),
                 "completedDocuments": completed_documents,
                 "persistWorkers": save_workers,
@@ -367,7 +371,7 @@ class IncrementalIngestService:
         self.update_index_progress(stage="readying_review", details={**self.summarize_document_ingest_stats(document_stats), **image_result})
         self.mark_source_ready_for_review(source)
         ai_review = self.maybe_review_ingestion_with_openai(source, ingested_state, document_stats)
-        final_details = {**self.summarize_document_ingest_stats(document_stats), **image_result}
+        final_details = {**self.summarize_document_ingest_stats(document_stats), **image_result, **selected_ocr_mode(self.config)}
         ai_part = "ai=none"
         if ai_review:
             try:

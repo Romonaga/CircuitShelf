@@ -36,6 +36,11 @@ function formatRounds(row: PerformanceWorkRun): string {
   return `${row.roundNumber ?? 1} / ${row.roundCount ?? 1}`;
 }
 
+function ocrMode(row: PerformanceWorkRun): string {
+  const mode = row.details?.ocrMode;
+  return typeof mode === "string" && mode ? mode : "";
+}
+
 export function RecentWorkTable({
   rows,
   showIndexChecks,
@@ -87,6 +92,7 @@ export function RecentWorkTable({
                 <td>
                   <strong>{row.workTypeLabel}</strong>
                   {row.label ? <small>{row.label}</small> : null}
+                  {ocrMode(row) ? <small>OCR {ocrMode(row)}</small> : null}
                 </td>
                 <td>{row.status}</td>
                 <td>
