@@ -58,7 +58,7 @@ from backend.ingestion.worker_sizing import (
 from backend.services.inventory_import import parse_inventory_import
 from backend.services.log_retention import cleanup_old_logs
 from backend.services.log_tail import tail_recent_trace_logs
-from backend.ingestion.ocr_engines import run_selected_ocr
+from backend.ingestion.ocr_engines import ocr_uses_local_gpu, run_selected_ocr
 from backend.ingestion.pinout_extractor import extract_pinout_map
 from backend.services.reranker import Reranker
 from backend.services.response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT
@@ -254,7 +254,7 @@ class CircuitShelfRuntime:
         self.ingestion_pipeline = IngestionPipeline(
             config=self.config,
             trace_logger=self.trace_logger,
-            run_ocr=run_selected_ocr,
+            run_ocr=self.run_ingestion_ocr,
             detected_cpu_count=detected_cpu_count,
             reserved_core_count=reserved_core_count,
             usable_core_count=usable_core_count,
@@ -265,6 +265,25 @@ class CircuitShelfRuntime:
             finish_document_worker=self.ingest_progress.finish_document_worker,
             pdf_ext=self.pdf_ext,
         )
+
+    def run_ingestion_ocr(self, image, ocr_config):
+        if not ocr_uses_local_gpu(ocr_config):
+            return run_selected_ocr(image, ocr_config)
+
+        width, height = image.size
+        with self.local_gpu_coordinator.lease(
+            task_type="paddleocr",
+            resource_class="cuda_batch",
+            priority=self.local_gpu_priority,
+            owner=self.local_gpu_owner,
+            details={
+                "engine": "paddleocr",
+                "device": "gpu",
+                "width": width,
+                "height": height,
+            },
+        ):
+            return run_selected_ocr(image, ocr_config)
 
     def _build_ingest_services(self):
         stores = self.stores
@@ -442,7 +461,7 @@ class CircuitShelfRuntime:
             ingest_status_provider=self.ingest_status_provider,
             local_llm_status_provider=self.ollama_chat_client.status,
             gpu_model_residency_provider=self.gpu_model_residency,
-            local_gpu_queue_provider=self.local_gpu_coordinator.status,
+            local_gpu_queue_provider=lambda: self.local_gpu_coordinator.status(recent_limit=30),
         )
         self.document_management_service = DocumentManagementService(
             vector_store=stores.vector_store,

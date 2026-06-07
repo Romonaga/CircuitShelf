@@ -4348,6 +4348,65 @@ nav {
   gap: 12px;
 }
 
+.gpu-queue-lanes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.gpu-queue-lane-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(65, 199, 178, 0.1), transparent 46%),
+    var(--panel-soft);
+}
+
+.gpu-queue-lane-card > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gpu-queue-lane-card span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.gpu-queue-lane-card strong {
+  color: var(--text);
+}
+
+.gpu-queue-lane-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gpu-queue-lane-metrics span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(3, 13, 18, 0.22);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.gpu-queue-lane-metrics small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .local-gpu-queue-table {
   display: grid;
   overflow: hidden;
@@ -4357,12 +4416,25 @@ nav {
 
 .compact-table-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 110px 80px 90px 100px;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(110px, 0.8fr) 95px 70px 90px 100px minmax(140px, 1fr);
   gap: 10px;
   align-items: center;
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
   color: var(--text);
+}
+
+.gpu-queue-row.running {
+  background: rgba(65, 199, 178, 0.08);
+}
+
+.gpu-queue-row.queued {
+  background: rgba(255, 178, 75, 0.08);
+}
+
+.gpu-queue-row.failed,
+.gpu-queue-row.timed_out {
+  background: rgba(255, 94, 94, 0.08);
 }
 
 .compact-table-row:last-child {

@@ -10,7 +10,7 @@ from backend.ingestion import IngestionPipeline
 from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsset
 from backend.ingestion.ocr_assets import OcrAssetProcessor
 from backend.ingestion.pdf.embedded_image_extractor import EmbeddedPdfImageExtractor
-from backend.ingestion.ocr_engines import _extract_paddle_text_and_confidence, run_selected_ocr
+from backend.ingestion.ocr_engines import _extract_paddle_text_and_confidence, ocr_uses_local_gpu, run_selected_ocr
 from backend.ingestion.ocr_utils import parse_tesseract_tsv, should_skip_image, should_skip_image_dimensions
 
 
@@ -171,6 +171,11 @@ class OcrUtilsTests(unittest.TestCase):
 
         self.assertTrue(result.skipped)
         self.assertIn("unsupported OCR engine", result.skip_reason)
+
+    def test_paddleocr_gpu_engine_reports_local_gpu_use(self):
+        self.assertTrue(ocr_uses_local_gpu({"OCR_ENGINE": "paddleocr", "PADDLEOCR_DEVICE": "gpu"}))
+        self.assertFalse(ocr_uses_local_gpu({"OCR_ENGINE": "paddleocr", "PADDLEOCR_DEVICE": "cpu"}))
+        self.assertFalse(ocr_uses_local_gpu({"OCR_ENGINE": "tesseract", "PADDLEOCR_DEVICE": "gpu"}))
 
     def test_paddleocr_failure_falls_back_to_tesseract_when_enabled(self):
         image = Image.new("RGB", (120, 80), "white")

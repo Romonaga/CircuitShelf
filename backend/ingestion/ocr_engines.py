@@ -41,6 +41,12 @@ def run_selected_ocr(image: Image.Image, config: dict[str, Any]) -> OcrResult:
     return OcrResult(text="", confidence=None, skipped=True, skip_reason=f"unsupported OCR engine: {engine}")
 
 
+def ocr_uses_local_gpu(config: dict[str, Any]) -> bool:
+    """Return true when the selected OCR engine will consume local CUDA resources."""
+
+    return _normalized_engine(config) == "paddleocr" and _paddle_device(config) == "gpu"
+
+
 def _run_paddle_ocr_with_fallback(image: Image.Image, config: dict[str, Any]) -> OcrResult:
     skip, reason = should_skip_image(image, config)
     if skip:
