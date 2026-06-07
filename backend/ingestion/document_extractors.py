@@ -22,6 +22,7 @@ class DocumentExtractor:
         run_ocr,
         ocr_worker_count,
         current_document_workers,
+        local_gpu_ocr_slots,
         detected_cpu_count,
         reserved_core_count,
         pdf_ext: str,
@@ -31,6 +32,7 @@ class DocumentExtractor:
         self.run_ocr = run_ocr
         self.ocr_worker_count = ocr_worker_count
         self.current_document_workers = current_document_workers
+        self.local_gpu_ocr_slots = local_gpu_ocr_slots
         self.detected_cpu_count = detected_cpu_count
         self.reserved_core_count = reserved_core_count
         self.pdf_ext = pdf_ext
@@ -117,6 +119,7 @@ class DocumentExtractor:
             trace_logger=self.trace_logger,
             ocr_worker_count=self.ocr_worker_count,
             current_document_workers=self.current_document_workers,
+            local_gpu_ocr_slots=self.local_gpu_ocr_slots,
             detected_cpu_count=self.detected_cpu_count,
             reserved_core_count=self.reserved_core_count,
         )

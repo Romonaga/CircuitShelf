@@ -270,6 +270,44 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertEqual(text, "VCC GND")
         self.assertAlmostEqual(confidence, 90.0)
 
+    def test_gpu_ocr_worker_count_uses_gpu_lane_count(self):
+        ocr_assets = OcrAssetProcessor(
+            config=ConfigWrapper({
+                "USE_MULTITHREAD_OCR": True,
+                "OCR_ENGINE": "paddleocr",
+                "PADDLEOCR_DEVICE": "gpu",
+            }),
+            trace_logger=None,
+            chunker=FakeChunker(),
+            run_ocr=lambda *_args, **_kwargs: None,
+            detected_cpu_count=lambda: 32,
+            reserved_core_count=lambda *_args, **_kwargs: 2,
+            ocr_worker_count=lambda *_args, **_kwargs: 2,
+            current_document_workers=lambda: 15,
+            local_gpu_ocr_slots=lambda: 8,
+        )
+
+        self.assertEqual(ocr_assets.worker_count(20), 8)
+
+    def test_cpu_ocr_worker_count_keeps_cpu_budget_sizing(self):
+        ocr_assets = OcrAssetProcessor(
+            config=ConfigWrapper({
+                "USE_MULTITHREAD_OCR": True,
+                "OCR_ENGINE": "tesseract",
+                "PADDLEOCR_DEVICE": "gpu",
+            }),
+            trace_logger=None,
+            chunker=FakeChunker(),
+            run_ocr=lambda *_args, **_kwargs: None,
+            detected_cpu_count=lambda: 32,
+            reserved_core_count=lambda *_args, **_kwargs: 2,
+            ocr_worker_count=lambda *_args, **_kwargs: 2,
+            current_document_workers=lambda: 15,
+            local_gpu_ocr_slots=lambda: 8,
+        )
+
+        self.assertEqual(ocr_assets.worker_count(20), 2)
+
     def test_pdf_embedded_image_config_accepts_config_wrapper(self):
         extractor = EmbeddedPdfImageExtractor(
             config=ConfigWrapper({
@@ -333,6 +371,7 @@ class OcrUtilsTests(unittest.TestCase):
             document_worker_count=lambda *_args, **_kwargs: 1,
             ocr_worker_count=lambda *_args, **_kwargs: 1,
             current_document_workers=lambda: 0,
+            local_gpu_ocr_slots=lambda: 1,
             begin_document_worker=lambda *_args, **_kwargs: None,
             finish_document_worker=lambda *_args, **_kwargs: None,
             pdf_ext=".pdf",

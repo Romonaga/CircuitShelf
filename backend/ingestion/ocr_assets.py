@@ -9,6 +9,8 @@ from typing import Any
 
 from PIL import Image
 
+from backend.ingestion.ocr_engines import ocr_uses_local_gpu
+
 
 _PNG_NORMALIZE_LOCK = threading.Lock()
 
@@ -23,6 +25,7 @@ class OcrAssetProcessor:
         trace_logger=None,
         ocr_worker_count=lambda item_count, **_kwargs: 1,
         current_document_workers=lambda: 0,
+        local_gpu_ocr_slots=lambda: 1,
         detected_cpu_count=lambda: 1,
         reserved_core_count=lambda *_args, **_kwargs: 0,
     ):
@@ -32,6 +35,7 @@ class OcrAssetProcessor:
         self.trace_logger = trace_logger or logging.getLogger(__name__)
         self.ocr_worker_count = ocr_worker_count
         self.current_document_workers = current_document_workers
+        self.local_gpu_ocr_slots = local_gpu_ocr_slots
         self.detected_cpu_count = detected_cpu_count
         self.reserved_core_count = reserved_core_count
 
@@ -81,6 +85,9 @@ class OcrAssetProcessor:
     def worker_count(self, item_count: int) -> int:
         if not self.config.get("USE_MULTITHREAD_OCR", False) or item_count <= 1:
             return 1
+        if ocr_uses_local_gpu(self.config):
+            slots = max(1, int(self.local_gpu_ocr_slots() or 1))
+            return max(1, min(item_count, slots))
         return self.ocr_worker_count(
             item_count,
             active_document_workers=self.current_document_workers(),

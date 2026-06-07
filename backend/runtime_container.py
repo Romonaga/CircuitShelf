@@ -255,6 +255,7 @@ class CircuitShelfRuntime:
             document_worker_count=document_worker_count,
             ocr_worker_count=ocr_worker_count,
             current_document_workers=self.ingest_progress.current_document_workers,
+            local_gpu_ocr_slots=self.current_local_gpu_ocr_slots,
             begin_document_worker=self.ingest_progress.begin_document_worker,
             finish_document_worker=self.ingest_progress.finish_document_worker,
             pdf_ext=self.pdf_ext,
@@ -322,6 +323,9 @@ class CircuitShelfRuntime:
             },
         ):
             return run_selected_ocr(image, ocr_config)
+
+    def current_local_gpu_ocr_slots(self) -> int:
+        return max(1, int(getattr(self, "local_gpu_ocr_slots", 1) or 1))
 
     def _wait_for_interactive_gpu_headroom(self, *, task_type: str, timeout_seconds: float = 120.0) -> None:
         started = time.monotonic()

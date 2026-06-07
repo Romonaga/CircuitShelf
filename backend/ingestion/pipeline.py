@@ -27,6 +27,7 @@ class IngestionPipeline:
         document_worker_count,
         ocr_worker_count,
         current_document_workers,
+        local_gpu_ocr_slots,
         begin_document_worker,
         finish_document_worker,
         pdf_ext: str,
@@ -40,6 +41,7 @@ class IngestionPipeline:
         self.document_worker_count = document_worker_count
         self.ocr_worker_count = ocr_worker_count
         self.current_document_workers = current_document_workers
+        self.local_gpu_ocr_slots = local_gpu_ocr_slots
         self.begin_document_worker = begin_document_worker
         self.finish_document_worker = finish_document_worker
         self.pdf_ext = pdf_ext
@@ -49,6 +51,7 @@ class IngestionPipeline:
             run_ocr=run_ocr,
             ocr_worker_count=ocr_worker_count,
             current_document_workers=current_document_workers,
+            local_gpu_ocr_slots=local_gpu_ocr_slots,
             detected_cpu_count=detected_cpu_count,
             reserved_core_count=reserved_core_count,
             pdf_ext=pdf_ext,
