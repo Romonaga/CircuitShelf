@@ -178,7 +178,7 @@ class OcrUtilsTests(unittest.TestCase):
             "OCR_ENGINE": "paddleocr",
             "PADDLEOCR_DEVICE": "gpu",
         }))
-        self.assertFalse(ocr_uses_local_gpu({"OCR_ENGINE": "paddleocr", "PADDLEOCR_DEVICE": "cpu"}))
+        self.assertTrue(ocr_uses_local_gpu({"OCR_ENGINE": "paddleocr", "PADDLEOCR_DEVICE": "cpu"}))
         self.assertFalse(ocr_uses_local_gpu({
             "OCR_ENGINE": "tesseract",
             "PADDLEOCR_DEVICE": "gpu",
@@ -191,6 +191,10 @@ class OcrUtilsTests(unittest.TestCase):
         )
         self.assertEqual(
             selected_ocr_mode({"OCR_ENGINE": "paddleocr", "PADDLEOCR_DEVICE": "gpu"}),
+            {"ocrEngine": "paddleocr", "ocrDevice": "gpu", "ocrMode": "paddleocr/gpu"},
+        )
+        self.assertEqual(
+            selected_ocr_mode({"OCR_ENGINE": "paddleocr", "PADDLEOCR_DEVICE": "cpu"}),
             {"ocrEngine": "paddleocr", "ocrDevice": "gpu", "ocrMode": "paddleocr/gpu"},
         )
 
@@ -215,10 +219,13 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertFalse(result.skipped)
         self.assertEqual(result.text, "fallback text")
 
-    def test_paddleocr_failure_can_be_reported_without_fallback(self):
+    def test_paddleocr_failure_always_falls_back_to_tesseract(self):
         image = Image.new("RGB", (120, 80), "white")
 
-        with patch("backend.ingestion.ocr_engines._run_paddle_ocr", side_effect=RuntimeError("missing paddle")):
+        with (
+            patch("backend.ingestion.ocr_engines._run_paddle_ocr", side_effect=RuntimeError("missing paddle")),
+            patch("backend.ingestion.ocr_engines.run_tesseract_ocr", return_value=SimpleNamespace(text="fallback text", confidence=90.0, skipped=False, skip_reason="")),
+        ):
             result = run_selected_ocr(
                 image,
                 {
@@ -230,8 +237,9 @@ class OcrUtilsTests(unittest.TestCase):
                 },
             )
 
-        self.assertTrue(result.skipped)
-        self.assertIn("paddleocr failed", result.skip_reason)
+        self.assertFalse(result.skipped)
+        self.assertEqual(result.text, "fallback text")
+        self.assertEqual(result.fallback_from, "paddleocr")
 
     def test_paddleocr_external_python_runner_is_supported(self):
         image = Image.new("RGB", (120, 80), "white")

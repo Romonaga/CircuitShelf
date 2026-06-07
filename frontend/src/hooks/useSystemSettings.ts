@@ -4,11 +4,15 @@ import { errorMessage } from "../libs/errors";
 import type { AppSetting, SettingValue } from "../types";
 
 const PADDLEOCR_SETTING_KEYS = new Set([
-  "PADDLEOCR_DEVICE",
   "PADDLEOCR_LANG",
   "PADDLEOCR_ENGINE",
   "PADDLEOCR_PYTHON",
   "PADDLEOCR_TIMEOUT_SECONDS"
+]);
+
+const HIDDEN_OCR_INTERNAL_SETTING_KEYS = new Set([
+  "OCR_ENGINE_FALLBACK",
+  "PADDLEOCR_DEVICE"
 ]);
 
 export interface SettingsGroup {
@@ -54,6 +58,9 @@ export function useSystemSettings() {
   const filteredSettings = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     return settings.filter((setting) => {
+      if (HIDDEN_OCR_INTERNAL_SETTING_KEYS.has(setting.key)) {
+        return false;
+      }
       if (!settingVisibleInContext(setting, settingsByKey)) {
         return false;
       }

@@ -53,13 +53,7 @@ function settingOptions(key: string): Array<{ value: string; label: string }> {
   if (key === "OCR_ENGINE") {
     return [
       { value: "tesseract", label: "Tesseract (stable CPU)" },
-      { value: "paddleocr", label: "PaddleOCR" }
-    ];
-  }
-  if (key === "PADDLEOCR_DEVICE") {
-    return [
-      { value: "cpu", label: "CPU" },
-      { value: "gpu", label: "GPU (experimental)" }
+      { value: "paddleocr", label: "PaddleOCR GPU with Tesseract fallback" }
     ];
   }
   return [];

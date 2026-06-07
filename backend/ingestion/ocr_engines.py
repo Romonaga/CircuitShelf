@@ -68,24 +68,14 @@ def _run_paddle_ocr_with_fallback(image: Image.Image, config: dict[str, Any]) ->
     try:
         return _run_paddle_ocr(image, config)
     except Exception as exc:
-        fallback = bool(_config_value(config, "OCR_ENGINE_FALLBACK", True))
-        if fallback:
-            result = run_tesseract_ocr(image, config)
-            return OcrResult(
-                text=result.text,
-                confidence=result.confidence,
-                skipped=result.skipped,
-                skip_reason=result.skip_reason,
-                engine=getattr(result, "engine", "tesseract"),
-                fallback_from="paddleocr",
-                error=str(exc)[:500],
-            )
+        result = run_tesseract_ocr(image, config)
         return OcrResult(
-            text="",
-            confidence=None,
-            skipped=True,
-            skip_reason=f"paddleocr failed: {str(exc)[:240]}",
-            engine="paddleocr",
+            text=result.text,
+            confidence=result.confidence,
+            skipped=result.skipped,
+            skip_reason=result.skip_reason,
+            engine=getattr(result, "engine", "tesseract"),
+            fallback_from="paddleocr",
             error=str(exc)[:500],
         )
 
@@ -312,10 +302,7 @@ def _normalized_engine(config: dict[str, Any]) -> str:
 
 
 def _paddle_device(config: dict[str, Any]) -> str:
-    configured = str(_config_value(config, "PADDLEOCR_DEVICE", "") or "").strip().lower()
-    if configured in {"cpu", "gpu"}:
-        return configured
-    return "cpu"
+    return "gpu"
 
 
 def _config_value(config: dict[str, Any], key: str, default: Any = None) -> Any:
