@@ -41,11 +41,13 @@ class Logger:
         self.messages.append(("warning", message))
 
 
-def make_service(*, local_response, config=None):
+def make_service(*, local_response, config=None, captured_local_kwargs=None):
     store = ReviewStore()
     openai = OpenAiAssist()
 
     def local_llm(_prompt, _model, **_kwargs):
+        if captured_local_kwargs is not None:
+            captured_local_kwargs.update(_kwargs)
         return local_response
 
     return (
@@ -97,6 +99,38 @@ def test_component_datasheet_runs_local_review_without_openai_when_usable():
     assert len(store.reviews) == 1
     assert store.reviews[0]["provider"] == "ollama"
     assert openai.calls == []
+
+
+def test_local_ingestion_review_uses_gpu_admission_backpressure():
+    captured = {}
+    service, store, openai = make_service(
+        local_response=(
+            '{"quality":"good","useful":true,"confidence":0.91,'
+            '"warnings":[],"suggestedReviewFocus":"pinout","escalateToOpenAI":false,'
+            '"reason":"deterministic extraction looks complete"}'
+        ),
+        config={
+            "INGEST_LOCAL_AI_MAX_PENDING": 2,
+            "INGEST_LOCAL_AI_ADMISSION_TIMEOUT_SECONDS": 45,
+        },
+        captured_local_kwargs=captured,
+    )
+
+    result = service.review(
+        source_path="MCP23017 datasheet.pdf",
+        is_global=True,
+        entity_id=None,
+        user_id=1,
+        stats=component_stats(),
+        sample_text="MCP23017 data sheet pin configuration pin description electrical characteristics",
+        openai_enabled=False,
+    )
+
+    assert result["provider"] == "ollama"
+    assert captured["gpu_resource_class"] == "local_llm"
+    assert captured["gpu_owner"] == "ingest-ai"
+    assert captured["gpu_admission_max_pending"] == 2
+    assert captured["gpu_admission_timeout_seconds"] == 45.0
 
 
 def test_local_review_can_escalate_to_openai_with_reason():

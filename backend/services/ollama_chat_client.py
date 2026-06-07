@@ -142,6 +142,8 @@ class OllamaChatClient:
         gpu_priority: int | None = None,
         gpu_owner: str | None = None,
         gpu_resource_class: str = "local_llm",
+        gpu_admission_max_pending: int | None = None,
+        gpu_admission_timeout_seconds: float | None = None,
         keep_alive=None,
     ):
         retries = int(self.query_retries if retries is None else retries)
@@ -188,6 +190,8 @@ class OllamaChatClient:
                     owner=gpu_owner or self.gpu_owner,
                     details={"model": model_name or "default"},
                     timeout_seconds=self.request_gate.status()["queueTimeoutSeconds"],
+                    admission_max_pending=gpu_admission_max_pending,
+                    admission_timeout_seconds=gpu_admission_timeout_seconds,
                 ):
                     return self._post_chat_with_retry(url, headers, payload, retries, delay)
             except TimeoutError:

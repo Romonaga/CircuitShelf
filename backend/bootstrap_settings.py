@@ -34,6 +34,16 @@ DEFAULT_APP_SETTINGS = [
         "Use the local Ollama model as the first ingestion QA pass when deterministic extraction detects component/datasheet risk.",
     ),
     (
+        "INGEST_LOCAL_AI_MAX_PENDING",
+        1,
+        "Maximum live local LLM ingestion-review jobs allowed at once, including one running job. Keeps large ingests from flooding the GPU queue.",
+    ),
+    (
+        "INGEST_LOCAL_AI_ADMISSION_TIMEOUT_SECONDS",
+        1800,
+        "Seconds an ingestion review may wait before entering the local LLM queue when the local GPU lane is busy.",
+    ),
+    (
         "INGEST_OPENAI_ASSIST_ENABLED",
         False,
         "Escalate ingestion QA to OpenAI only after deterministic/local review says paid repair is useful. Corpus uses the system key; entity documents use entity then user key fallback.",

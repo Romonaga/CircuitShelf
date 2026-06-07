@@ -208,6 +208,10 @@ class IngestionAiReviewService:
                 gpu_priority=80,
                 gpu_owner="ingest-ai",
                 gpu_resource_class="local_llm",
+                gpu_admission_max_pending=int(self.config.get("INGEST_LOCAL_AI_MAX_PENDING", 1) or 1),
+                gpu_admission_timeout_seconds=float(
+                    self.config.get("INGEST_LOCAL_AI_ADMISSION_TIMEOUT_SECONDS", 1800) or 1800
+                ),
                 keep_alive=0,
             )
             parsed = parse_json_object(raw)

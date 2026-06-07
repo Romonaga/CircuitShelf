@@ -516,6 +516,8 @@ class CircuitShelfRuntime:
         gpu_priority=None,
         gpu_owner=None,
         gpu_resource_class="local_llm",
+        gpu_admission_max_pending=None,
+        gpu_admission_timeout_seconds=None,
         keep_alive=None,
     ):
         return self.ollama_chat_client.chat_with_retry(
@@ -528,6 +530,8 @@ class CircuitShelfRuntime:
             gpu_priority=gpu_priority,
             gpu_owner=gpu_owner,
             gpu_resource_class=gpu_resource_class,
+            gpu_admission_max_pending=gpu_admission_max_pending,
+            gpu_admission_timeout_seconds=gpu_admission_timeout_seconds,
             keep_alive=keep_alive,
         )
 

@@ -17,6 +17,7 @@ GPU_QUEUE_LOCK_OFFSETS = {
     "local_llm": 0,
     "cuda_batch": 1000,
 }
+GPU_QUEUE_ADMISSION_LOCK_BASE = GPU_QUEUE_LOCK_BASE + 900000
 
 
 def detect_local_gpu_count() -> int:
@@ -157,13 +158,29 @@ class LocalGpuWorkCoordinator:
         owner: str | None = None,
         details: dict[str, Any] | None = None,
         timeout_seconds: float | None = None,
+        admission_max_pending: int | None = None,
+        admission_timeout_seconds: float | None = None,
     ) -> Iterator[LocalGpuLease]:
         task_id = str(uuid.uuid4())
         priority = int(priority)
         resource_class = self._normalize_resource_class(resource_class or self._default_resource_class(task_type))
         timeout = self.queue_timeout_seconds if timeout_seconds is None else max(1.0, float(timeout_seconds))
         self.cleanup_abandoned_once()
-        self._insert_task(task_id, resource_class, task_type, priority, owner, details or {})
+        admission_wait_seconds = self._admit_task(
+            task_id=task_id,
+            resource_class=resource_class,
+            task_type=task_type,
+            priority=priority,
+            owner=owner,
+            details=details or {},
+            admission_max_pending=admission_max_pending,
+            admission_timeout_seconds=admission_timeout_seconds,
+        )
+        if admission_wait_seconds > 0.25 and self.logger:
+            self.logger.info(
+                f"⏳ Local GPU {resource_class} admission waited {admission_wait_seconds:.2f}s: {task_type} "
+                f"(max pending {admission_max_pending})."
+            )
 
         conn = None
         lock_key = None
@@ -250,6 +267,33 @@ class LocalGpuWorkCoordinator:
             "recent": [self._row_to_payload(row) for row in recent_rows],
         }
 
+    def live_pressure(self, resource_class: str | None = None) -> dict[str, Any]:
+        resource_class = self._normalize_resource_class(resource_class or "local_llm")
+        try:
+            with self.database.connection() as conn:
+                rows = conn.execute(load_query("local_gpu_work_live_counts.sql"), (resource_class,)).fetchall()
+        except Exception as exc:
+            return {
+                "enabled": False,
+                "resourceClass": resource_class,
+                "error": str(exc),
+                "slots": self._slot_count_for(resource_class),
+                "queued": 0,
+                "running": 0,
+                "pending": 0,
+            }
+        counts = {str(row["status"]): int(row["count"] or 0) for row in rows}
+        queued = counts.get("queued", 0)
+        running = counts.get("running", 0)
+        return {
+            "enabled": True,
+            "resourceClass": resource_class,
+            "slots": self._slot_count_for(resource_class),
+            "queued": queued,
+            "running": running,
+            "pending": queued + running,
+        }
+
     def cleanup_abandoned_once(self) -> None:
         if self._cleaned_abandoned:
             return
@@ -274,10 +318,83 @@ class LocalGpuWorkCoordinator:
         details: dict[str, Any],
     ) -> None:
         with self.database.connection() as conn:
-            conn.execute(
-                load_query("local_gpu_work_insert.sql"),
-                (task_id, resource_class, task_type, priority, owner, self.process_id, json.dumps(details)),
-            )
+            self._insert_task_on_conn(conn, task_id, resource_class, task_type, priority, owner, details)
+
+    def _insert_task_on_conn(
+        self,
+        conn,
+        task_id: str,
+        resource_class: str,
+        task_type: str,
+        priority: int,
+        owner: str | None,
+        details: dict[str, Any],
+    ) -> None:
+        conn.execute(
+            load_query("local_gpu_work_insert.sql"),
+            (task_id, resource_class, task_type, priority, owner, self.process_id, json.dumps(details)),
+        )
+
+    def _admit_task(
+        self,
+        *,
+        task_id: str,
+        resource_class: str,
+        task_type: str,
+        priority: int,
+        owner: str | None,
+        details: dict[str, Any],
+        admission_max_pending: int | None,
+        admission_timeout_seconds: float | None,
+    ) -> float:
+        if admission_max_pending is None:
+            self._insert_task(task_id, resource_class, task_type, priority, owner, details)
+            return 0.0
+
+        max_pending = max(1, int(admission_max_pending))
+        timeout = self.queue_timeout_seconds if admission_timeout_seconds is None else max(
+            1.0,
+            float(admission_timeout_seconds),
+        )
+        started = time.monotonic()
+        lock_key = self._admission_lock_key(resource_class)
+        while True:
+            elapsed = time.monotonic() - started
+            if elapsed >= timeout:
+                raise TimeoutError(
+                    f"Local GPU {resource_class} admission timed out after {timeout:.0f}s "
+                    f"waiting for pending work below {max_pending}."
+                )
+
+            conn = self.database._connection_pool().getconn()
+            lock_acquired = False
+            try:
+                lock_row = conn.execute(load_query("local_gpu_advisory_try_lock.sql"), (lock_key,)).fetchone()
+                lock_acquired = bool(lock_row and lock_row.get("acquired"))
+                if not lock_acquired:
+                    conn.rollback()
+                else:
+                    rows = conn.execute(load_query("local_gpu_work_live_counts.sql"), (resource_class,)).fetchall()
+                    pending = sum(int(row["count"] or 0) for row in rows)
+                    if pending < max_pending:
+                        self._insert_task_on_conn(conn, task_id, resource_class, task_type, priority, owner, details)
+                        conn.commit()
+                        return elapsed
+
+                    conn.rollback()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                if lock_acquired:
+                    try:
+                        conn.execute(load_query("local_gpu_advisory_unlock.sql"), (lock_key,))
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+                self.database._connection_pool().putconn(conn)
+
+            time.sleep(self.poll_seconds)
 
     def _wait_for_slot(self, task_id: str, resource_class: str, timeout_seconds: float):
         started = time.monotonic()
@@ -357,6 +474,11 @@ class LocalGpuWorkCoordinator:
     def _lock_key(resource_class: str, slot_index: int) -> int:
         offset = GPU_QUEUE_LOCK_OFFSETS.get(resource_class, 0)
         return GPU_QUEUE_LOCK_BASE + offset + int(slot_index)
+
+    @staticmethod
+    def _admission_lock_key(resource_class: str) -> int:
+        offset = GPU_QUEUE_LOCK_OFFSETS.get(resource_class, 0)
+        return GPU_QUEUE_ADMISSION_LOCK_BASE + offset
 
     @staticmethod
     def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:

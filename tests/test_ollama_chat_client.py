@@ -31,6 +31,26 @@ class DummyResponse:
         return {"message": {"content": "queued answer"}}
 
 
+class DummyGpuCoordinator:
+    def __init__(self):
+        self.leases = []
+
+    class _Lease:
+        def __init__(self, owner, kwargs):
+            self.owner = owner
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            self.owner.leases.append(self.kwargs)
+            return None
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def lease(self, **kwargs):
+        return self._Lease(self, kwargs)
+
+
 def make_client(**overrides):
     values = {
         "config": DummyConfig(),
@@ -106,3 +126,29 @@ def test_runtime_queue_configuration_changes_status():
     assert status["maxConcurrent"] == 3
     assert status["queueTimeoutSeconds"] == 15
     assert status["keepAlive"] == "5s"
+
+
+def test_gpu_coordinator_receives_admission_limits(monkeypatch):
+    captured = {}
+
+    def fake_post(url, headers, json, timeout):
+        captured["payload"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("backend.services.ollama_chat_client.requests.post", fake_post)
+    coordinator = DummyGpuCoordinator()
+    client = make_client(gpu_coordinator=coordinator)
+
+    result = client.chat_with_retry(
+        "question",
+        "model-a",
+        gpu_resource_class="local_llm",
+        gpu_admission_max_pending=1,
+        gpu_admission_timeout_seconds=123,
+    )
+
+    assert result == "queued answer"
+    assert len(coordinator.leases) == 1
+    assert coordinator.leases[0]["resource_class"] == "local_llm"
+    assert coordinator.leases[0]["admission_max_pending"] == 1
+    assert coordinator.leases[0]["admission_timeout_seconds"] == 123
