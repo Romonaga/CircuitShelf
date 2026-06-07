@@ -107,7 +107,13 @@ export function useSystemSettings() {
       const response = await updateSetting(selected.key, draftValue);
       setSettings((items) => items.map((item) => (item.key === response.setting.key ? response.setting : item)));
       setDraftValue(response.setting.value);
-      setMessage(`${selected.key} saved.`);
+      if (response.change.restartRequired) {
+        setMessage(`${selected.key} saved. Restart required before it is active.`);
+      } else if (response.change.runtimeApplied) {
+        setMessage(`${selected.key} saved and applied to new work.`);
+      } else {
+        setMessage(`${selected.key} saved.`);
+      }
     } catch (err) {
       setError(errorMessage(err, "Could not save setting"));
     } finally {

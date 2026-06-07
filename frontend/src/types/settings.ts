@@ -16,6 +16,12 @@ export interface AppSetting {
   restartRequired: boolean;
 }
 
+export interface AppSettingChange {
+  changed: boolean;
+  runtimeApplied: boolean;
+  restartRequired: boolean;
+}
+
 export interface RuntimeLlmModel {
   id: number;
   modelName: string;

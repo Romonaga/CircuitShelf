@@ -113,6 +113,16 @@ class OllamaChatClient:
     def configure_runtime(
         self,
         *,
+        api_url: str | None = None,
+        default_system_prompt: str | None = None,
+        default_temperature: float | None = None,
+        default_num_predict: int | None = None,
+        default_num_ctx=None,
+        post_timeout: int | None = None,
+        query_retries: int | None = None,
+        query_retry_delay: float | None = None,
+        max_chat_history_turns: int | None = None,
+        max_chat_history_chars: int | None = None,
         max_concurrent_requests: int | None = None,
         queue_timeout_seconds: float | None = None,
         keep_alive: str | int | None = None,
@@ -121,6 +131,26 @@ class OllamaChatClient:
             max_concurrent=max_concurrent_requests,
             queue_timeout_seconds=queue_timeout_seconds,
         )
+        if api_url is not None:
+            self.api_url = str(api_url)
+        if default_system_prompt is not None:
+            self.default_system_prompt = str(default_system_prompt)
+        if default_temperature is not None:
+            self.default_temperature = float(default_temperature)
+        if default_num_predict is not None:
+            self.default_num_predict = int(default_num_predict)
+        if default_num_ctx is not None:
+            self.default_num_ctx = default_num_ctx
+        if post_timeout is not None:
+            self.post_timeout = int(post_timeout)
+        if query_retries is not None:
+            self.query_retries = int(query_retries)
+        if query_retry_delay is not None:
+            self.query_retry_delay = float(query_retry_delay)
+        if max_chat_history_turns is not None:
+            self.max_chat_history_turns = int(max_chat_history_turns)
+        if max_chat_history_chars is not None:
+            self.max_chat_history_chars = int(max_chat_history_chars)
         if keep_alive is not None:
             self.keep_alive = keep_alive
 

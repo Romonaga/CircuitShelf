@@ -1,4 +1,4 @@
-import type { AIAvailableModel, AIModelPricing, AIProviderSettings, AIProviderSettingsPayload, AIUsageReport, AppSetting, LogTailPayload, PasswordPolicy, PerformanceReport, RuntimeCatalog, StatusPayload } from "../../types";
+import type { AIAvailableModel, AIModelPricing, AIProviderSettings, AIProviderSettingsPayload, AIUsageReport, AppSetting, AppSettingChange, LogTailPayload, PasswordPolicy, PerformanceReport, RuntimeCatalog, StatusPayload } from "../../types";
 import { requestJson } from "./core";
 
 export function getSystemPasswordPolicy(): Promise<{ policy: PasswordPolicy }> {
@@ -55,8 +55,8 @@ export function getSettings(): Promise<{ settings: AppSetting[] }> {
   return requestJson<{ settings: AppSetting[] }>("/api/settings");
 }
 
-export function updateSetting(key: string, value: AppSetting["value"]): Promise<{ setting: AppSetting }> {
-  return requestJson<{ setting: AppSetting }>(`/api/settings/${encodeURIComponent(key)}`, {
+export function updateSetting(key: string, value: AppSetting["value"]): Promise<{ setting: AppSetting; change: AppSettingChange }> {
+  return requestJson<{ setting: AppSetting; change: AppSettingChange }>(`/api/settings/${encodeURIComponent(key)}`, {
     method: "PUT",
     body: JSON.stringify({ value })
   });

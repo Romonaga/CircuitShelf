@@ -25,6 +25,26 @@ class RagAnswerFinalizer:
         self.min_confidence = min_confidence
         self.max_context_chars = max_context_chars
 
+    def configure_runtime(
+        self,
+        *,
+        system_prompt: str | None = None,
+        enabled: bool | None = None,
+        mode: str | None = None,
+        min_confidence: float | None = None,
+        max_context_chars: int | None = None,
+    ) -> None:
+        if system_prompt is not None:
+            self.system_prompt = system_prompt
+        if enabled is not None:
+            self.enabled = bool(enabled)
+        if mode is not None:
+            self.mode = str(mode)
+        if min_confidence is not None:
+            self.min_confidence = float(min_confidence)
+        if max_context_chars is not None:
+            self.max_context_chars = int(max_context_chars)
+
     def finalize(
         self,
         *,

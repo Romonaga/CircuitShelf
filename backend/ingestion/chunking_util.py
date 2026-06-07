@@ -24,10 +24,21 @@ class ChunkingUtils(TextHeuristicsMixin, MathDetectionMixin, ChunkQualityMixin, 
         self.scoring_heurustics = self.config.get('SCORING_HEURISTICS', {})
         self.chunk_categories = self.config.get('CHUNK_CATEGORIES', {})
         self.equation_detection = self.config.get('EQUATION_DETECTION', {})
+        self._nltk_sentence_tokenizer_available = True
 
         self.trace_logger.debug(f"🔧 Loaded SCORING_HEURISTICS: {self.scoring_heurustics}")
         self.trace_logger.debug(f"📊 Loaded CHUNK_CATEGORIES: {self.chunk_categories}")
         self.trace_logger.debug(f"📊 Loaded EQUATION_DETECTION: {self.equation_detection}")
+
+    def sentence_tokenize(self, text):
+        if self._nltk_sentence_tokenizer_available:
+            try:
+                return sent_tokenize(text)
+            except LookupError:
+                self._nltk_sentence_tokenizer_available = False
+                if self.trace_logger:
+                    self.trace_logger.warning("NLTK sentence tokenizer data is unavailable; using regex sentence splitter.")
+        return [item.strip() for item in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])|\n+", text) if item.strip()]
 
     def split_lines_to_budget(self, lines, chunk_size, overlap):
         chunks = []
@@ -217,7 +228,7 @@ class ChunkingUtils(TextHeuristicsMixin, MathDetectionMixin, ChunkQualityMixin, 
                     current_section = block.strip()
                     continue
 
-                sentences = sent_tokenize(block)
+                sentences = self.sentence_tokenize(block)
                 for sentence_window in self.token_utils.sliding_window(sentences, chunk_size, overlap):
                     chunk_text = " ".join(sentence_window)
                     category = self.categorize_chunk(chunk_text)

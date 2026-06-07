@@ -91,6 +91,45 @@ class RagService:
     def average_query_time(self) -> str:
         return self.query_timings.average_label()
 
+    def configure_runtime(
+        self,
+        *,
+        default_llm_model: str | None = None,
+        llm_model_options: list[str] | None = None,
+        max_chat_history_turns: int | None = None,
+        max_chat_history_chars: int | None = None,
+        response_finalizer_system_prompt: str | None = None,
+        response_finalizer_enabled: bool | None = None,
+        response_finalizer_mode: str | None = None,
+        response_finalizer_min_confidence: float | None = None,
+        response_finalizer_max_context_chars: int | None = None,
+    ) -> None:
+        if default_llm_model is not None:
+            self.default_llm_model = default_llm_model
+        if llm_model_options is not None:
+            self.llm_model_options = llm_model_options or []
+        if max_chat_history_turns is not None:
+            self.max_chat_history_turns = int(max_chat_history_turns)
+        if max_chat_history_chars is not None:
+            self.max_chat_history_chars = int(max_chat_history_chars)
+        if response_finalizer_system_prompt is not None:
+            self.response_finalizer_system_prompt = response_finalizer_system_prompt
+        if response_finalizer_enabled is not None:
+            self.response_finalizer_enabled = bool(response_finalizer_enabled)
+        if response_finalizer_mode is not None:
+            self.response_finalizer_mode = str(response_finalizer_mode)
+        if response_finalizer_min_confidence is not None:
+            self.response_finalizer_min_confidence = float(response_finalizer_min_confidence)
+        if response_finalizer_max_context_chars is not None:
+            self.response_finalizer_max_context_chars = int(response_finalizer_max_context_chars)
+        self.answer_finalizer.configure_runtime(
+            system_prompt=self.response_finalizer_system_prompt,
+            enabled=self.response_finalizer_enabled,
+            mode=self.response_finalizer_mode,
+            min_confidence=self.response_finalizer_min_confidence,
+            max_context_chars=self.response_finalizer_max_context_chars,
+        )
+
     @staticmethod
     def assemble_final_markdown(response: str, image_blocks: list[str]) -> str:
         return assemble_final_markdown(response, image_blocks)

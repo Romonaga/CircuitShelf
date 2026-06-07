@@ -3477,7 +3477,7 @@ nav {
 }
 
 .ingest-status-panel.expanded .ingest-file-grid {
-  max-height: clamp(420px, 56vh, 760px);
+  max-height: clamp(620px, 72vh, 1040px);
 }
 
 .ingest-file-grid-heading,

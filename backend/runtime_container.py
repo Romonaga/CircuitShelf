@@ -162,21 +162,13 @@ class CircuitShelfRuntime:
             detected_gpu_count=self.detected_local_gpus,
             queue_timeout_seconds=self.local_gpu_queue_timeout_seconds,
         )
-        self.runtime_settings.register_callback(
-            "LOCAL_GPU_LLM_SLOTS",
-            lambda value: self.local_gpu_coordinator.configure(
-                llm_slot_count=resolve_local_gpu_llm_slots(self.config, detected_gpus=self.detected_local_gpus)
-            ),
-        )
-        self.runtime_settings.register_callback(
-            "LOCAL_GPU_CUDA_SLOTS",
-            lambda value: self.local_gpu_coordinator.configure(
-                cuda_slot_count=resolve_local_gpu_cuda_slots(self.config, detected_gpus=self.detected_local_gpus)
-            ),
-        )
-        self.runtime_settings.register_callback(
-            "LOCAL_GPU_QUEUE_TIMEOUT_SECONDS",
-            lambda value: self.local_gpu_coordinator.configure(queue_timeout_seconds=float(value or 300)),
+        self.runtime_settings.register_refresh_callback(
+            {
+                "LOCAL_GPU_LLM_SLOTS",
+                "LOCAL_GPU_CUDA_SLOTS",
+                "LOCAL_GPU_QUEUE_TIMEOUT_SECONDS",
+            },
+            lambda _key, _value: self.apply_gpu_runtime_settings(),
         )
         if self.lazy_gpu_models:
             self.trace_logger.info(f"🧠 Ingest runtime will cold-load GPU models on demand: {self.model_device}")
@@ -204,10 +196,7 @@ class CircuitShelfRuntime:
             gpu_priority=self.local_gpu_priority,
             gpu_owner=self.local_gpu_owner,
         )
-        self.runtime_settings.register_callback(
-            "RERANK_PROFILES",
-            lambda value: setattr(self.reranker_engine, "rerank_profiles", value),
-        )
+        self.runtime_settings.register_callback("RERANK_PROFILES", lambda value: setattr(self.reranker_engine, "rerank_profiles", value))
         self.ingest_progress = IngestProgressTracker(
             config=self.config,
             status_callback=self.ingest_status_callback,
@@ -264,6 +253,45 @@ class CircuitShelfRuntime:
             begin_document_worker=self.ingest_progress.begin_document_worker,
             finish_document_worker=self.ingest_progress.finish_document_worker,
             pdf_ext=self.pdf_ext,
+        )
+
+    def apply_gpu_runtime_settings(self):
+        self.local_gpu_llm_slots = resolve_local_gpu_llm_slots(self.config, detected_gpus=self.detected_local_gpus)
+        self.local_gpu_cuda_slots = resolve_local_gpu_cuda_slots(self.config, detected_gpus=self.detected_local_gpus)
+        self.local_gpu_queue_timeout_seconds = float(self.config.get("LOCAL_GPU_QUEUE_TIMEOUT_SECONDS", 300) or 300)
+        self.local_gpu_coordinator.configure(
+            llm_slot_count=self.local_gpu_llm_slots,
+            cuda_slot_count=self.local_gpu_cuda_slots,
+            queue_timeout_seconds=self.local_gpu_queue_timeout_seconds,
+        )
+
+    def apply_ollama_runtime_settings(self):
+        self.ollama_chat_client.configure_runtime(
+            api_url=self.config.get("OLLAMA_API_URL"),
+            default_system_prompt=self.config.get("RAG_CHAT_SYSTEM_PROMPT"),
+            default_temperature=self.config.get("LLM_TEMPERATURE", 0.2),
+            default_num_predict=self.config.get("LLM_NUM_PREDICT", 3072),
+            default_num_ctx=self.config.get("LLM_NUM_CTX"),
+            post_timeout=self.config.get("POST_TIMEOUT", 60),
+            query_retries=self.config.get("QUERY_RETRIES", 3),
+            query_retry_delay=self.config.get("QUERY_RETRY_DELAY", 5),
+            max_chat_history_turns=self.config.get("MAX_CHAT_HISTORY_TURNS", 5),
+            max_chat_history_chars=self.config.get("MAX_CHAT_HISTORY_CHARS", 2000),
+            max_concurrent_requests=self.config.get("LOCAL_LLM_MAX_CONCURRENT", 1),
+            queue_timeout_seconds=self.config.get("LOCAL_LLM_QUEUE_TIMEOUT_SECONDS", 300),
+            keep_alive=self.config.get("OLLAMA_KEEP_ALIVE", "30s"),
+        )
+
+    def apply_rag_runtime_settings(self):
+        self.rag_service.configure_runtime(
+            default_llm_model=self.config.get("LLM_MODEL_NAME"),
+            llm_model_options=self.config.get("LLM_MODEL_OPTIONS"),
+            max_chat_history_turns=self.config.get("MAX_CHAT_HISTORY_TURNS", 5),
+            max_chat_history_chars=self.config.get("MAX_CHAT_HISTORY_CHARS", 2000),
+            response_finalizer_enabled=self.config.get("RESPONSE_FINALIZER_ENABLED", True),
+            response_finalizer_mode=self.config.get("RESPONSE_FINALIZER_MODE", "always"),
+            response_finalizer_min_confidence=self.config.get("RESPONSE_FINALIZER_MIN_CONFIDENCE", 0.80),
+            response_finalizer_max_context_chars=self.config.get("RESPONSE_FINALIZER_MAX_CONTEXT_CHARS", 7000),
         )
 
     def run_ingestion_ocr(self, image, ocr_config):
@@ -402,18 +430,6 @@ class CircuitShelfRuntime:
             gpu_priority=5,
             gpu_owner="web",
         )
-        self.runtime_settings.register_callback(
-            "LOCAL_LLM_MAX_CONCURRENT",
-            lambda value: self.ollama_chat_client.configure_runtime(max_concurrent_requests=int(value or 1)),
-        )
-        self.runtime_settings.register_callback(
-            "LOCAL_LLM_QUEUE_TIMEOUT_SECONDS",
-            lambda value: self.ollama_chat_client.configure_runtime(queue_timeout_seconds=float(value or 0)),
-        )
-        self.runtime_settings.register_callback(
-            "OLLAMA_KEEP_ALIVE",
-            lambda value: self.ollama_chat_client.configure_runtime(keep_alive=value),
-        )
         self.rag_service = RagService(
             state=self.state,
             trace_logger=self.trace_logger,
@@ -440,6 +456,102 @@ class CircuitShelfRuntime:
             response_finalizer_mode=self.response_finalizer_mode,
             response_finalizer_min_confidence=self.response_finalizer_min_confidence,
             response_finalizer_max_context_chars=self.response_finalizer_max_context_chars,
+        )
+        self.runtime_settings.register_refresh_callback(
+            {
+                "LLM_MODEL_NAME",
+                "OLLAMA_API_URL",
+                "POST_TIMEOUT",
+                "QUERY_RETRIES",
+                "QUERY_RETRY_DELAY",
+                "RAG_CHAT_SYSTEM_PROMPT",
+                "LLM_TEMPERATURE",
+                "LLM_NUM_PREDICT",
+                "LLM_NUM_CTX",
+                "MAX_CHAT_HISTORY_TURNS",
+                "MAX_CHAT_HISTORY_CHARS",
+                "LOCAL_LLM_MAX_CONCURRENT",
+                "LOCAL_LLM_QUEUE_TIMEOUT_SECONDS",
+                "OLLAMA_KEEP_ALIVE",
+            },
+            lambda _key, _value: self.apply_ollama_runtime_settings(),
+        )
+        self.runtime_settings.register_refresh_callback(
+            {
+                "LLM_MODEL_NAME",
+                "LLM_MODEL_OPTIONS",
+                "MAX_CHAT_HISTORY_TURNS",
+                "MAX_CHAT_HISTORY_CHARS",
+                "RESPONSE_FINALIZER_ENABLED",
+                "RESPONSE_FINALIZER_MODE",
+                "RESPONSE_FINALIZER_MIN_CONFIDENCE",
+                "RESPONSE_FINALIZER_MAX_CONTEXT_CHARS",
+            },
+            lambda _key, _value: self.apply_rag_runtime_settings(),
+        )
+        self.runtime_settings.register_config_live_keys(
+            {
+                "CHUNK_SIZE",
+                "CHUNK_OVERLAP",
+                "CHUNKING_MODE",
+                "MIN_TOKENS_PER_CHUNK",
+                "MAX_TOKENS_PER_CHUNK",
+                "MIN_CHUNK_QUALITY",
+                "MIN_ACCEPTED_SCORE",
+                "RERANK_FALLBACK_TOP_K",
+                "RERANK_MAX_CONTEXT_CHUNKS",
+                "EMBED_BATCH_SIZE",
+                "EMBED_BATCH_AUTO",
+                "RERANK_BATCH_SIZE",
+                "RERANK_BATCH_AUTO",
+                "TRAINING_RECURSIVE",
+                "TRAINING_EXCLUDE_DIRS",
+                "INGEST_HASH_FILES",
+                "PDF_RENDER_VECTOR_PAGES",
+                "PDF_RENDER_MAX_PAGES_PER_DOC",
+                "PDF_RENDER_MIN_DRAWINGS",
+                "PDF_RENDER_ZOOM",
+                "PDF_RENDER_RASTER_PAGES",
+                "PDF_RENDER_MIN_RASTER_COVERAGE",
+                "PDF_RENDER_OCR_PAGES",
+                "USE_MULTITHREAD_OCR",
+                "INDEX_IMAGE_OCR_AS_TEXT",
+                "OCR_ENGINE",
+                "OCR_ENGINE_FALLBACK",
+                "PADDLEOCR_USE_GPU",
+                "PADDLEOCR_GPU_EXPERIMENTAL_ENABLED",
+                "PADDLEOCR_DEVICE",
+                "PADDLEOCR_LANG",
+                "PADDLEOCR_ENGINE",
+                "PADDLEOCR_PYTHON",
+                "PADDLEOCR_TIMEOUT_SECONDS",
+                "OCR_INDEX_TEXT_MIN_CHARS",
+                "OCR_MIN_CONFIDENCE",
+                "OCR_USE_TESSERACT_CONFIDENCE",
+                "OCR_MIN_LENGTH",
+                "OCR_MIN_MEANINGFUL_CHARS",
+                "OCR_MIN_MEANINGFUL_WORDS",
+                "OCR_MIN_UNIQUE_CHARS",
+                "OCR_MIN_ALPHA_RATIO",
+                "OCR_MAX_DIGIT_RATIO",
+                "OCR_MAX_SYMBOL_RATIO",
+                "OCR_MAX_SPACE_RATIO",
+                "OCR_MAX_AVG_WORD_LEN",
+                "OCR_LOW_CONTENT_MAX_SCORE",
+                "OCR_SHORT_TEXT_MAX_SCORE",
+                "OCR_TXT_DROP_SCORE",
+                "LOG_RETENTION_DAYS",
+                "STATUS_POLL_INTERVAL_SECONDS",
+                "STATUS_POLL_ACTIVE_INTERVAL_SECONDS",
+                "SESSION_TIMEOUT_SECONDS",
+                "INGEST_LOCAL_AI_REVIEW_ENABLED",
+                "INGEST_LOCAL_AI_MAX_PENDING",
+                "INGEST_LOCAL_AI_ADMISSION_TIMEOUT_SECONDS",
+                "INGEST_OPENAI_ASSIST_ENABLED",
+                "DATASHEET_OPENAI_REPAIR_ENABLED",
+                "PROMPT_TEMPLATE_GENERAL",
+                "PROMPT_TEMPLATE_MATH",
+            }
         )
         self.runtime_status_reporter = RuntimeStatusReporter(
             config=self.config,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Iterable
 from typing import Any, Callable, Mapping
 
 
@@ -23,20 +24,21 @@ SENSITIVE_SETTING_KEYS = {
 }
 
 DEPRECATED_SETTING_KEYS = {
+    "API_HOST",
+    "API_PORT",
     "EXTRACTED_IMAGES_DIR",
+    "BYPASS_NLTK_DOWNLOAD",
+    "LRU_CACHE_SIZE",
+    "NLTK_DATA_DIR",
     "SAVE_EXTRACTED_IMAGES",
 }
 
 RESTART_REQUIRED_SETTING_KEYS = BOOTSTRAP_SETTING_KEYS | {
-    "API_HOST",
-    "API_PORT",
     "APP_HOST",
     "APP_PORT",
-    "BYPASS_NLTK_DOWNLOAD",
     "CROSS_ENCODER_MODEL",
     "EMBED_MODEL_NAME",
     "MODEL_DEVICE",
-    "NLTK_DATA_DIR",
     "REACT_DIST_DIR",
     "RESPONSE_CACHE_CAPACITY",
     "TESSERACT_CMD",
@@ -63,10 +65,18 @@ class RuntimeSettingsManager:
         self.config_wrapper = config_wrapper
         self.module_globals = module_globals if module_globals is not None else {}
         self.logger = logger
-        self._callbacks: dict[str, Callable[[Any], None]] = {}
+        self._callbacks: dict[str, list[Callable[[Any], None]]] = {}
+        self._config_live_keys: set[str] = set()
 
     def register_callback(self, key: str, callback: Callable[[Any], None]) -> None:
-        self._callbacks[key] = callback
+        self._callbacks.setdefault(key, []).append(callback)
+
+    def register_refresh_callback(self, keys: Iterable[str], callback: Callable[[str, Any], None]) -> None:
+        for key in keys:
+            self.register_callback(key, lambda value, setting_key=key: callback(setting_key, value))
+
+    def register_config_live_keys(self, keys: Iterable[str]) -> None:
+        self._config_live_keys.update(keys)
 
     def apply_update(self, key: str, value: Any) -> SettingChange:
         target = getattr(self.config_wrapper, "config", None)
@@ -106,8 +116,9 @@ class RuntimeSettingsManager:
         if key in self.module_globals:
             self.module_globals[key] = value
             applied = True
-        callback = self._callbacks.get(key)
-        if callback:
+        for callback in self._callbacks.get(key, []):
             callback(value)
             applied = True
-        return applied or not setting_restart_required(key)
+        if key in self._config_live_keys:
+            applied = True
+        return applied

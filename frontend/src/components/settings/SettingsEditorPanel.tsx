@@ -26,7 +26,13 @@ export function SettingsEditorPanel({
     <form className="settings-editor-panel" onSubmit={onSubmit}>
       <SectionHeader
         title={selected?.label || "No setting selected"}
-        description={selected?.restartRequired ? "Saved changes are stored in Postgres and applied on next restart." : ""}
+        description={
+          selected?.restartRequired
+            ? "Saved changes are stored in Postgres and applied on next restart."
+            : selected
+              ? "Saved changes are applied to new work without restarting the server."
+              : ""
+        }
         actions={
           <button className="ghost-button" type="button" onClick={onLoadSettings} disabled={busy || saving}>
             Refresh

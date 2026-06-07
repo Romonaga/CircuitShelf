@@ -41,7 +41,14 @@ def create_router(
                 trace_logger.info(f"⚙️ Applied runtime setting update for {key}.")
             elif change.restart_required:
                 trace_logger.info(f"⚙️ Stored setting update for {key}; restart required to apply it.")
-            return {"setting": updated}
+            return {
+                "setting": updated,
+                "change": {
+                    "changed": change.changed,
+                    "runtimeApplied": change.runtime_applied,
+                    "restartRequired": change.restart_required,
+                },
+            }
         except KeyError as exc:
             return JSONResponse({"error": str(exc)}, status_code=404)
         except (PermissionError, ValueError, TypeError) as exc:

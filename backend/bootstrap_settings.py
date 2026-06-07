@@ -57,7 +57,7 @@ DEFAULT_APP_SETTINGS = [
     (
         "RESPONSE_FINALIZER_MODE",
         "always",
-        "When to run answer validation: off, always, issues, build, build_or_issues, low_confidence, or build_or_low_confidence.",
+        "When to run answer validation: off, always, auto, issues, build, build_or_issues, low_confidence, build_or_low_confidence, or issues_or_build_or_low_confidence.",
     ),
     ("RESPONSE_FINALIZER_MIN_CONFIDENCE", 0.80, "Retrieval confidence threshold used by low-confidence finalizer modes."),
     ("RESPONSE_FINALIZER_MAX_CONTEXT_CHARS", 7000, "Maximum source-summary characters sent to the response finalizer."),

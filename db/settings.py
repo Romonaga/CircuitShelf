@@ -125,7 +125,7 @@ class AppSettingsStore:
         if target is None:
             return 0
         for key, value in db_settings.items():
-            if key not in BOOTSTRAP_SETTING_KEYS:
+            if key not in BOOTSTRAP_SETTING_KEYS and key not in DEPRECATED_SETTING_KEYS:
                 target[key] = value
         return len(db_settings)
 
