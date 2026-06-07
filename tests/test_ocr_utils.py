@@ -10,7 +10,8 @@ from backend.ingestion import IngestionPipeline
 from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsset
 from backend.ingestion.ocr_assets import OcrAssetProcessor
 from backend.ingestion.pdf.embedded_image_extractor import EmbeddedPdfImageExtractor
-from backend.ingestion.ocr_engines import _extract_paddle_text_and_confidence, ocr_uses_local_gpu, run_selected_ocr, selected_ocr_mode
+from backend.ingestion.pdf.extractor import PdfDocumentExtractor
+from backend.ingestion.ocr_engines import _extract_paddle_text_and_confidence, _paddleocr_kwargs, ocr_uses_local_gpu, run_selected_ocr, selected_ocr_mode
 from backend.ingestion.ocr_utils import parse_tesseract_tsv, should_skip_image, should_skip_image_dimensions
 
 
@@ -269,6 +270,40 @@ class OcrUtilsTests(unittest.TestCase):
 
         self.assertEqual(text, "VCC GND")
         self.assertAlmostEqual(confidence, 90.0)
+
+    def test_paddleocr_kwargs_disable_document_preprocessors(self):
+        kwargs = _paddleocr_kwargs(lang="en", device="gpu")
+
+        self.assertEqual(kwargs["lang"], "en")
+        self.assertEqual(kwargs["device"], "gpu")
+        self.assertFalse(kwargs["use_doc_orientation_classify"])
+        self.assertFalse(kwargs["use_doc_unwarping"])
+        self.assertFalse(kwargs["use_textline_orientation"])
+
+    def test_pdf_ocr_stats_roll_up_fallback_errors(self):
+        stats = PdfDocumentExtractor._ocr_stats([
+            {
+                "ocr_result": {
+                    "accepted": True,
+                    "skipped": False,
+                    "engine": "tesseract",
+                    "fallbackFrom": "paddleocr",
+                    "error": "external paddleocr exited 1: runtime failure",
+                }
+            },
+            {
+                "ocr_result": {
+                    "accepted": False,
+                    "skipped": True,
+                    "engine": "tesseract",
+                    "fallbackFrom": "paddleocr",
+                    "error": "external paddleocr exited 1: runtime failure",
+                }
+            },
+        ])
+
+        self.assertEqual(stats["ocrFallbacks"], 2)
+        self.assertIn("external paddleocr exited 1: runtime failure (2)", stats["ocrFallbackErrors"])
 
     def test_gpu_ocr_worker_count_uses_gpu_lane_count(self):
         ocr_assets = OcrAssetProcessor(

@@ -89,6 +89,7 @@ class PdfDocumentExtractor:
             "ocrFallbacks": 0,
         }
         engines: dict[str, int] = {}
+        fallback_errors: dict[str, int] = {}
         for result in results:
             ocr_result = result.get("ocr_result") or {}
             engine = str(ocr_result.get("engine") or "unknown")
@@ -99,7 +100,15 @@ class PdfDocumentExtractor:
                 stats["ocrSkipped"] = int(stats["ocrSkipped"]) + 1
             if ocr_result.get("fallbackFrom"):
                 stats["ocrFallbacks"] = int(stats["ocrFallbacks"]) + 1
+                error = str(ocr_result.get("error") or "").strip()
+                if error:
+                    fallback_errors[error] = fallback_errors.get(error, 0) + 1
         stats["ocrEngineBreakdown"] = ", ".join(f"{name}:{count}" for name, count in sorted(engines.items()))
+        if fallback_errors:
+            stats["ocrFallbackErrors"] = "; ".join(
+                f"{message[:160]} ({count})"
+                for message, count in sorted(fallback_errors.items(), key=lambda item: item[1], reverse=True)[:3]
+            )
         return stats
 
     @staticmethod

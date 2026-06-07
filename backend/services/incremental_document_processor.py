@@ -250,6 +250,7 @@ class IncrementalDocumentProcessor:
             f"indexed_image_text={self._int_value(details.get('indexedImageTexts'))} "
             f"ocr_engine={details.get('ocrEngineBreakdown') or details.get('ocrMode') or 'n/a'} "
             f"ocr_fallbacks={self._int_value(details.get('ocrFallbacks'))} | "
+            f"ocr_fallback_reason={details.get('ocrFallbackErrors') or 'n/a'} | "
             f"{ai_part}"
         )
 

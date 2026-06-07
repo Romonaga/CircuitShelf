@@ -185,17 +185,40 @@ def _paddle_engine(config: dict[str, Any]) -> Any:
     if cached is not None:
         return cached
 
-    kwargs: dict[str, Any] = {"lang": lang, "device": device}
-    if engine:
-        kwargs["engine"] = engine
+    kwargs = _paddleocr_kwargs(lang=lang, device=device, engine=engine)
     try:
         instance = paddle_ocr(**kwargs)
     except TypeError:
         # PaddleOCR 2.x used use_gpu instead of the 3.x device parameter.
-        legacy_kwargs: dict[str, Any] = {"lang": lang, "use_gpu": device == "gpu"}
+        legacy_kwargs: dict[str, Any] = {
+            "lang": lang,
+            "use_gpu": device == "gpu",
+            "use_angle_cls": False,
+        }
         instance = paddle_ocr(**legacy_kwargs)
     _PADDLE_ENGINES[key] = instance
     return instance
+
+
+def _paddleocr_kwargs(*, lang: str, device: str, engine: str = "") -> dict[str, Any]:
+    """Build PaddleOCR 3.x kwargs for a lean OCR-only pipeline.
+
+    The default PaddleOCR 3.x constructor enables document orientation,
+    unwarping, and textline orientation models. We only need text detection and
+    recognition for extracted PDF images/pages, and those extra models trigger a
+    Paddle oneDNN/PIR runtime failure on this host's CPU build.
+    """
+
+    kwargs: dict[str, Any] = {
+        "lang": lang,
+        "device": device,
+        "use_doc_orientation_classify": False,
+        "use_doc_unwarping": False,
+        "use_textline_orientation": False,
+    }
+    if engine:
+        kwargs["engine"] = engine
+    return kwargs
 
 
 def clear_ocr_engine_cache() -> None:

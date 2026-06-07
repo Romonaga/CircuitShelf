@@ -25,14 +25,20 @@ def main() -> int:
     parser.add_argument("--engine", default="")
     args = parser.parse_args()
 
-    kwargs: dict[str, Any] = {"lang": args.lang, "device": args.device}
+    kwargs: dict[str, Any] = {
+        "lang": args.lang,
+        "device": args.device,
+        "use_doc_orientation_classify": False,
+        "use_doc_unwarping": False,
+        "use_textline_orientation": False,
+    }
     if args.engine:
         kwargs["engine"] = args.engine
 
     try:
         ocr = PaddleOCR(**kwargs)
     except TypeError:
-        ocr = PaddleOCR(lang=args.lang, use_gpu=args.device == "gpu")
+        ocr = PaddleOCR(lang=args.lang, use_gpu=args.device == "gpu", use_angle_cls=False)
 
     image = Image.open(args.image).convert("RGB")
     input_image = np.asarray(image)
