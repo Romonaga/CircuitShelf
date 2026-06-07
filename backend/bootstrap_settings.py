@@ -25,6 +25,8 @@ DEFAULT_APP_SETTINGS = [
     ("PADDLEOCR_DEVICE", "gpu", "PaddleOCR device hint: gpu or cpu. Leave gpu for CUDA-backed OCR testing."),
     ("PADDLEOCR_LANG", "en", "PaddleOCR recognition language code."),
     ("PADDLEOCR_ENGINE", "", "Optional PaddleOCR inference backend override. Leave blank for the default backend."),
+    ("PADDLEOCR_PYTHON", "", "Optional Python executable for an isolated PaddleOCR environment."),
+    ("PADDLEOCR_TIMEOUT_SECONDS", 120, "Seconds allowed for one PaddleOCR image request before falling back."),
     (
         "INGEST_LOCAL_AI_REVIEW_ENABLED",
         True,

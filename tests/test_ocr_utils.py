@@ -211,6 +211,29 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertTrue(result.skipped)
         self.assertIn("paddleocr failed", result.skip_reason)
 
+    def test_paddleocr_external_python_runner_is_supported(self):
+        image = Image.new("RGB", (120, 80), "white")
+
+        completed = SimpleNamespace(returncode=0, stdout='{"text":"VCC GND","confidence":91.5}\n', stderr="")
+        with patch("backend.ingestion.ocr_engines.subprocess.run", return_value=completed) as run_mock:
+            result = run_selected_ocr(
+                image,
+                {
+                    "OCR_ENGINE": "paddleocr",
+                    "PADDLEOCR_PYTHON": "/tmp/ocr-python",
+                    "PADDLEOCR_DEVICE": "gpu",
+                    "PADDLEOCR_LANG": "en",
+                    "OCR_MIN_IMAGE_WIDTH": 20,
+                    "OCR_MIN_IMAGE_HEIGHT": 20,
+                    "OCR_MIN_IMAGE_AREA": 900,
+                },
+            )
+
+        self.assertFalse(result.skipped)
+        self.assertEqual(result.text, "VCC GND")
+        self.assertEqual(result.confidence, 91.5)
+        self.assertEqual(run_mock.call_args.args[0][0], "/tmp/ocr-python")
+
     def test_paddleocr_result_normalization_handles_current_json_shape(self):
         text, confidence = _extract_paddle_text_and_confidence(
             [

@@ -116,6 +116,8 @@ SETTING_UI = {
     "PADDLEOCR_DEVICE": ("ocr", "PaddleOCR device", "PaddleOCR device hint. Use gpu for CUDA-backed OCR or cpu for CPU-only testing.", False),
     "PADDLEOCR_LANG": ("ocr", "PaddleOCR language", "PaddleOCR recognition language code.", False),
     "PADDLEOCR_ENGINE": ("ocr", "PaddleOCR backend", "Optional PaddleOCR inference backend override. Leave blank for PaddleOCR defaults.", True),
+    "PADDLEOCR_PYTHON": ("ocr", "PaddleOCR Python", "Optional Python executable for an isolated PaddleOCR environment. Recommended when the app uses a different CUDA stack.", False),
+    "PADDLEOCR_TIMEOUT_SECONDS": ("ocr", "PaddleOCR timeout", "Seconds allowed for one PaddleOCR image OCR request before the engine falls back or reports failure.", False),
     "TESSERACT_CMD": ("ocr", "Tesseract command", "Path to the Tesseract executable.", True),
     "OCR_INDEX_TEXT_MIN_CHARS": ("ocr", "OCR index minimum characters", "Minimum useful OCR text length before image text is indexed.", True),
     "OCR_MIN_CONFIDENCE": ("ocr", "OCR minimum confidence", "Minimum Tesseract confidence accepted for OCR text.", True),

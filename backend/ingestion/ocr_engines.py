@@ -7,7 +7,12 @@ missing GPU OCR dependency never prevents CircuitShelf from starting.
 from __future__ import annotations
 
 import importlib
+import json
+import subprocess
+import sys
+import tempfile
 import threading
+from pathlib import Path
 from statistics import fmean
 from typing import Any
 
@@ -56,6 +61,10 @@ def _run_paddle_ocr_with_fallback(image: Image.Image, config: dict[str, Any]) ->
 
 
 def _run_paddle_ocr(image: Image.Image, config: dict[str, Any]) -> OcrResult:
+    external_python = str(_config_value(config, "PADDLEOCR_PYTHON", "") or "").strip()
+    if external_python:
+        return _run_external_paddle_ocr(image, config, external_python)
+
     ocr = _paddle_engine(config)
     np = importlib.import_module("numpy")
     rgb = image.convert("RGB")
@@ -69,6 +78,40 @@ def _run_paddle_ocr(image: Image.Image, config: dict[str, Any]) -> OcrResult:
 
     text, confidence = _extract_paddle_text_and_confidence(raw_result)
     return OcrResult(text=text, confidence=confidence)
+
+
+def _run_external_paddle_ocr(image: Image.Image, config: dict[str, Any], python_path: str) -> OcrResult:
+    runner_path = Path(__file__).with_name("paddleocr_runner.py")
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as image_file:
+        image.convert("RGB").save(image_file.name, format="PNG")
+        command = [
+            python_path,
+            str(runner_path),
+            "--image",
+            image_file.name,
+            "--lang",
+            str(_config_value(config, "PADDLEOCR_LANG", "en") or "en"),
+            "--device",
+            _paddle_device(config),
+        ]
+        engine = str(_config_value(config, "PADDLEOCR_ENGINE", "") or "").strip()
+        if engine:
+            command.extend(["--engine", engine])
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=float(_config_value(config, "PADDLEOCR_TIMEOUT_SECONDS", 120) or 120),
+        )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "unknown error").strip()
+        raise RuntimeError(f"external paddleocr exited {completed.returncode}: {detail[:500]}")
+    try:
+        payload = json.loads(completed.stdout.strip().splitlines()[-1])
+    except (IndexError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"external paddleocr returned invalid JSON: {completed.stdout[:500]}") from exc
+    return OcrResult(text=str(payload.get("text") or ""), confidence=_safe_float(payload.get("confidence")))
 
 
 def _paddle_engine(config: dict[str, Any]) -> Any:
