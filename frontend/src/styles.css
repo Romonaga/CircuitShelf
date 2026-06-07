@@ -4425,7 +4425,7 @@ nav {
 
 .compact-table-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) minmax(110px, 0.8fr) 95px 70px 90px 100px minmax(140px, 1fr);
+  grid-template-columns: minmax(155px, 1fr) minmax(170px, 1.25fr) minmax(105px, 0.75fr) 90px 60px 80px 90px minmax(140px, 1fr);
   gap: 10px;
   align-items: center;
   padding: 10px 12px;

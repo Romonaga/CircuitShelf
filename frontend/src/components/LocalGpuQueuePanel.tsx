@@ -43,6 +43,11 @@ function queueTime(value?: number | null) {
   return value == null ? "n/a" : `${formatNumber(value)}s`;
 }
 
+function queueTimestamp(item: LocalGpuQueueItem) {
+  const value = item.finishedAt || item.startedAt || item.createdAt;
+  return value ? new Date(value).toLocaleString() : "n/a";
+}
+
 function resourceRows(queue: LocalGpuQueueStatus) {
   const byResource = queue.byResource || {};
   const configured = [
@@ -117,6 +122,7 @@ export function LocalGpuQueuePanel({ queue }: { queue?: LocalGpuQueueStatus | nu
       {queue.recent?.length ? (
         <div className="compact-table local-gpu-queue-table">
           <div className="compact-table-row compact-table-head">
+            <span>When</span>
             <span>Work</span>
             <span>Lane</span>
             <span>Status</span>
@@ -127,6 +133,7 @@ export function LocalGpuQueuePanel({ queue }: { queue?: LocalGpuQueueStatus | nu
           </div>
           {queue.recent.slice(0, 14).map((item) => (
             <div className={`compact-table-row gpu-queue-row ${item.status}`} key={item.taskId}>
+              <span>{queueTimestamp(item)}</span>
               <span title={item.taskId}>{queueItemLabel(item)}</span>
               <span>{resourceLabel(item.resourceClass)}</span>
               <span>{item.status}</span>

@@ -185,6 +185,7 @@ class LocalGpuWorkCoordinator:
         conn = None
         lock_key = None
         lease: LocalGpuLease | None = None
+        run_started: float | None = None
         try:
             conn, slot_index, wait_seconds = self._wait_for_slot(task_id, resource_class, timeout)
             slot_count = self._slot_count_for(resource_class)
@@ -203,12 +204,30 @@ class LocalGpuWorkCoordinator:
                     f"⏳ Local GPU {resource_class} work waited {wait_seconds:.2f}s: {task_type} "
                     f"(priority {priority}, slot {slot_index + 1}/{slot_count})."
                 )
+            run_started = time.monotonic()
+            if self.logger:
+                self.logger.info(
+                    f"🎮 Local GPU work start: "
+                    f"{self._log_context(lease, owner=owner, details=details or {})}."
+                )
             yield lease
+            if self.logger:
+                self.logger.info(
+                    f"✅ Local GPU work complete: "
+                    f"{self._log_context(lease, owner=owner, details=details or {}, duration=time.monotonic() - run_started)}."
+                )
             self._finish_task(conn, task_id, "completed", None)
         except TimeoutError as exc:
             self._finish_without_lease(task_id, "timed_out", str(exc))
             raise
         except Exception as exc:
+            if lease is not None and self.logger:
+                duration = (time.monotonic() - run_started) if run_started is not None else None
+                self.logger.warning(
+                    f"❌ Local GPU work failed: "
+                    f"{self._log_context(lease, owner=owner, details=details or {}, duration=duration)}; "
+                    f"{exc}"
+                )
             if conn is not None:
                 self._finish_task(conn, task_id, "failed", str(exc))
             else:
@@ -479,6 +498,47 @@ class LocalGpuWorkCoordinator:
     def _admission_lock_key(resource_class: str) -> int:
         offset = GPU_QUEUE_LOCK_OFFSETS.get(resource_class, 0)
         return GPU_QUEUE_ADMISSION_LOCK_BASE + offset
+
+    @staticmethod
+    def _format_details(details: dict[str, Any], max_items: int = 5) -> str:
+        parts: list[str] = []
+        for index, (key, value) in enumerate(details.items()):
+            if index >= max_items:
+                parts.append(f"+{len(details) - max_items} more")
+                break
+            if value is None:
+                continue
+            if isinstance(value, float):
+                rendered = f"{value:.3g}"
+            else:
+                rendered = str(value)
+            if len(rendered) > 80:
+                rendered = f"{rendered[:77]}..."
+            parts.append(f"{key}={rendered}")
+        return ", ".join(parts)
+
+    @classmethod
+    def _log_context(
+        cls,
+        lease: LocalGpuLease,
+        *,
+        owner: str | None,
+        details: dict[str, Any],
+        duration: float | None = None,
+    ) -> str:
+        context = [
+            f"{lease.task_type} via {lease.resource_class}",
+            f"owner={owner or 'n/a'}",
+            f"priority={lease.priority}",
+            f"slot={lease.slot_index + 1}/{lease.slot_count}",
+            f"wait={lease.wait_seconds:.2f}s",
+        ]
+        if duration is not None:
+            context.append(f"duration={duration:.2f}s")
+        detail_text = cls._format_details(details)
+        if detail_text:
+            context.append(detail_text)
+        return " | ".join(context)
 
     @staticmethod
     def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
