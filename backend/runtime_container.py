@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import time
 
 import backend.services.bench_tools as bench_tools
 from backend.services.app_runtime_helpers import conversation_title_from_question, sanitize_for_json
@@ -306,6 +307,7 @@ class CircuitShelfRuntime:
 
         width, height = image.size
         ocr_slots = max(1, int(getattr(self, "local_gpu_ocr_slots", 1) or 1))
+        self._wait_for_interactive_gpu_headroom(task_type="paddleocr")
         with self.local_gpu_coordinator.lease(
             task_type="paddleocr",
             resource_class="ocr_cuda",
@@ -320,6 +322,33 @@ class CircuitShelfRuntime:
             },
         ):
             return run_selected_ocr(image, ocr_config)
+
+    def _wait_for_interactive_gpu_headroom(self, *, task_type: str, timeout_seconds: float = 120.0) -> None:
+        started = time.monotonic()
+        logged = False
+        while True:
+            pressure = self.local_gpu_coordinator.live_pressure("local_llm")
+            pending = int(pressure.get("pending") or 0) if pressure.get("enabled") else 0
+            if pending <= 0:
+                if logged and self.trace_logger:
+                    waited = time.monotonic() - started
+                    self.trace_logger.info(f"✅ Background GPU work resumed after {waited:.2f}s: {task_type}.")
+                return
+
+            waited = time.monotonic() - started
+            if waited >= timeout_seconds:
+                if self.trace_logger:
+                    self.trace_logger.warning(
+                        f"⚠️ Background GPU work waited {waited:.2f}s for local LLM headroom and will continue: {task_type}."
+                    )
+                return
+            if not logged and self.trace_logger:
+                self.trace_logger.info(
+                    f"⏳ Background GPU work paused for local LLM priority: {task_type} "
+                    f"(local LLM pending {pending})."
+                )
+                logged = True
+            time.sleep(0.25)
 
     def _build_ingest_services(self):
         stores = self.stores

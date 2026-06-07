@@ -83,7 +83,7 @@ DEFAULT_APP_SETTINGS = [
     (
         "LOCAL_GPU_OCR_SLOTS",
         "auto",
-        "PaddleOCR CUDA lanes. Auto allows more OCR page workers than model-generation lanes while keeping ingestion lower priority.",
+        "PaddleOCR CUDA lanes. Auto allows up to 8 OCR page workers per GPU while keeping ingestion lower priority.",
     ),
     (
         "LOCAL_GPU_QUEUE_TIMEOUT_SECONDS",

@@ -90,7 +90,7 @@ def resolve_local_gpu_ocr_slots(config: Any, *, detected_gpus: int | None = None
         config,
         "LOCAL_GPU_OCR_SLOTS",
         detected_gpus=detected_gpus,
-        auto_multiplier=4,
+        auto_multiplier=8,
         auto_max=8,
     )
 

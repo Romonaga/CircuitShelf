@@ -60,7 +60,7 @@ SETTING_UI = {
     "LOCAL_LLM_QUEUE_TIMEOUT_SECONDS": ("models", "Local LLM queue timeout", "Seconds a local Ollama request can wait for the model queue before returning a busy response.", False),
     "LOCAL_GPU_LLM_SLOTS": ("models", "Local LLM GPU slots", "Local Ollama generation lanes. Auto uses one lane per detected GPU.", False),
     "LOCAL_GPU_CUDA_SLOTS": ("models", "CUDA batch lanes", "Embedding and reranking CUDA work lanes. Auto uses a conservative per-GPU count so ingestion does not serialize every batch.", False),
-    "LOCAL_GPU_OCR_SLOTS": ("models", "OCR CUDA lanes", "PaddleOCR CUDA work lanes. Auto allows several OCR page workers per GPU while user-facing local LLM work keeps priority.", False),
+    "LOCAL_GPU_OCR_SLOTS": ("models", "OCR CUDA lanes", "PaddleOCR CUDA work lanes. Auto allows up to 8 OCR page workers per GPU while user-facing local LLM work keeps priority.", False),
     "LOCAL_GPU_QUEUE_TIMEOUT_SECONDS": ("models", "Local GPU queue timeout", "Seconds local GPU work may wait for an available local resource lane before failing.", False),
     "OLLAMA_KEEP_ALIVE": ("models", "Ollama keep alive", "How long Ollama keeps the chat model loaded after a request. Use 0 to unload immediately; use a short value for faster follow-ups.", False),
     "LLM_TEMPERATURE": ("models", "Temperature", "Higher values make answers more varied; lower values make them more consistent.", False),
