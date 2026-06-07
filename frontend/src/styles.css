@@ -3298,6 +3298,9 @@ nav {
   border-radius: 8px;
   background: #ecfdf3;
   padding: 10px 12px;
+  max-height: 180px;
+  overflow: auto;
+  line-height: 1.35;
 }
 
 .upload-panel {
