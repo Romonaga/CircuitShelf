@@ -117,7 +117,7 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
             <span><small>Ingest</small><strong>{ingestProgress}</strong></span>
             <span><small>Next check</small><strong>{formatShortTime(ingest?.nextCheckAt)}</strong></span>
             <span><small>Temp</small><strong>{gpu?.temperatureC == null ? "n/a" : `${formatNumber(gpu.temperatureC)} C`}</strong></span>
-            <span><small>Power</small><strong>{gpu?.powerW == null ? "n/a" : `${formatNumber(gpu.powerW)} W`}</strong></span>
+            <span><small>GPU power</small><strong>{gpu?.powerW == null ? "n/a" : `${formatNumber(gpu.powerW)} W`}</strong></span>
             <span><small>CPU cores</small><strong>{formatInteger(resources?.cpu?.cores)}</strong></span>
             <span><small>Threads</small><strong>{formatInteger(process?.threads)}</strong></span>
             <span><small>Proc RAM</small><strong>{formatBytes(process?.memoryBytes)}</strong></span>
