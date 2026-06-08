@@ -5,6 +5,7 @@ import time
 
 import numpy as np
 
+from backend.domain.statuses import DocumentStatusId
 from backend.ingestion.ocr_engines import selected_ocr_mode
 from backend.ingestion.index_builder import IndexBuilder
 
@@ -153,7 +154,7 @@ class IncrementalDocumentProcessor:
             sources=ingested_state.get_sources(),
             metadata=ingested_state.get_metadata(),
             embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
-            status="pending",
+            status=DocumentStatusId.PENDING,
             document_stats=document_stats,
         )
         self.update_index_progress(
@@ -209,7 +210,7 @@ class IncrementalDocumentProcessor:
         return build_result, final_details
 
     def mark_source_ready_for_review(self, source):
-        ready_sources = self.vector_store.set_sources_status([source], "needs_review")
+        ready_sources = self.vector_store.set_sources_status([source], DocumentStatusId.NEEDS_REVIEW)
         if source not in ready_sources:
             raise RuntimeError(f"{source} could not be marked ready for review.")
         return ready_sources

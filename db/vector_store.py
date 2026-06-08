@@ -8,10 +8,11 @@ from typing import Any
 import numpy as np
 from psycopg.errors import UndefinedColumn, UndefinedTable
 
+from backend.domain.statuses import DocumentStatusId
+from backend.ingestion.manifest import FileRecord
 from db.connection import Database
 from db.sql import load_query
 from db.text import clean_db_text
-from backend.ingestion.manifest import FileRecord
 
 
 def vector_to_sql(value: Any) -> str:
@@ -151,7 +152,7 @@ class VectorStore:
         sources: list[str],
         metadata: list[dict],
         embeddings: np.ndarray,
-        status: str = "indexed",
+        status: DocumentStatusId = DocumentStatusId.INDEXED,
         document_stats: dict[str, dict[str, int]] | None = None,
     ) -> None:
         if len(chunks) != len(sources) or len(chunks) != len(metadata) or len(chunks) != len(embeddings):
@@ -170,7 +171,7 @@ class VectorStore:
         sources: list[str],
         metadata: list[dict],
         embeddings: np.ndarray,
-        status: str = "needs_review",
+        status: DocumentStatusId = DocumentStatusId.NEEDS_REVIEW,
         document_stats: dict[str, dict[str, int]] | None = None,
         scope_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> None:
@@ -195,7 +196,7 @@ class VectorStore:
         sources: list[str],
         metadata: list[dict],
         embeddings: np.ndarray,
-        status: str,
+        status: DocumentStatusId,
         document_stats: dict[str, dict[str, int]],
         scope_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> None:
@@ -221,7 +222,7 @@ class VectorStore:
                         record.size,
                         record.mtime_ns,
                         clean_db_text(record.sha256, None),
-                        clean_db_text(status),
+                        int(status),
                         None if stats.get("pageCount") is None else int(stats.get("pageCount") or 0),
                         int(stats.get("rawChunkCount", 0) or 0),
                         int(stats.get("chunkCount", 0) or 0),
@@ -399,16 +400,16 @@ class VectorStore:
             rows = conn.execute(load_query("review_document_chunks.sql"), (source_path, int(limit))).fetchall()
         return [dict(row) for row in rows]
 
-    def set_document_status(self, source_path: str, status: str, reviewed_by: str | None) -> dict | None:
+    def set_document_status(self, source_path: str, status: DocumentStatusId, reviewed_by: str | None) -> dict | None:
         with self.database.connection() as conn:
-            row = conn.execute(load_query("review_document_status_update.sql"), (status, reviewed_by, source_path)).fetchone()
+            row = conn.execute(load_query("review_document_status_update.sql"), (int(status), reviewed_by, source_path)).fetchone()
         return dict(row) if row else None
 
-    def set_sources_status(self, source_paths: list[str], status: str) -> list[str]:
+    def set_sources_status(self, source_paths: list[str], status: DocumentStatusId) -> list[str]:
         if not source_paths:
             return []
         with self.database.connection() as conn:
-            rows = conn.execute(load_query("review_documents_status_update_by_sources.sql"), (status, source_paths)).fetchall()
+            rows = conn.execute(load_query("review_documents_status_update_by_sources.sql"), (int(status), source_paths)).fetchall()
         return [row["source_path"] for row in rows]
 
     def delete_document(self, source_path: str) -> dict | None:

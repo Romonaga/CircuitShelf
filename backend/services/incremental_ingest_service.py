@@ -3,6 +3,7 @@ import time
 
 import numpy as np
 
+from backend.domain.statuses import DocumentStatusId
 from backend.ingestion.ocr_engines import selected_ocr_mode
 from backend.ingestion.index_builder import IndexBuildResult, IndexBuilder
 from backend.services.incremental_document_processor import IncrementalDocumentProcessor
@@ -354,7 +355,7 @@ class IncrementalIngestService:
             sources=ingested_state.get_sources(),
             metadata=ingested_state.get_metadata(),
             embeddings=np.asarray(ingested_state.get_embeddings(), dtype="float32"),
-            status="pending",
+            status=DocumentStatusId.PENDING,
             document_stats=document_stats,
         )
         self.update_index_progress(

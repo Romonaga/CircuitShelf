@@ -17,7 +17,8 @@ SELECT d.source_path,
        d.file_extension,
        d.size_bytes,
        d.mtime_ns,
-       d.status,
+       ds.code AS status,
+       d.status_id,
        d.entity_id,
        d.is_global,
        e.name AS entity_name,
@@ -36,10 +37,11 @@ SELECT d.source_path,
        coalesce(c.avg_quality, 0) AS avg_quality,
        coalesce(c.low_quality_count, 0) AS low_quality_count
 FROM documents d
+JOIN document_statuses ds ON ds.id = d.status_id
 LEFT JOIN chunk_stats c ON c.document_id = d.id
 LEFT JOIN image_stats i ON i.document_id = d.id
 LEFT JOIN entities e ON e.id = d.entity_id
-WHERE d.status IN ('needs_review', 'failed')
+WHERE d.status_id IN (2, 4)
   AND (
       %s = 'all'
       OR (%s = 'global' AND d.is_global = true)

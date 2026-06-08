@@ -563,7 +563,6 @@ class CircuitShelfRuntime:
                 "RERANK_BATCH_AUTO",
                 "TRAINING_RECURSIVE",
                 "TRAINING_EXCLUDE_DIRS",
-                "INGEST_HASH_FILES",
                 "PDF_RENDER_VECTOR_PAGES",
                 "PDF_RENDER_MAX_PAGES_PER_DOC",
                 "PDF_RENDER_MIN_DRAWINGS",
@@ -669,7 +668,7 @@ class CircuitShelfRuntime:
             supported_extensions=self.supported_training_extensions(),
             recursive=self.config.get("TRAINING_RECURSIVE", True),
             excluded_dirs=self.config.get("TRAINING_EXCLUDE_DIRS", []),
-            hash_files=self.config.get("INGEST_HASH_FILES", False),
+            hash_files=True,
         )
 
     def query_ollama_chat_with_retry(

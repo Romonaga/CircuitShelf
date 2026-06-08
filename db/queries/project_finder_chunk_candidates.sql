@@ -18,7 +18,7 @@ matched AS (
     JOIN documents d ON d.id = dc.document_id
     LEFT JOIN document_pages dp ON dp.id = dc.page_id
     JOIN terms ON lower(dc.chunk_text) LIKE '%%' || terms.term || '%%'
-    WHERE d.status = 'indexed'
+    WHERE d.status_id = 3
       AND (
           lower(dc.chunk_text) ~ '(project|experiment|circuit|build|breadboard|schematic|parts|components|wire|wiring)'
           OR dc.category IN ('MED_LEVEL_DETAIL', 'TECH_LEVEL_DETAIL')

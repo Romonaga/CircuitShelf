@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Iterator
 
+from backend.domain.statuses import LocalGpuWorkStatusId, local_gpu_work_status_code
 from db.sql import load_query
 
 
@@ -246,9 +247,9 @@ class LocalGpuWorkCoordinator:
                     f"✅ Local GPU work complete: "
                     f"{self._log_context(lease, owner=owner, details=details or {}, duration=time.monotonic() - run_started)}."
                 )
-            self._finish_task(conn, task_id, "completed", None)
+            self._finish_task(conn, task_id, LocalGpuWorkStatusId.COMPLETED, None)
         except TimeoutError as exc:
-            self._finish_without_lease(task_id, "timed_out", str(exc))
+            self._finish_without_lease(task_id, LocalGpuWorkStatusId.TIMED_OUT, str(exc))
             raise
         except Exception as exc:
             if lease is not None and self.logger:
@@ -259,9 +260,9 @@ class LocalGpuWorkCoordinator:
                     f"{exc}"
                 )
             if conn is not None:
-                self._finish_task(conn, task_id, "failed", str(exc))
+                self._finish_task(conn, task_id, LocalGpuWorkStatusId.FAILED, str(exc))
             else:
-                self._finish_without_lease(task_id, "failed", str(exc))
+                self._finish_without_lease(task_id, LocalGpuWorkStatusId.FAILED, str(exc))
             raise
         finally:
             self._stop_heartbeat(heartbeat_stop, heartbeat_thread)
@@ -547,17 +548,17 @@ class LocalGpuWorkCoordinator:
             row = conn.execute(load_query("local_gpu_work_eligible.sql"), (task_id,)).fetchone()
         return bool(row and row.get("eligible"))
 
-    def _finish_task(self, conn, task_id: str, status: str, error_message: str | None) -> None:
-        conn.execute(load_query("local_gpu_work_finish.sql"), (status, error_message, task_id))
+    def _finish_task(self, conn, task_id: str, status: LocalGpuWorkStatusId, error_message: str | None) -> None:
+        conn.execute(load_query("local_gpu_work_finish.sql"), (int(status), error_message, task_id))
         conn.commit()
 
-    def _finish_without_lease(self, task_id: str, status: str, error_message: str | None) -> None:
+    def _finish_without_lease(self, task_id: str, status: LocalGpuWorkStatusId, error_message: str | None) -> None:
         try:
             with self.database.connection() as conn:
-                conn.execute(load_query("local_gpu_work_finish.sql"), (status, error_message, task_id))
+                conn.execute(load_query("local_gpu_work_finish.sql"), (int(status), error_message, task_id))
         except Exception:
             if self.logger:
-                self.logger.warning(f"⚠️ Could not mark local GPU work {task_id} as {status}.")
+                self.logger.warning(f"⚠️ Could not mark local GPU work {task_id} as {local_gpu_work_status_code(status)}.")
 
     @staticmethod
     def _default_resource_class(task_type: str) -> str:

@@ -4,7 +4,7 @@ INSERT INTO performance_work_runs (
     user_id,
     label,
     trigger_reason,
-    status,
+    status_id,
     source_path,
     started_at,
     finished_at,

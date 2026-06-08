@@ -14,7 +14,7 @@ SELECT d.source_path,
 FROM document_intelligence di
 JOIN documents d ON d.id = di.document_id
 JOIN terms ON lower(COALESCE(di.component_name, '') || ' ' || COALESCE(di.component_type, '') || ' ' || d.display_name) LIKE '%%' || terms.term || '%%'
-WHERE d.status = 'indexed'
+WHERE d.status_id = 3
 GROUP BY d.source_path,
          d.display_name,
          di.component_name,

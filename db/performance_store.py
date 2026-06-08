@@ -9,6 +9,7 @@ from typing import Any
 
 from psycopg.errors import UndefinedTable
 
+from backend.domain.statuses import PerformanceWorkStatusId
 from db.connection import Database
 from db.sql import load_query
 
@@ -92,7 +93,7 @@ class PerformanceStore:
         work_type: str,
         label: str,
         trigger_reason: str = "",
-        status: str = "completed",
+        status: PerformanceWorkStatusId = PerformanceWorkStatusId.COMPLETED,
         started_at: datetime | None = None,
         finished_at: datetime | None = None,
         duration_ms: int = 0,
@@ -123,7 +124,7 @@ class PerformanceStore:
                         user_id,
                         label,
                         trigger_reason,
-                        status,
+                        int(status),
                         source_path,
                         started,
                         finished,

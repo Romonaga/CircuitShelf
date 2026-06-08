@@ -7,7 +7,8 @@ SELECT wr.id,
        u.username,
        wr.label,
        wr.trigger_reason,
-       wr.status,
+       statuses.code AS status,
+       wr.status_id,
        wr.source_path,
        wr.started_at,
        wr.finished_at,
@@ -18,6 +19,7 @@ SELECT wr.id,
        wr.details,
        wr.error_message
 FROM performance_work_runs wr
+JOIN performance_work_statuses statuses ON statuses.id = wr.status_id
 LEFT JOIN performance_work_types wt ON wt.id = wr.work_type_id
 LEFT JOIN entities e ON e.id = wr.entity_id
 LEFT JOIN users u ON u.id = wr.user_id

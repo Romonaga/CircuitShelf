@@ -24,7 +24,7 @@ SELECT d.source_path,
 FROM documents d
 LEFT JOIN chunk_stats c ON c.document_id = d.id
 LEFT JOIN image_stats i ON i.document_id = d.id
-WHERE d.status = 'indexed'
+WHERE d.status_id = 3
   AND (
       %s = 'global' AND d.is_global = true
       OR %s = 'visible' AND document_visible_to_entity(d.is_global, d.entity_id, %s::bigint)

@@ -8,6 +8,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from backend.domain.statuses import DocumentStatusId
+
 
 class DocumentActionRequest(BaseModel):
     source: str = ""
@@ -26,6 +28,7 @@ def review_document_payload(row: Any) -> dict:
         "source": row["source_path"],
         "displayName": row["display_name"],
         "status": row["status"],
+        "statusId": row.get("status_id"),
         "entityId": row.get("entity_id"),
         "isGlobal": bool(row.get("is_global")),
         "entityName": row.get("entity_name") or "",
@@ -208,7 +211,7 @@ def create_router(
         source = payload.source
         if not payload.includeImages:
             image_store.delete_document_images(source)
-        row = vector_store.set_document_status(source, "indexed", user.username)
+        row = vector_store.set_document_status(source, DocumentStatusId.INDEXED, user.username)
         if not row:
             return JSONResponse({"error": "Document not found."}, status_code=404)
         image_count = refresh_active_state_from_db()

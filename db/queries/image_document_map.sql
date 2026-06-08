@@ -1,4 +1,4 @@
 SELECT id, source_path, display_name
 FROM documents
-WHERE status IN ('indexed', 'needs_review', 'pending')
+WHERE status_id IN (1, 2, 3)
 ORDER BY source_path;

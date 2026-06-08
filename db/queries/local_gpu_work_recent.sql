@@ -5,7 +5,8 @@ SELECT task_id::text,
        owner,
        process_id,
        slot_index,
-       status,
+       statuses.code AS status,
+       status_id,
        wait_seconds,
        duration_seconds,
        error_message,
@@ -14,7 +15,8 @@ SELECT task_id::text,
        started_at,
        finished_at,
        updated_at
-  FROM local_gpu_work_items
- WHERE created_at >= now() - (%s::text)::interval
- ORDER BY created_at DESC
+  FROM local_gpu_work_items work
+  JOIN local_gpu_work_statuses statuses ON statuses.id = work.status_id
+ WHERE work.created_at >= now() - (%s::text)::interval
+ ORDER BY work.created_at DESC
  LIMIT %s;

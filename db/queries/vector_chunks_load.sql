@@ -16,7 +16,7 @@ FROM document_chunks c
 JOIN documents d ON d.id = c.document_id
 LEFT JOIN document_pages p ON p.id = c.page_id
 LEFT JOIN chunk_quality_flags q ON q.chunk_id = c.id
-WHERE d.status = 'indexed'
+WHERE d.status_id = 3
 GROUP BY d.source_path,
          c.chunk_index,
          c.chunk_text,

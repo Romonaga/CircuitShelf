@@ -2,6 +2,7 @@ import os
 import threading
 import time
 
+from backend.domain.statuses import PerformanceWorkStatusId
 from backend.services.upload_session_guard import active_upload_sessions
 
 
@@ -66,13 +67,13 @@ class IndexLifecycleService:
                 work_type="index_check",
                 label="Index check skipped",
                 trigger_reason=reason,
-                status="skipped",
+                status=PerformanceWorkStatusId.SKIPPED,
                 details={"reason": "already_running"},
             )
             return self.set_index_status(lastResult="already_running")
 
         started_at = self.utc_now()
-        work_status = "completed"
+        work_status = PerformanceWorkStatusId.COMPLETED
         work_label = "Index check"
         work_error = None
         work_details = {}
@@ -100,7 +101,7 @@ class IndexLifecycleService:
                         f"⏳ Index check deferred for {reason}; {len(active_uploads)} upload session(s) still active."
                     )
                 work_label = "Index check: upload active"
-                work_status = "skipped"
+                work_status = PerformanceWorkStatusId.SKIPPED
                 work_details = {"reason": "upload_in_progress", "activeUploadSessions": len(active_uploads)}
                 return self.set_index_status(
                     running=False,
@@ -124,7 +125,7 @@ class IndexLifecycleService:
                 if reason != "watch":
                     self.trace_logger.info(f"✅ Index check found no training changes for {reason}.")
                 work_label = "Index check: no changes"
-                work_status = "skipped"
+                work_status = PerformanceWorkStatusId.SKIPPED
                 work_details = self.file_changes_payload(changes)
                 return self.set_index_status(
                     running=False,
@@ -164,7 +165,7 @@ class IndexLifecycleService:
             elif changes.removed and not changes.changed_or_added:
                 result = f"ignored {len(changes.removed)} missing source files"
                 work_label = "Index check: ignored missing sources"
-                work_status = "skipped"
+                work_status = PerformanceWorkStatusId.SKIPPED
                 work_details = final_details
             else:
                 work_details = final_details
@@ -182,7 +183,7 @@ class IndexLifecycleService:
             )
         except Exception as exc:
             self.trace_logger.error(f"❌ Incremental index check failed for {reason}: {exc}")
-            work_status = "failed"
+            work_status = PerformanceWorkStatusId.FAILED
             work_label = "Index check failed"
             work_error = str(exc)
             return self.set_index_status(

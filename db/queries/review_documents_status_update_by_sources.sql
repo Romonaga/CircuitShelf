@@ -1,5 +1,5 @@
 UPDATE documents
-SET status = %s,
+SET status_id = %s,
     reviewed_by = NULL,
     reviewed_at = NULL,
     last_error = NULL,

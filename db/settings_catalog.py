@@ -79,7 +79,6 @@ SETTING_UI = {
     "TRAINING_RECURSIVE": ("ingestion", "Scan subfolders", "When enabled, ingestion includes supported documents in subfolders.", False),
     "INGEST_WATCH_ENABLED": ("ingestion", "Background watcher", "Automatically checks for new, changed, and removed documents.", False),
     "INGEST_WATCH_INTERVAL_SECONDS": ("ingestion", "Watcher interval", "Seconds between automatic document-change checks.", False),
-    "INGEST_HASH_FILES": ("ingestion", "Hash file contents", "Use content hashes for change detection instead of size and modified time.", True),
     "STATUS_POLL_INTERVAL_SECONDS": ("ingestion", "Idle status refresh", "Seconds between browser status refreshes while indexing is idle.", False),
     "STATUS_POLL_ACTIVE_INTERVAL_SECONDS": ("ingestion", "Active status refresh", "Seconds between browser status refreshes while indexing is running.", False),
     "PDF_RENDER_VECTOR_PAGES": ("ingestion", "Render visual PDF pages", "Store vector-heavy PDF pages as searchable images for pinouts, figures, graphs, and package drawings.", False),

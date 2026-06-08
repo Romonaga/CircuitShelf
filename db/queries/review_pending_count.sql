@@ -1,3 +1,3 @@
 SELECT count(*) AS pending
 FROM documents
-WHERE status = 'needs_review';
+WHERE status_id = 2;
