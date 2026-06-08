@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
 import uuid
 from contextlib import contextmanager
@@ -124,9 +125,11 @@ class LocalGpuWorkCoordinator:
         ocr_slot_count: int | None = None,
         detected_gpu_count: int | None = None,
         queue_timeout_seconds: float = 300,
-        stale_running_after_seconds: int = 7200,
+        stale_running_after_seconds: int = 900,
         stale_queued_after_seconds: int | None = None,
         poll_seconds: float = 0.1,
+        cleanup_interval_seconds: float = 30,
+        heartbeat_interval_seconds: float = 15,
     ):
         self.database = database
         self.logger = logger
@@ -142,8 +145,11 @@ class LocalGpuWorkCoordinator:
             int(stale_queued_after_seconds or max(600, self.queue_timeout_seconds * 2)),
         )
         self.poll_seconds = max(0.02, float(poll_seconds or 0.1))
+        self.cleanup_interval_seconds = max(5.0, float(cleanup_interval_seconds or 30))
+        self.heartbeat_interval_seconds = max(5.0, float(heartbeat_interval_seconds or 15))
         self.process_id = os.getpid()
         self._cleaned_abandoned = False
+        self._last_cleanup_at = 0.0
 
     @property
     def slot_count(self) -> int:
@@ -186,7 +192,7 @@ class LocalGpuWorkCoordinator:
         priority = int(priority)
         resource_class = self._normalize_resource_class(resource_class or self._default_resource_class(task_type))
         timeout = self.queue_timeout_seconds if timeout_seconds is None else max(1.0, float(timeout_seconds))
-        self.cleanup_abandoned_once()
+        self.cleanup_abandoned()
         admission_wait_seconds = self._admit_task(
             task_id=task_id,
             resource_class=resource_class,
@@ -207,6 +213,8 @@ class LocalGpuWorkCoordinator:
         lock_key = None
         lease: LocalGpuLease | None = None
         run_started: float | None = None
+        heartbeat_stop: threading.Event | None = None
+        heartbeat_thread: threading.Thread | None = None
         try:
             conn, slot_index, wait_seconds = self._wait_for_slot(task_id, resource_class, timeout)
             slot_count = self._slot_count_for(resource_class)
@@ -231,6 +239,7 @@ class LocalGpuWorkCoordinator:
                     f"🎮 Local GPU work start: "
                     f"{self._log_context(lease, owner=owner, details=details or {})}."
                 )
+            heartbeat_stop, heartbeat_thread = self._start_heartbeat(task_id)
             yield lease
             if self.logger:
                 self.logger.info(
@@ -255,6 +264,7 @@ class LocalGpuWorkCoordinator:
                 self._finish_without_lease(task_id, "failed", str(exc))
             raise
         finally:
+            self._stop_heartbeat(heartbeat_stop, heartbeat_thread)
             if conn is not None:
                 if lock_key is not None:
                     try:
@@ -267,6 +277,7 @@ class LocalGpuWorkCoordinator:
     def status(self, *, recent_limit: int = 10, window_seconds: int = 3600) -> dict[str, Any]:
         window = f"{max(60, int(window_seconds))} seconds"
         try:
+            self.cleanup_abandoned()
             with self.database.connection() as conn:
                 count_rows = conn.execute(load_query("local_gpu_work_counts.sql"), (window,)).fetchall()
                 live_count_rows = conn.execute(load_query("local_gpu_work_live_by_resource_counts.sql")).fetchall()
@@ -321,6 +332,7 @@ class LocalGpuWorkCoordinator:
     def live_pressure(self, resource_class: str | None = None) -> dict[str, Any]:
         resource_class = self._normalize_resource_class(resource_class or "local_llm")
         try:
+            self.cleanup_abandoned()
             with self.database.connection() as conn:
                 rows = conn.execute(load_query("local_gpu_work_live_counts.sql"), (resource_class,)).fetchall()
         except Exception as exc:
@@ -349,6 +361,13 @@ class LocalGpuWorkCoordinator:
         if self._cleaned_abandoned:
             return
         self._cleaned_abandoned = True
+        self.cleanup_abandoned(force=True)
+
+    def cleanup_abandoned(self, *, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and (now - self._last_cleanup_at) < self.cleanup_interval_seconds:
+            return
+        self._last_cleanup_at = now
         try:
             with self.database.connection() as conn:
                 conn.execute(
@@ -361,6 +380,34 @@ class LocalGpuWorkCoordinator:
         except Exception as exc:
             if self.logger:
                 self.logger.warning(f"⚠️ Local GPU queue abandoned-work cleanup failed: {exc}")
+
+    def _start_heartbeat(self, task_id: str) -> tuple[threading.Event, threading.Thread]:
+        stop_event = threading.Event()
+
+        def heartbeat() -> None:
+            while not stop_event.wait(self.heartbeat_interval_seconds):
+                try:
+                    with self.database.connection() as heartbeat_conn:
+                        heartbeat_conn.execute(load_query("local_gpu_work_touch.sql"), (task_id,))
+                except Exception as exc:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ Local GPU work heartbeat failed for {task_id}: {exc}")
+                    return
+
+        thread = threading.Thread(
+            target=heartbeat,
+            name=f"local-gpu-heartbeat-{task_id[:8]}",
+            daemon=True,
+        )
+        thread.start()
+        return stop_event, thread
+
+    @staticmethod
+    def _stop_heartbeat(stop_event: threading.Event | None, thread: threading.Thread | None) -> None:
+        if stop_event is None or thread is None:
+            return
+        stop_event.set()
+        thread.join(timeout=1)
 
     def _insert_task(
         self,
