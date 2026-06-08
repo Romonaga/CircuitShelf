@@ -23,8 +23,33 @@ GPU_QUEUE_LOCK_OFFSETS = {
 GPU_QUEUE_ADMISSION_LOCK_BASE = GPU_QUEUE_LOCK_BASE + 900000
 
 
+def _query_nvidia_smi_gpu_lines(query: str) -> list[list[str]]:
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                f"--query-gpu={query}",
+                "--format=csv,noheader,nounits",
+            ],
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=2,
+        )
+    except Exception:
+        return []
+    if result.returncode != 0:
+        return []
+    rows: list[list[str]] = []
+    for line in result.stdout.splitlines():
+        parts = [part.strip() for part in line.split(",")]
+        if any(parts):
+            rows.append(parts)
+    return rows
+
+
 def detect_local_gpu_count() -> int:
-    """Return the deterministic local GPU slot count without creating a CUDA context when possible."""
+    """Return the local GPU count without creating a CUDA context when possible."""
     try:
         result = subprocess.run(
             ["nvidia-smi", "-L"],
@@ -50,6 +75,35 @@ def detect_local_gpu_count() -> int:
         pass
 
     return 1
+
+
+def detect_local_gpu_memory_total_mib() -> int | None:
+    """Return the smallest detected GPU VRAM size in MiB.
+
+    Multi-GPU hosts are sized from the least capable card so auto settings do not
+    overcommit a mixed installation.
+    """
+    totals: list[int] = []
+    for row in _query_nvidia_smi_gpu_lines("memory.total"):
+        if not row:
+            continue
+        try:
+            totals.append(int(float(row[0])))
+        except (TypeError, ValueError):
+            continue
+    if totals:
+        return max(1, min(totals))
+
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            for index in range(torch.cuda.device_count()):
+                props = torch.cuda.get_device_properties(index)
+                totals.append(int(props.total_memory / (1024 * 1024)))
+    except Exception:
+        pass
+    return max(1, min(totals)) if totals else None
 
 
 def _resolve_slot_count(
@@ -87,14 +141,53 @@ def resolve_local_gpu_cuda_slots(config: Any, *, detected_gpus: int | None = Non
     )
 
 
-def resolve_local_gpu_ocr_slots(config: Any, *, detected_gpus: int | None = None) -> int:
-    return _resolve_slot_count(
-        config,
-        "LOCAL_GPU_OCR_SLOTS",
-        detected_gpus=detected_gpus,
-        auto_multiplier=2,
-        auto_max=4,
-    )
+def resolve_local_gpu_ocr_slots(
+    config: Any,
+    *,
+    detected_gpus: int | None = None,
+    gpu_memory_total_mib: int | None = None,
+) -> int:
+    configured = str(config.get("LOCAL_GPU_OCR_SLOTS", "auto") or "auto").strip().lower()
+    if configured not in {"", "auto", "detected"}:
+        try:
+            return max(1, int(configured))
+        except ValueError:
+            pass
+
+    detected = max(1, int(detected_gpus or detect_local_gpu_count()))
+    total_mib = gpu_memory_total_mib or detect_local_gpu_memory_total_mib()
+    if not total_mib:
+        lanes_per_gpu = 1
+    else:
+        total_gib = float(total_mib) / 1024.0
+        if total_gib >= 40:
+            lanes_per_gpu = 4
+        elif total_gib >= 20:
+            lanes_per_gpu = 3
+        elif total_gib >= 12:
+            lanes_per_gpu = 2
+        else:
+            lanes_per_gpu = 1
+
+    return max(1, min(detected * lanes_per_gpu, detected * 4, 16))
+
+
+def resolve_local_gpu_ocr_pending_cap(
+    config: Any,
+    *,
+    ocr_slots: int,
+    detected_gpus: int | None = None,
+    gpu_memory_total_mib: int | None = None,
+) -> int:
+    detected = max(1, int(detected_gpus or detect_local_gpu_count()))
+    slots = max(1, int(ocr_slots or 1))
+    total_mib = gpu_memory_total_mib or detect_local_gpu_memory_total_mib()
+    if not total_mib:
+        multiplier = 2
+    else:
+        total_gib = float(total_mib) / 1024.0
+        multiplier = 3 if total_gib >= 20 else 2
+    return max(slots, min(slots * multiplier, detected * 8, 24))
 
 
 @dataclass(frozen=True)

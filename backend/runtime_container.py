@@ -33,8 +33,10 @@ from backend.services.gpu_work_queue import (
     GpuQueuedEmbedder,
     LocalGpuWorkCoordinator,
     detect_local_gpu_count,
+    detect_local_gpu_memory_total_mib,
     resolve_local_gpu_cuda_slots,
     resolve_local_gpu_llm_slots,
+    resolve_local_gpu_ocr_pending_cap,
     resolve_local_gpu_ocr_slots,
 )
 from backend.services.model_runtime import LazySentenceTransformer, release_accelerator_memory, resolve_model_device
@@ -154,9 +156,14 @@ class CircuitShelfRuntime:
         self.local_gpu_priority = 50 if self.lazy_gpu_models else 10
         self.local_gpu_owner = "ingest" if self.lazy_gpu_models else "web"
         self.detected_local_gpus = detect_local_gpu_count()
+        self.detected_local_gpu_memory_mib = detect_local_gpu_memory_total_mib()
         self.local_gpu_llm_slots = resolve_local_gpu_llm_slots(self.config, detected_gpus=self.detected_local_gpus)
         self.local_gpu_cuda_slots = resolve_local_gpu_cuda_slots(self.config, detected_gpus=self.detected_local_gpus)
-        self.local_gpu_ocr_slots = resolve_local_gpu_ocr_slots(self.config, detected_gpus=self.detected_local_gpus)
+        self.local_gpu_ocr_slots = resolve_local_gpu_ocr_slots(
+            self.config,
+            detected_gpus=self.detected_local_gpus,
+            gpu_memory_total_mib=self.detected_local_gpu_memory_mib,
+        )
         self.local_gpu_coordinator = LocalGpuWorkCoordinator(
             database=self.database,
             logger=self.trace_logger,
@@ -264,7 +271,11 @@ class CircuitShelfRuntime:
     def apply_gpu_runtime_settings(self):
         self.local_gpu_llm_slots = resolve_local_gpu_llm_slots(self.config, detected_gpus=self.detected_local_gpus)
         self.local_gpu_cuda_slots = resolve_local_gpu_cuda_slots(self.config, detected_gpus=self.detected_local_gpus)
-        self.local_gpu_ocr_slots = resolve_local_gpu_ocr_slots(self.config, detected_gpus=self.detected_local_gpus)
+        self.local_gpu_ocr_slots = resolve_local_gpu_ocr_slots(
+            self.config,
+            detected_gpus=self.detected_local_gpus,
+            gpu_memory_total_mib=self.detected_local_gpu_memory_mib,
+        )
         self.local_gpu_queue_timeout_seconds = float(self.config.get("LOCAL_GPU_QUEUE_TIMEOUT_SECONDS", 300) or 300)
         self.local_gpu_coordinator.configure(
             llm_slot_count=self.local_gpu_llm_slots,
@@ -311,7 +322,12 @@ class CircuitShelfRuntime:
         paddle_timeout = max(10.0, float(self.config.get("PADDLEOCR_TIMEOUT_SECONDS", 120) or 120))
         slot_timeout = min(max(30.0, paddle_timeout), float(self.local_gpu_queue_timeout_seconds or 300))
         admission_timeout = max(slot_timeout, min(float(self.local_gpu_queue_timeout_seconds or 300), paddle_timeout * 4))
-        max_pending = max(ocr_slots, min(ocr_slots * 2, 8))
+        max_pending = resolve_local_gpu_ocr_pending_cap(
+            self.config,
+            ocr_slots=ocr_slots,
+            detected_gpus=self.detected_local_gpus,
+            gpu_memory_total_mib=self.detected_local_gpu_memory_mib,
+        )
         self._wait_for_interactive_gpu_headroom(task_type="paddleocr")
         try:
             with self.local_gpu_coordinator.lease(

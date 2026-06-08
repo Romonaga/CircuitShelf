@@ -83,7 +83,7 @@ DEFAULT_APP_SETTINGS = [
     (
         "LOCAL_GPU_OCR_SLOTS",
         "auto",
-        "PaddleOCR CUDA lanes. Auto uses a conservative per-GPU lane count; explicit values can be used for tuning.",
+        "PaddleOCR CUDA lanes. Auto sizes from detected GPU count and VRAM; explicit values can be used for tuning.",
     ),
     (
         "LOCAL_GPU_QUEUE_TIMEOUT_SECONDS",

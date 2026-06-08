@@ -20,7 +20,7 @@ from backend.ingestion.ocr_engines import (
     selected_ocr_mode,
 )
 from backend.ingestion.ocr_utils import parse_tesseract_tsv, should_skip_image, should_skip_image_dimensions
-from backend.services.gpu_work_queue import resolve_local_gpu_ocr_slots
+from backend.services.gpu_work_queue import resolve_local_gpu_ocr_pending_cap, resolve_local_gpu_ocr_slots
 
 
 class ConfigWrapper:
@@ -367,9 +367,59 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertEqual(ocr_assets.worker_count(20), 8)
 
     def test_auto_gpu_ocr_slots_are_conservative(self):
-        self.assertEqual(resolve_local_gpu_ocr_slots(ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "auto"}), detected_gpus=1), 2)
-        self.assertEqual(resolve_local_gpu_ocr_slots(ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "auto"}), detected_gpus=4), 4)
+        self.assertEqual(
+            resolve_local_gpu_ocr_slots(
+                ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "auto"}),
+                detected_gpus=1,
+                gpu_memory_total_mib=10 * 1024,
+            ),
+            1,
+        )
+        self.assertEqual(
+            resolve_local_gpu_ocr_slots(
+                ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "auto"}),
+                detected_gpus=1,
+                gpu_memory_total_mib=16 * 1024,
+            ),
+            2,
+        )
+        self.assertEqual(
+            resolve_local_gpu_ocr_slots(
+                ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "auto"}),
+                detected_gpus=1,
+                gpu_memory_total_mib=24 * 1024,
+            ),
+            3,
+        )
+        self.assertEqual(
+            resolve_local_gpu_ocr_slots(
+                ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "auto"}),
+                detected_gpus=4,
+                gpu_memory_total_mib=48 * 1024,
+            ),
+            16,
+        )
         self.assertEqual(resolve_local_gpu_ocr_slots(ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "8"}), detected_gpus=1), 8)
+
+    def test_auto_gpu_ocr_pending_cap_uses_vram_class(self):
+        self.assertEqual(
+            resolve_local_gpu_ocr_pending_cap(
+                ConfigWrapper({}),
+                ocr_slots=1,
+                detected_gpus=1,
+                gpu_memory_total_mib=10 * 1024,
+            ),
+            2,
+        )
+        self.assertEqual(
+            resolve_local_gpu_ocr_pending_cap(
+                ConfigWrapper({}),
+                ocr_slots=3,
+                detected_gpus=1,
+                gpu_memory_total_mib=24 * 1024,
+            ),
+            8,
+        )
 
     def test_cpu_ocr_worker_count_keeps_cpu_budget_sizing(self):
         ocr_assets = OcrAssetProcessor(
