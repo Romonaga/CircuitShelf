@@ -90,8 +90,8 @@ def resolve_local_gpu_ocr_slots(config: Any, *, detected_gpus: int | None = None
         config,
         "LOCAL_GPU_OCR_SLOTS",
         detected_gpus=detected_gpus,
-        auto_multiplier=8,
-        auto_max=8,
+        auto_multiplier=2,
+        auto_max=4,
     )
 
 
@@ -125,6 +125,7 @@ class LocalGpuWorkCoordinator:
         detected_gpu_count: int | None = None,
         queue_timeout_seconds: float = 300,
         stale_running_after_seconds: int = 7200,
+        stale_queued_after_seconds: int | None = None,
         poll_seconds: float = 0.1,
     ):
         self.database = database
@@ -136,6 +137,10 @@ class LocalGpuWorkCoordinator:
         self.ocr_slot_count = max(1, int(ocr_slot_count or self.cuda_slot_count))
         self.queue_timeout_seconds = max(1.0, float(queue_timeout_seconds or 300))
         self.stale_running_after_seconds = max(60, int(stale_running_after_seconds or 7200))
+        self.stale_queued_after_seconds = max(
+            60,
+            int(stale_queued_after_seconds or max(600, self.queue_timeout_seconds * 2)),
+        )
         self.poll_seconds = max(0.02, float(poll_seconds or 0.1))
         self.process_id = os.getpid()
         self._cleaned_abandoned = False
@@ -348,7 +353,10 @@ class LocalGpuWorkCoordinator:
             with self.database.connection() as conn:
                 conn.execute(
                     load_query("local_gpu_work_cleanup_abandoned.sql"),
-                    (f"{self.stale_running_after_seconds} seconds",),
+                    (
+                        f"{self.stale_running_after_seconds} seconds",
+                        f"{self.stale_queued_after_seconds} seconds",
+                    ),
                 )
         except Exception as exc:
             if self.logger:

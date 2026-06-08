@@ -11,8 +11,16 @@ from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsse
 from backend.ingestion.ocr_assets import OcrAssetProcessor
 from backend.ingestion.pdf.embedded_image_extractor import EmbeddedPdfImageExtractor
 from backend.ingestion.pdf.extractor import PdfDocumentExtractor
-from backend.ingestion.ocr_engines import _extract_paddle_text_and_confidence, _paddleocr_kwargs, ocr_uses_local_gpu, run_selected_ocr, selected_ocr_mode
+from backend.ingestion.ocr_engines import (
+    _extract_paddle_text_and_confidence,
+    _paddleocr_kwargs,
+    clear_ocr_engine_cache,
+    ocr_uses_local_gpu,
+    run_selected_ocr,
+    selected_ocr_mode,
+)
 from backend.ingestion.ocr_utils import parse_tesseract_tsv, should_skip_image, should_skip_image_dimensions
+from backend.services.gpu_work_queue import resolve_local_gpu_ocr_slots
 
 
 class ConfigWrapper:
@@ -221,6 +229,7 @@ class OcrUtilsTests(unittest.TestCase):
 
     def test_paddleocr_failure_always_falls_back_to_tesseract(self):
         image = Image.new("RGB", (120, 80), "white")
+        clear_ocr_engine_cache()
 
         with (
             patch("backend.ingestion.ocr_engines._run_paddle_ocr", side_effect=RuntimeError("missing paddle")),
@@ -240,6 +249,31 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertFalse(result.skipped)
         self.assertEqual(result.text, "fallback text")
         self.assertEqual(result.fallback_from, "paddleocr")
+
+    def test_repeated_paddle_failures_open_circuit_breaker(self):
+        image = Image.new("RGB", (120, 80), "white")
+        clear_ocr_engine_cache()
+
+        with (
+            patch("backend.ingestion.ocr_engines._run_paddle_ocr", side_effect=RuntimeError("paddle wedged")) as paddle_mock,
+            patch("backend.ingestion.ocr_engines.run_tesseract_ocr", return_value=SimpleNamespace(text="fallback text", confidence=90.0, skipped=False, skip_reason="")),
+        ):
+            results = [
+                run_selected_ocr(
+                    image,
+                    {
+                        "OCR_ENGINE": "paddleocr",
+                        "OCR_MIN_IMAGE_WIDTH": 20,
+                        "OCR_MIN_IMAGE_HEIGHT": 20,
+                        "OCR_MIN_IMAGE_AREA": 900,
+                    },
+                )
+                for _ in range(4)
+            ]
+
+        self.assertEqual(paddle_mock.call_count, 3)
+        self.assertTrue(all(result.fallback_from == "paddleocr" for result in results))
+        self.assertIn("circuit breaker", results[-1].error)
 
     def test_paddleocr_external_python_runner_is_supported(self):
         image = Image.new("RGB", (120, 80), "white")
@@ -331,6 +365,11 @@ class OcrUtilsTests(unittest.TestCase):
         )
 
         self.assertEqual(ocr_assets.worker_count(20), 8)
+
+    def test_auto_gpu_ocr_slots_are_conservative(self):
+        self.assertEqual(resolve_local_gpu_ocr_slots(ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "auto"}), detected_gpus=1), 2)
+        self.assertEqual(resolve_local_gpu_ocr_slots(ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "auto"}), detected_gpus=4), 4)
+        self.assertEqual(resolve_local_gpu_ocr_slots(ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "8"}), detected_gpus=1), 8)
 
     def test_cpu_ocr_worker_count_keeps_cpu_budget_sizing(self):
         ocr_assets = OcrAssetProcessor(

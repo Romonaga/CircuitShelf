@@ -13,6 +13,7 @@ import signal
 import subprocess
 import tempfile
 import threading
+import time
 from pathlib import Path
 from statistics import fmean
 from typing import Any
@@ -24,6 +25,11 @@ from backend.ingestion.ocr_utils import OcrResult, run_ocr as run_tesseract_ocr,
 
 _PADDLE_LOCK = threading.Lock()
 _PADDLE_ENGINES: dict[tuple[str, str, str], Any] = {}
+_PADDLE_CIRCUIT_LOCK = threading.Lock()
+_PADDLE_FAILURE_COUNT = 0
+_PADDLE_DISABLED_UNTIL = 0.0
+_PADDLE_FAILURE_LIMIT = 3
+_PADDLE_FAILURE_COOLDOWN_SECONDS = 300.0
 
 
 def run_selected_ocr(image: Image.Image, config: dict[str, Any]) -> OcrResult:
@@ -65,19 +71,36 @@ def _run_paddle_ocr_with_fallback(image: Image.Image, config: dict[str, Any]) ->
     if skip:
         return OcrResult(text="", confidence=None, skipped=True, skip_reason=reason)
 
+    disabled_reason = _paddle_disabled_reason()
+    if disabled_reason:
+        return run_tesseract_fallback_ocr(image, config, fallback_from="paddleocr", error=disabled_reason)
+
     try:
-        return _run_paddle_ocr(image, config)
+        result = _run_paddle_ocr(image, config)
+        _record_paddle_success()
+        return result
     except Exception as exc:
-        result = run_tesseract_ocr(image, config)
-        return OcrResult(
-            text=result.text,
-            confidence=result.confidence,
-            skipped=result.skipped,
-            skip_reason=result.skip_reason,
-            engine=getattr(result, "engine", "tesseract"),
-            fallback_from="paddleocr",
-            error=str(exc)[:500],
-        )
+        _record_paddle_failure()
+        return run_tesseract_fallback_ocr(image, config, fallback_from="paddleocr", error=exc)
+
+
+def run_tesseract_fallback_ocr(
+    image: Image.Image,
+    config: dict[str, Any],
+    *,
+    fallback_from: str,
+    error: Exception | str,
+) -> OcrResult:
+    result = run_tesseract_ocr(image, config)
+    return OcrResult(
+        text=result.text,
+        confidence=result.confidence,
+        skipped=result.skipped,
+        skip_reason=result.skip_reason,
+        engine=getattr(result, "engine", "tesseract"),
+        fallback_from=fallback_from,
+        error=str(error)[:500],
+    )
 
 
 def _run_paddle_ocr(image: Image.Image, config: dict[str, Any]) -> OcrResult:
@@ -215,6 +238,33 @@ def clear_ocr_engine_cache() -> None:
     """Clear cached OCR engine instances. Primarily used by tests."""
 
     _PADDLE_ENGINES.clear()
+    global _PADDLE_FAILURE_COUNT, _PADDLE_DISABLED_UNTIL
+    with _PADDLE_CIRCUIT_LOCK:
+        _PADDLE_FAILURE_COUNT = 0
+        _PADDLE_DISABLED_UNTIL = 0.0
+
+
+def _paddle_disabled_reason() -> str:
+    with _PADDLE_CIRCUIT_LOCK:
+        if _PADDLE_DISABLED_UNTIL <= time.monotonic():
+            return ""
+        remaining = max(1, int(_PADDLE_DISABLED_UNTIL - time.monotonic()))
+        return f"PaddleOCR circuit breaker open after repeated failures; retrying in {remaining}s."
+
+
+def _record_paddle_success() -> None:
+    global _PADDLE_FAILURE_COUNT, _PADDLE_DISABLED_UNTIL
+    with _PADDLE_CIRCUIT_LOCK:
+        _PADDLE_FAILURE_COUNT = 0
+        _PADDLE_DISABLED_UNTIL = 0.0
+
+
+def _record_paddle_failure() -> None:
+    global _PADDLE_FAILURE_COUNT, _PADDLE_DISABLED_UNTIL
+    with _PADDLE_CIRCUIT_LOCK:
+        _PADDLE_FAILURE_COUNT += 1
+        if _PADDLE_FAILURE_COUNT >= _PADDLE_FAILURE_LIMIT:
+            _PADDLE_DISABLED_UNTIL = time.monotonic() + _PADDLE_FAILURE_COOLDOWN_SECONDS
 
 
 def _extract_paddle_text_and_confidence(raw_result: Any) -> tuple[str, float | None]:

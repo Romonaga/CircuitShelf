@@ -60,7 +60,7 @@ from backend.ingestion.worker_sizing import (
 from backend.services.inventory_import import parse_inventory_import
 from backend.services.log_retention import cleanup_old_logs
 from backend.services.log_tail import tail_recent_trace_logs
-from backend.ingestion.ocr_engines import ocr_uses_local_gpu, run_selected_ocr
+from backend.ingestion.ocr_engines import ocr_uses_local_gpu, run_selected_ocr, run_tesseract_fallback_ocr
 from backend.ingestion.pinout_extractor import extract_pinout_map
 from backend.services.reranker import Reranker
 from backend.services.response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT
@@ -308,21 +308,37 @@ class CircuitShelfRuntime:
 
         width, height = image.size
         ocr_slots = max(1, int(getattr(self, "local_gpu_ocr_slots", 1) or 1))
+        paddle_timeout = max(10.0, float(self.config.get("PADDLEOCR_TIMEOUT_SECONDS", 120) or 120))
+        admission_timeout = min(45.0, paddle_timeout)
+        slot_timeout = min(max(30.0, paddle_timeout), float(self.local_gpu_queue_timeout_seconds or 300))
+        max_pending = max(ocr_slots, min(ocr_slots * 2, 8))
         self._wait_for_interactive_gpu_headroom(task_type="paddleocr")
-        with self.local_gpu_coordinator.lease(
-            task_type="paddleocr",
-            resource_class="ocr_cuda",
-            priority=max(60, int(self.local_gpu_priority or 50)),
-            owner=self.local_gpu_owner,
-            admission_max_pending=max(ocr_slots * 3, ocr_slots),
-            details={
-                "engine": "paddleocr",
-                "device": "gpu",
-                "width": width,
-                "height": height,
-            },
-        ):
-            return run_selected_ocr(image, ocr_config)
+        try:
+            with self.local_gpu_coordinator.lease(
+                task_type="paddleocr",
+                resource_class="ocr_cuda",
+                priority=max(60, int(self.local_gpu_priority or 50)),
+                owner=self.local_gpu_owner,
+                timeout_seconds=slot_timeout,
+                admission_max_pending=max_pending,
+                admission_timeout_seconds=admission_timeout,
+                details={
+                    "engine": "paddleocr",
+                    "device": "gpu",
+                    "width": width,
+                    "height": height,
+                    "pendingCap": max_pending,
+                    "ocrSlots": ocr_slots,
+                    "timeoutSeconds": paddle_timeout,
+                },
+            ):
+                return run_selected_ocr(image, ocr_config)
+        except TimeoutError as exc:
+            if self.trace_logger:
+                self.trace_logger.warning(
+                    f"⚠️ PaddleOCR GPU queue busy; falling back to Tesseract for {width}x{height} image: {exc}"
+                )
+            return run_tesseract_fallback_ocr(image, ocr_config, fallback_from="paddleocr", error=exc)
 
     def current_local_gpu_ocr_slots(self) -> int:
         return max(1, int(getattr(self, "local_gpu_ocr_slots", 1) or 1))
