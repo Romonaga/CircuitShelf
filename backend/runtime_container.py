@@ -60,7 +60,7 @@ from backend.ingestion.worker_sizing import (
 from backend.services.inventory_import import parse_inventory_import
 from backend.services.log_retention import cleanup_old_logs
 from backend.services.log_tail import tail_recent_trace_logs
-from backend.ingestion.ocr_engines import ocr_uses_local_gpu, run_selected_ocr, run_tesseract_fallback_ocr
+from backend.ingestion.ocr_engines import ocr_uses_local_gpu, run_selected_ocr
 from backend.ingestion.pinout_extractor import extract_pinout_map
 from backend.services.reranker import Reranker
 from backend.services.response_finalizer import RESPONSE_FINALIZER_SYSTEM_PROMPT
@@ -309,8 +309,8 @@ class CircuitShelfRuntime:
         width, height = image.size
         ocr_slots = max(1, int(getattr(self, "local_gpu_ocr_slots", 1) or 1))
         paddle_timeout = max(10.0, float(self.config.get("PADDLEOCR_TIMEOUT_SECONDS", 120) or 120))
-        admission_timeout = min(45.0, paddle_timeout)
         slot_timeout = min(max(30.0, paddle_timeout), float(self.local_gpu_queue_timeout_seconds or 300))
+        admission_timeout = max(slot_timeout, min(float(self.local_gpu_queue_timeout_seconds or 300), paddle_timeout * 4))
         max_pending = max(ocr_slots, min(ocr_slots * 2, 8))
         self._wait_for_interactive_gpu_headroom(task_type="paddleocr")
         try:
@@ -336,9 +336,10 @@ class CircuitShelfRuntime:
         except TimeoutError as exc:
             if self.trace_logger:
                 self.trace_logger.warning(
-                    f"⚠️ PaddleOCR GPU queue busy; falling back to Tesseract for {width}x{height} image: {exc}"
+                    f"⚠️ PaddleOCR GPU queue timed out for {width}x{height} image; "
+                    f"not falling back to Tesseract because Paddle queue pressure is not OCR failure: {exc}"
                 )
-            return run_tesseract_fallback_ocr(image, ocr_config, fallback_from="paddleocr", error=exc)
+            raise
 
     def current_local_gpu_ocr_slots(self) -> int:
         return max(1, int(getattr(self, "local_gpu_ocr_slots", 1) or 1))
