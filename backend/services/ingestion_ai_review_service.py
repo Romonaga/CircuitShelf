@@ -46,6 +46,7 @@ class IngestionAiReviewService:
         if not decision["shouldReview"]:
             self.trace_logger.debug(f"🤖 Ingestion AI review skipped for {source_path}: {decision['reason']}")
             return None
+        local_paid_by = self.local_paid_by(is_global=is_global, entity_id=entity_id)
 
         if progress_callback:
             progress_callback(documentPhase="Local AI review")
@@ -63,6 +64,7 @@ class IngestionAiReviewService:
                 entity_id=entity_id,
                 user_id=user_id,
                 decision_reason=decision["reason"],
+                paid_by=local_paid_by,
             )
 
         escalation_reason = self.escalation_reason(decision, local_review)
@@ -74,7 +76,7 @@ class IngestionAiReviewService:
                 return {
                     "provider": "ollama",
                     "model": self.local_model_name or "local",
-                    "paidBy": "local",
+                    "paidBy": local_paid_by,
                     "estimatedCost": 0.0,
                     "review": local_review,
                     "escalated": False,
@@ -88,7 +90,7 @@ class IngestionAiReviewService:
                 return {
                     "provider": "ollama",
                     "model": self.local_model_name or "local",
-                    "paidBy": "local",
+                    "paidBy": local_paid_by,
                     "estimatedCost": 0.0,
                     "review": local_review,
                     "escalated": False,
@@ -114,7 +116,7 @@ class IngestionAiReviewService:
             return {
                 **openai_result,
                 "provider": "ollama+openai" if local_review else "openai",
-                "paidBy": f"local->{paid_by}" if local_review else paid_by,
+                "paidBy": paid_by,
                 "localReview": local_review,
                 "escalated": True,
                 "reason": escalation_reason,
@@ -127,7 +129,7 @@ class IngestionAiReviewService:
             return {
                 "provider": "ollama",
                 "model": self.local_model_name or "local",
-                "paidBy": "local",
+                "paidBy": local_paid_by,
                 "estimatedCost": 0.0,
                 "review": local_review,
                 "escalated": False,
@@ -241,6 +243,7 @@ class IngestionAiReviewService:
         entity_id: int | None,
         user_id: int | None,
         decision_reason: str,
+        paid_by: str,
     ) -> None:
         if not self.ai_provider_store:
             return
@@ -252,7 +255,7 @@ class IngestionAiReviewService:
                 source_path=source_path,
                 provider="ollama",
                 model_name=self.local_model_name or "local",
-                paid_by="local",
+                paid_by=paid_by,
                 review_text=review.get("raw") or "",
                 review_json=review,
                 estimated_cost=0.0,
@@ -268,7 +271,7 @@ class IngestionAiReviewService:
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     estimated_cost=0.0,
-                    paid_by="local",
+                    paid_by=paid_by,
                     success=True,
                     decision_reason=f"Local ingestion review ran for {source_path}: {decision_reason}",
                     latency_ms=latency_ms,
@@ -289,6 +292,14 @@ class IngestionAiReviewService:
         if not bool(local_review.get("useful", True)):
             return f"Ingestion assist escalation for {decision['reason']}: local review marked extraction not useful."
         return None
+
+    @staticmethod
+    def local_paid_by(*, is_global: bool, entity_id: int | None) -> str:
+        if is_global:
+            return "system"
+        if entity_id is not None:
+            return "entity"
+        return "unknown"
 
 
 def normalize_local_review(parsed: dict[str, Any], raw: str) -> dict[str, Any]:

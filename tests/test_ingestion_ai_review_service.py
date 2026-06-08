@@ -6,9 +6,14 @@ from backend.services.ingestion_ai_review_service import IngestionAiReviewServic
 class ReviewStore:
     def __init__(self):
         self.reviews = []
+        self.events = []
 
     def record_document_ingest_ai_review(self, **kwargs):
         self.reviews.append(kwargs)
+        return 1
+
+    def record_ai_assist_event(self, **kwargs):
+        self.events.append(kwargs)
         return 1
 
 
@@ -94,10 +99,12 @@ def test_component_datasheet_runs_local_review_without_openai_when_usable():
     )
 
     assert result["provider"] == "ollama"
-    assert result["paidBy"] == "local"
+    assert result["paidBy"] == "system"
     assert result["estimatedCost"] == 0.0
     assert len(store.reviews) == 1
     assert store.reviews[0]["provider"] == "ollama"
+    assert store.reviews[0]["paid_by"] == "system"
+    assert store.events[0]["paid_by"] == "system"
     assert openai.calls == []
 
 
@@ -153,11 +160,38 @@ def test_local_review_can_escalate_to_openai_with_reason():
     )
 
     assert result["provider"] == "ollama+openai"
-    assert result["paidBy"] == "local->system"
+    assert result["paidBy"] == "system"
     assert result["estimatedCost"] == 0.01
     assert len(store.reviews) == 1
     assert len(openai.calls) == 1
     assert "pinout evidence is missing" in openai.calls[0]["decision_reason"]
+
+
+def test_entity_private_local_review_records_entity_payer():
+    service, store, openai = make_service(
+        local_response=(
+            '{"quality":"good","useful":true,"confidence":0.91,'
+            '"warnings":[],"suggestedReviewFocus":"pinout","escalateToOpenAI":false,'
+            '"reason":"deterministic extraction looks complete"}'
+        )
+    )
+
+    result = service.review(
+        source_path="private/MCP23017 datasheet.pdf",
+        is_global=False,
+        entity_id=7,
+        user_id=1,
+        stats=component_stats(),
+        sample_text="MCP23017 data sheet pin configuration pin description electrical characteristics",
+        openai_enabled=False,
+    )
+
+    assert result["provider"] == "ollama"
+    assert result["paidBy"] == "entity"
+    assert store.reviews[0]["paid_by"] == "entity"
+    assert store.events[0]["entity_id"] == 7
+    assert store.events[0]["paid_by"] == "entity"
+    assert openai.calls == []
 
 
 def test_general_book_skips_ai_review():
