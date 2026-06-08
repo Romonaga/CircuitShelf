@@ -68,7 +68,7 @@ export function ReviewView({
   }
 
   return (
-    <section className="view-grid docs-grid">
+    <section className="view-grid review-grid">
       <ReviewDocumentList
         actionBusy={review.actionBusy}
         busy={review.busy}

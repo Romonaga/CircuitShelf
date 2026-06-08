@@ -406,7 +406,8 @@ nav {
 
 .nav-item,
 .ghost-button,
-.primary-button {
+.primary-button,
+.danger-button {
   min-height: 38px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -1062,6 +1063,44 @@ nav {
 .docs-grid {
   grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
   align-items: start;
+}
+
+.review-grid {
+  grid-template-columns: clamp(320px, 24vw, 460px) minmax(0, 1fr);
+  align-items: stretch;
+  min-height: 0;
+}
+
+.review-grid .document-list-panel,
+.review-grid .review-panel {
+  height: calc(100dvh - 132px);
+  min-height: 560px;
+  max-height: 1100px;
+}
+
+.review-grid .document-list-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.review-grid .document-list {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.review-grid .review-panel {
+  min-width: 0;
+}
+
+.review-list-feedback {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.review-list-feedback:empty {
+  display: none;
 }
 
 .settings-grid {
@@ -2119,6 +2158,7 @@ nav {
 .review-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -5466,6 +5506,28 @@ nav {
   color: var(--muted);
 }
 
+@media (max-width: 1280px) {
+  .review-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .review-grid .document-list-panel,
+  .review-grid .review-panel {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .review-grid .document-list {
+    max-height: min(420px, 42dvh);
+    min-height: 220px;
+  }
+
+  .review-actions {
+    justify-content: flex-start;
+  }
+}
+
 :root[data-theme="dark"] .assembly-step.warning,
 :root[data-theme="dark"] .warning-row,
 :root[data-theme="dark"] .ingest-status-panel.error {
@@ -5517,6 +5579,7 @@ nav {
 
   .ask-grid,
   .docs-grid,
+  .review-grid,
   .settings-grid,
   .resource-panel {
     grid-template-columns: minmax(0, 1fr);
@@ -5542,6 +5605,18 @@ nav {
   .settings-list-panel,
   .chunk-panel {
     max-height: none;
+  }
+
+  .review-grid .document-list-panel,
+  .review-grid .review-panel {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .review-grid .document-list {
+    max-height: 42dvh;
+    min-height: 220px;
   }
 
   .settings-primary-stack .settings-list-panel {
@@ -5651,6 +5726,10 @@ nav {
 
   .batch-row span {
     text-align: left;
+  }
+
+  .review-grid .document-list {
+    max-height: 340px;
   }
 
   .finder-control-panel {

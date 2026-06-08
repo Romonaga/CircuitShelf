@@ -42,8 +42,10 @@ export function ReviewDocumentList({
         }
       />
       <input value={filter} onChange={(event) => onFilterChange(event.target.value)} placeholder="Filter review queue" />
-      {message ? <p className="success-message">{message}</p> : null}
-      <ErrorMessage message={error} />
+      <div className="review-list-feedback">
+        {message ? <p className="success-message">{message}</p> : null}
+        <ErrorMessage message={error} />
+      </div>
       <div className="document-list">
         {documents.map((document) => (
           <button
