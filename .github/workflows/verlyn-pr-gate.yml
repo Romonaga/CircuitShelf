@@ -1,0 +1,73 @@
+name: Verlyn PR Gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  pr-template-check:
+    name: PR Template Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR template sections
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const body = context.payload.pull_request.body ?? '';
+            const requiredSections = [
+              'Change Type',
+              'Linked Workstream Change',
+              'Acceptance Criteria',
+              'Verification Runs Completed',
+              'Coverage Summary',
+              'AI Assistance Disclosure',
+              'Independent Cross-Agent Review',
+              'Rollback Plan',
+              'Handoff Status',
+            ];
+
+            const escapeRegExp = (value) =>
+              value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            const extractSection = (heading) => {
+              const pattern = new RegExp(
+                `##\\s+${escapeRegExp(heading)}([\\s\\S]*?)(?=\\r?\\n##\\s|\\s*$)`,
+                'i'
+              );
+              const match = body.match(pattern);
+              return match ? match[1] : '';
+            };
+
+            const missingSections = requiredSections.filter((heading) => {
+              const pattern = new RegExp(`##\\s+${escapeRegExp(heading)}(?=\\r?\\n|$)`, 'i');
+              return !pattern.test(body);
+            });
+
+            if (missingSections.length > 0) {
+              core.setFailed(
+                'PR description is missing required template section(s): ' +
+                missingSections.join(', ')
+              );
+              return;
+            }
+
+            const linkedSection = extractSection('Linked Workstream Change');
+            if (!/- \[x\]/i.test(linkedSection)) {
+              core.setFailed('Linked Workstream Change has no checked option.');
+              return;
+            }
+
+            const aiSection = extractSection('AI Assistance Disclosure');
+            if (!/- \[x\]/i.test(aiSection)) {
+              core.setFailed('AI Assistance Disclosure has no checked option.');
+              return;
+            }
+
+            const reviewSection = extractSection('Independent Cross-Agent Review');
+            if (!/- \[x\]/i.test(reviewSection)) {
+              core.setFailed('Independent Cross-Agent Review has no checked option.');
+              return;
+            }
+
+            console.log('PR template structure is present and disclosure sections are filled in.');
