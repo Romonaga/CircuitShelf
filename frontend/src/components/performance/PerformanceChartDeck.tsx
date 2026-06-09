@@ -7,6 +7,7 @@ import type { PerformanceChartChoice } from "./chartTypes";
 const BatchEfficiencyGraph = lazy(() => import("../performanceCharts/BatchEfficiencyGraph").then((module) => ({ default: module.BatchEfficiencyGraph })));
 const DocumentOutputGraph = lazy(() => import("../performanceCharts/DocumentOutputGraph").then((module) => ({ default: module.DocumentOutputGraph })));
 const GpuEnvelopeGraph = lazy(() => import("../performanceCharts/GpuEnvelopeGraph").then((module) => ({ default: module.GpuEnvelopeGraph })));
+const GpuQueueGraph = lazy(() => import("../performanceCharts/GpuQueueGraph").then((module) => ({ default: module.GpuQueueGraph })));
 const IngestionOutcomeGraph = lazy(() => import("../performanceCharts/IngestionOutcomeGraph").then((module) => ({ default: module.IngestionOutcomeGraph })));
 const IngestionThroughputChart = lazy(() => import("../IngestionThroughputChart").then((module) => ({ default: module.IngestionThroughputChart })));
 const PowerGraph = lazy(() => import("../performanceCharts/PowerGraph").then((module) => ({ default: module.PowerGraph })));
@@ -42,6 +43,7 @@ export function PerformanceChartDeck({
       <Suspense fallback={<ChartModuleLoading />}>
         {showChart("utilization") ? <UtilizationGraph history={history} /> : null}
         {showChart("gpuEnvelope") ? <GpuEnvelopeGraph history={history} /> : null}
+        {showChart("gpuQueue") ? <GpuQueueGraph history={history} /> : null}
         {showChart("thermals") ? <ThermalGraph history={history} /> : null}
         {showChart("power") ? <PowerGraph history={history} /> : null}
         {showChart("documentOutput") ? <DocumentOutputGraph rows={visibleRecentWork} /> : null}

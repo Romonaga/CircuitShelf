@@ -73,3 +73,31 @@ def test_cleanup_abandoned_once_still_only_runs_once(monkeypatch):
         "local_gpu_work_live_process_ids.sql",
         "local_gpu_work_cleanup_abandoned.sql",
     ]
+
+
+def test_wait_summary_payload_splits_overall_and_resource_rows():
+    payload = LocalGpuWorkCoordinator._wait_summary_payload([
+        {
+            "resource_class": "cuda_batch",
+            "queued": 2,
+            "running": 1,
+            "current_avg_wait_seconds": 1.25,
+            "current_max_wait_seconds": 3.5,
+            "recent_avg_wait_seconds": 0.5,
+            "recent_max_wait_seconds": 2.0,
+        },
+        {
+            "resource_class": "all",
+            "queued": 3,
+            "running": 2,
+            "current_avg_wait_seconds": 2.25,
+            "current_max_wait_seconds": 5.0,
+            "recent_avg_wait_seconds": 1.5,
+            "recent_max_wait_seconds": 4.0,
+        },
+    ])
+
+    assert payload["overall"]["queued"] == 3
+    assert payload["overall"]["currentMaxWaitSeconds"] == 5.0
+    assert payload["byResource"]["cuda_batch"]["running"] == 1
+    assert payload["byResource"]["cuda_batch"]["recentAvgWaitSeconds"] == 0.5

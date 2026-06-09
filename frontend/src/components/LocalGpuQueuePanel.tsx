@@ -99,6 +99,14 @@ export function LocalGpuQueuePanel({ queue }: { queue?: LocalGpuQueueStatus | nu
           <strong>{formatInteger(queue.queued)}</strong>
         </div>
         <div className="status-stat">
+          <span>Oldest wait</span>
+          <strong>{queueTime(queue.wait?.currentMaxWaitSeconds)}</strong>
+        </div>
+        <div className="status-stat">
+          <span>Recent avg wait</span>
+          <strong>{queueTime(queue.wait?.recentAvgWaitSeconds)}</strong>
+        </div>
+        <div className="status-stat">
           <span>Completed</span>
           <strong>{formatInteger(queue.completed)}</strong>
         </div>

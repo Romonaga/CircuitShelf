@@ -19,11 +19,20 @@ INSERT INTO performance_resource_samples (
     reranker_batch_active,
     chunks,
     sources,
-    image_ids
+    image_ids,
+    gpu_queue_active,
+    gpu_queue_queued,
+    gpu_queue_cuda_queued,
+    gpu_queue_ocr_queued,
+    gpu_queue_llm_queued,
+    gpu_queue_current_wait_seconds,
+    gpu_queue_recent_avg_wait_seconds,
+    gpu_queue_recent_max_wait_seconds
 )
 VALUES (
     now(),
     %s, %s, %s, %s, %s, %s, %s,
     %s, %s, %s, %s, %s, %s,
-    %s, %s, %s, %s, %s, %s, %s
+    %s, %s, %s, %s, %s, %s, %s,
+    %s, %s, %s, %s, %s, %s, %s, %s
 );

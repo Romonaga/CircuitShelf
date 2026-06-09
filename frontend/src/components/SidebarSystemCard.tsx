@@ -22,6 +22,13 @@ function formatShortTime(value?: string | null) {
   return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+function formatSeconds(value?: number | null) {
+  if (value == null || !Number.isFinite(value)) {
+    return "n/a";
+  }
+  return value >= 60 ? `${formatNumber(value / 60)}m` : `${formatNumber(value)}s`;
+}
+
 export function SidebarSystemCard({ status, detailed = false }: { status: StatusPayload | null; detailed?: boolean }) {
   const resources = status?.systemResources;
   const gpu = resources?.gpu;
@@ -80,6 +87,12 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
         detail={gpu?.available ? `${formatNumber(gpu.memoryUsedMiB)} MiB / today ${formatPercent(peaks?.gpuMemoryUsedPercent)}` : "n/a"}
         tone="teal"
       />
+      <div className="sidebar-system-queue-line">
+        <span>GPU queue</span>
+        <strong title={`Oldest current wait ${formatSeconds(gpuQueue?.wait?.currentMaxWaitSeconds)} | recent max ${formatSeconds(gpuQueue?.wait?.recentMaxWaitSeconds)}`}>
+          {formatInteger(gpuQueue?.active)} active / {formatInteger(gpuQueue?.queued)} queued
+        </strong>
+      </div>
       <div className="sidebar-system-pills">
         <span><small>Workers</small><strong>{formatInteger(workers?.activeDocumentWorkers)} / {formatInteger(workerCapacity)}</strong></span>
         <span>
@@ -125,6 +138,8 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
             <span><small>Worker slots</small><strong>{formatInteger(workerCapacity)}</strong></span>
             <span><small>Today workers</small><strong>{formatInteger(peaks?.activeDocumentWorkers)}</strong></span>
             <span><small>Today GPU temp</small><strong>{peaks?.gpuTemperatureC == null ? "n/a" : `${formatNumber(peaks.gpuTemperatureC)} C`}</strong></span>
+            <span><small>GPU queued</small><strong>{formatInteger(gpuQueue?.queued)}</strong></span>
+            <span><small>GPU wait</small><strong>{formatSeconds(gpuQueue?.wait?.currentMaxWaitSeconds)}</strong></span>
             <span><small>CUDA queued</small><strong>{formatInteger(cudaQueue?.queued)}</strong></span>
             <span><small>CUDA lanes</small><strong>{formatInteger(gpuQueue?.cudaSlots)}</strong></span>
             <span><small>OCR queued</small><strong>{formatInteger(ocrGpuQueue?.queued)}</strong></span>

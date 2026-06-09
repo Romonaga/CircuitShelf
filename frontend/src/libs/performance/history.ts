@@ -27,6 +27,14 @@ export interface StatusHistoryPoint {
   images: number;
   workers: number;
   workerCapacity: number;
+  gpuQueueActive: number;
+  gpuQueueQueued: number;
+  gpuQueueCudaQueued: number;
+  gpuQueueOcrQueued: number;
+  gpuQueueLlmQueued: number;
+  gpuQueueCurrentWaitSeconds: number | null;
+  gpuQueueRecentAvgWaitSeconds: number | null;
+  gpuQueueRecentMaxWaitSeconds: number | null;
 }
 
 export function pointFromPerformanceSample(sample: PerformanceSample): StatusHistoryPoint {
@@ -58,6 +66,14 @@ export function pointFromPerformanceSample(sample: PerformanceSample): StatusHis
     images: sample.images ?? 0,
     workers: sample.workers ?? 0,
     workerCapacity: sample.workerCapacity ?? 0,
+    gpuQueueActive: sample.gpuQueueActive ?? 0,
+    gpuQueueQueued: sample.gpuQueueQueued ?? 0,
+    gpuQueueCudaQueued: sample.gpuQueueCudaQueued ?? 0,
+    gpuQueueOcrQueued: sample.gpuQueueOcrQueued ?? 0,
+    gpuQueueLlmQueued: sample.gpuQueueLlmQueued ?? 0,
+    gpuQueueCurrentWaitSeconds: sample.gpuQueueCurrentWaitSeconds ?? null,
+    gpuQueueRecentAvgWaitSeconds: sample.gpuQueueRecentAvgWaitSeconds ?? null,
+    gpuQueueRecentMaxWaitSeconds: sample.gpuQueueRecentMaxWaitSeconds ?? null,
   };
 }
 
@@ -71,6 +87,11 @@ export function pointFromStatus(status: StatusPayload): StatusHistoryPoint {
     0,
     status.ingestWorkerBudget?.documentWorkerCapacity ?? activeDocumentWorkers
   );
+  const gpuQueue = status.localGpuQueue;
+  const gpuQueueByResource = gpuQueue?.byResource ?? {};
+  const cudaQueue = gpuQueueByResource.cuda_batch ?? {};
+  const ocrQueue = gpuQueueByResource.ocr_cuda ?? {};
+  const llmQueue = gpuQueueByResource.local_llm ?? {};
   return {
     sampledAt: Number.isFinite(sampled) ? sampled : Date.now(),
     cpu: status.systemResources?.cpu?.utilizationPercent ?? null,
@@ -109,6 +130,14 @@ export function pointFromStatus(status: StatusPayload): StatusHistoryPoint {
     images: status.imageIds ?? 0,
     workers: activeDocumentWorkers,
     workerCapacity,
+    gpuQueueActive: gpuQueue?.active ?? 0,
+    gpuQueueQueued: gpuQueue?.queued ?? 0,
+    gpuQueueCudaQueued: Number(cudaQueue.queued ?? 0),
+    gpuQueueOcrQueued: Number(ocrQueue.queued ?? 0),
+    gpuQueueLlmQueued: Number(llmQueue.queued ?? 0),
+    gpuQueueCurrentWaitSeconds: gpuQueue?.wait?.currentMaxWaitSeconds ?? null,
+    gpuQueueRecentAvgWaitSeconds: gpuQueue?.wait?.recentAvgWaitSeconds ?? null,
+    gpuQueueRecentMaxWaitSeconds: gpuQueue?.wait?.recentMaxWaitSeconds ?? null,
   };
 }
 

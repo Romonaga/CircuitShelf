@@ -19,7 +19,15 @@ WITH bucketed AS (
            max(reranker_batch_active) AS reranker_batch_active,
            max(chunks) AS chunks,
            max(sources) AS sources,
-           max(image_ids) AS image_ids
+           max(image_ids) AS image_ids,
+           max(gpu_queue_active) AS gpu_queue_active,
+           max(gpu_queue_queued) AS gpu_queue_queued,
+           max(gpu_queue_cuda_queued) AS gpu_queue_cuda_queued,
+           max(gpu_queue_ocr_queued) AS gpu_queue_ocr_queued,
+           max(gpu_queue_llm_queued) AS gpu_queue_llm_queued,
+           max(gpu_queue_current_wait_seconds) AS gpu_queue_current_wait_seconds,
+           max(gpu_queue_recent_avg_wait_seconds) AS gpu_queue_recent_avg_wait_seconds,
+           max(gpu_queue_recent_max_wait_seconds) AS gpu_queue_recent_max_wait_seconds
     FROM performance_resource_samples
     WHERE sampled_at >= now() - (%s::integer * interval '1 hour')
     GROUP BY 1
@@ -44,7 +52,15 @@ SELECT sampled_at,
        reranker_batch_active,
        chunks,
        sources,
-       image_ids
+       image_ids,
+       gpu_queue_active,
+       gpu_queue_queued,
+       gpu_queue_cuda_queued,
+       gpu_queue_ocr_queued,
+       gpu_queue_llm_queued,
+       gpu_queue_current_wait_seconds,
+       gpu_queue_recent_avg_wait_seconds,
+       gpu_queue_recent_max_wait_seconds
 FROM bucketed
 ORDER BY sampled_at DESC
 LIMIT %s;

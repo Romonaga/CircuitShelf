@@ -54,6 +54,12 @@ class PerformanceStore:
         batches = status.get("runtimeBatches") or {}
         embedding = batches.get("embedding") or {}
         reranker = batches.get("reranker") or {}
+        gpu_queue = status.get("localGpuQueue") or {}
+        gpu_queue_by_resource = gpu_queue.get("byResource") or {}
+        cuda_queue = gpu_queue_by_resource.get("cuda_batch") or {}
+        ocr_queue = gpu_queue_by_resource.get("ocr_cuda") or {}
+        llm_queue = gpu_queue_by_resource.get("local_llm") or {}
+        gpu_queue_wait = gpu_queue.get("wait") or {}
         try:
             with self.database.connection() as conn:
                 conn.execute(
@@ -79,6 +85,14 @@ class PerformanceStore:
                         self._optional_int(status.get("chunks")) or 0,
                         self._optional_int(status.get("sources")) or 0,
                         self._optional_int(status.get("imageIds")) or 0,
+                        self._optional_int(gpu_queue.get("active")) or 0,
+                        self._optional_int(gpu_queue.get("queued")) or 0,
+                        self._optional_int(cuda_queue.get("queued")) or 0,
+                        self._optional_int(ocr_queue.get("queued")) or 0,
+                        self._optional_int(llm_queue.get("queued")) or 0,
+                        self._optional_float(gpu_queue_wait.get("currentMaxWaitSeconds")),
+                        self._optional_float(gpu_queue_wait.get("recentAvgWaitSeconds")),
+                        self._optional_float(gpu_queue_wait.get("recentMaxWaitSeconds")),
                     ),
                 )
         except UndefinedTable:
@@ -201,6 +215,14 @@ class PerformanceStore:
             "chunks": PerformanceStore._optional_int(row.get("chunks")) or 0,
             "sources": PerformanceStore._optional_int(row.get("sources")) or 0,
             "images": PerformanceStore._optional_int(row.get("image_ids")) or 0,
+            "gpuQueueActive": PerformanceStore._optional_int(row.get("gpu_queue_active")) or 0,
+            "gpuQueueQueued": PerformanceStore._optional_int(row.get("gpu_queue_queued")) or 0,
+            "gpuQueueCudaQueued": PerformanceStore._optional_int(row.get("gpu_queue_cuda_queued")) or 0,
+            "gpuQueueOcrQueued": PerformanceStore._optional_int(row.get("gpu_queue_ocr_queued")) or 0,
+            "gpuQueueLlmQueued": PerformanceStore._optional_int(row.get("gpu_queue_llm_queued")) or 0,
+            "gpuQueueCurrentWaitSeconds": PerformanceStore._optional_float(row.get("gpu_queue_current_wait_seconds")),
+            "gpuQueueRecentAvgWaitSeconds": PerformanceStore._optional_float(row.get("gpu_queue_recent_avg_wait_seconds")),
+            "gpuQueueRecentMaxWaitSeconds": PerformanceStore._optional_float(row.get("gpu_queue_recent_max_wait_seconds")),
         }
 
     @staticmethod

@@ -375,6 +375,7 @@ class LocalGpuWorkCoordinator:
             with self.database.connection() as conn:
                 count_rows = conn.execute(load_query("local_gpu_work_counts.sql"), (window,)).fetchall()
                 live_count_rows = conn.execute(load_query("local_gpu_work_live_by_resource_counts.sql")).fetchall()
+                wait_rows = conn.execute(load_query("local_gpu_work_queue_wait_summary.sql"), (window,)).fetchall()
                 recent_rows = conn.execute(
                     load_query("local_gpu_work_recent.sql"),
                     (window, max(1, int(recent_limit))),
@@ -405,6 +406,9 @@ class LocalGpuWorkCoordinator:
             count = int(row["count"] or 0)
             counts[status] = counts.get(status, 0) + count
             counts_by_resource.setdefault(resource, {})[status] = count
+        wait_summary = self._wait_summary_payload(wait_rows)
+        for resource, summary in wait_summary.get("byResource", {}).items():
+            counts_by_resource.setdefault(resource, {}).update(summary)
         return {
             "enabled": True,
             "slots": self.llm_slot_count,
@@ -419,6 +423,7 @@ class LocalGpuWorkCoordinator:
             "completed": counts.get("completed", 0),
             "failed": counts.get("failed", 0),
             "timedOut": counts.get("timed_out", 0),
+            "wait": wait_summary.get("overall", {}),
             "byResource": counts_by_resource,
             "recent": [self._row_to_payload(row) for row in recent_rows],
         }
@@ -752,6 +757,33 @@ class LocalGpuWorkCoordinator:
         if detail_text:
             context.append(detail_text)
         return " | ".join(context)
+
+    @staticmethod
+    def _optional_float(value: Any) -> float | None:
+        try:
+            return None if value is None else float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _wait_summary_payload(cls, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        by_resource: dict[str, dict[str, float | int | None]] = {}
+        overall: dict[str, float | int | None] = {}
+        for row in rows:
+            resource = str(row.get("resource_class") or "unknown")
+            payload = {
+                "queued": int(row.get("queued") or 0),
+                "running": int(row.get("running") or 0),
+                "currentAvgWaitSeconds": cls._optional_float(row.get("current_avg_wait_seconds")),
+                "currentMaxWaitSeconds": cls._optional_float(row.get("current_max_wait_seconds")),
+                "recentAvgWaitSeconds": cls._optional_float(row.get("recent_avg_wait_seconds")),
+                "recentMaxWaitSeconds": cls._optional_float(row.get("recent_max_wait_seconds")),
+            }
+            if resource == "all":
+                overall = payload
+            else:
+                by_resource[resource] = payload
+        return {"overall": overall, "byResource": by_resource}
 
     @staticmethod
     def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:

@@ -14,6 +14,7 @@ export function PerformanceChartSelector({
         <select value={value} onChange={(event) => onChange(event.target.value as PerformanceChartChoice)}>
           <option value="utilization">Utilization</option>
           <option value="gpuEnvelope">GPU envelope</option>
+          <option value="gpuQueue">GPU queue pressure</option>
           <option value="thermals">Thermals</option>
           <option value="power">Power</option>
           <option value="documentOutput">Document output</option>

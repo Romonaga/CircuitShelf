@@ -93,7 +93,15 @@ export interface LocalGpuQueueStatus {
   completed?: number;
   failed?: number;
   timedOut?: number;
-  byResource?: Record<string, Record<string, number>>;
+  wait?: {
+    queued?: number;
+    running?: number;
+    currentAvgWaitSeconds?: number | null;
+    currentMaxWaitSeconds?: number | null;
+    recentAvgWaitSeconds?: number | null;
+    recentMaxWaitSeconds?: number | null;
+  };
+  byResource?: Record<string, Record<string, number | null | undefined>>;
   recent?: LocalGpuQueueItem[];
   error?: string | null;
 }
@@ -173,6 +181,14 @@ export interface PerformanceSample {
   chunks: number;
   sources: number;
   images: number;
+  gpuQueueActive?: number;
+  gpuQueueQueued?: number;
+  gpuQueueCudaQueued?: number;
+  gpuQueueOcrQueued?: number;
+  gpuQueueLlmQueued?: number;
+  gpuQueueCurrentWaitSeconds?: number | null;
+  gpuQueueRecentAvgWaitSeconds?: number | null;
+  gpuQueueRecentMaxWaitSeconds?: number | null;
 }
 
 export interface PerformanceWorkRun {

@@ -540,6 +540,31 @@ nav {
   background: #36ccb0;
 }
 
+.sidebar-system-queue-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid rgba(156, 230, 213, 0.22);
+  border-radius: 7px;
+  background: rgba(8, 19, 29, 0.32);
+}
+
+.sidebar-system-queue-line span {
+  color: #9fb0c5;
+  font-size: 0.66rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.sidebar-system-queue-line strong {
+  color: #f5fbff;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .sidebar-system-pills {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
