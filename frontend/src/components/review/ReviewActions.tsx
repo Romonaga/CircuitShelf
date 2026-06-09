@@ -9,6 +9,7 @@ export function ReviewActions({
   downloadSelected,
   reindexSelected,
   removeSelected,
+  selectedCount,
   selectedDocument
 }: {
   actionBusy: boolean;
@@ -19,17 +20,20 @@ export function ReviewActions({
   downloadSelected: () => void;
   reindexSelected: () => void;
   removeSelected: () => void;
+  selectedCount: number;
   selectedDocument: ReviewDocument;
 }) {
   const disabled = actionBusy || detailBusy;
+  const targetLabel = selectedCount > 0 ? ` ${selectedCount}` : "";
+  const hasImages = selectedCount > 0 || selectedDocument.imageCount > 0;
   return (
     <div className="review-actions">
       <button className="primary-button" onClick={() => approveSelected(true)} disabled={disabled}>
-        Approve with images
+        Approve{targetLabel} with images
       </button>
-      {selectedDocument.imageCount > 0 ? (
+      {hasImages ? (
         <button className="ghost-button" onClick={() => approveSelected(false)} disabled={disabled}>
-          Approve text only
+          Approve{targetLabel} text only
         </button>
       ) : null}
       {canManageSystem && !selectedDocument.isGlobal ? (
@@ -46,10 +50,10 @@ export function ReviewActions({
         Download
       </button>
       <button className="ghost-button" onClick={reindexSelected} disabled={disabled}>
-        Re-index
+        Re-index{targetLabel}
       </button>
       <button className="danger-button" onClick={removeSelected} disabled={disabled}>
-        Delete
+        Delete{targetLabel}
       </button>
     </div>
   );

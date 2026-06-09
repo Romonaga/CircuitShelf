@@ -25,6 +25,7 @@ export function ReviewDocumentDetail({
   reindexSelected,
   removeSelected,
   scopeAudit,
+  selectedCount,
   selectedDocument,
   setChunkLimit,
   totalChunkCount
@@ -44,6 +45,7 @@ export function ReviewDocumentDetail({
   reindexSelected: () => void;
   removeSelected: () => void;
   scopeAudit: ReviewScopeAudit[];
+  selectedCount: number;
   selectedDocument: ReviewDocument | null;
   setChunkLimit: (limit: number) => void;
   totalChunkCount: number;
@@ -68,6 +70,7 @@ export function ReviewDocumentDetail({
               downloadSelected={downloadSelected}
               reindexSelected={reindexSelected}
               removeSelected={removeSelected}
+              selectedCount={selectedCount}
               selectedDocument={selectedDocument}
             />
           ) : null

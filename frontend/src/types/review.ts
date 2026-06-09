@@ -73,3 +73,22 @@ export type ReviewDocumentPayload = {
   scopeAudit?: ReviewScopeAudit[];
   intelligence?: DatasheetIntelligence | null;
 };
+
+export interface ReviewBatchActionResult {
+  source: string;
+  ok: boolean;
+  action: string;
+  statusCode?: number;
+  error?: string;
+  queued?: boolean;
+}
+
+export interface ReviewBatchActionResponse {
+  ok: boolean;
+  action: string;
+  count: number;
+  okCount: number;
+  failedCount: number;
+  results: ReviewBatchActionResult[];
+  imageCount?: number | null;
+}

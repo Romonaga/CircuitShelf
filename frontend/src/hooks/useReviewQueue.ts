@@ -34,6 +34,8 @@ export function useReviewQueue({
   );
   const actions = useReviewActions({
     selectedDocument: documents.selectedDocument,
+    selectedDocuments: documents.selectedDocuments,
+    clearSelection: documents.clearSelection,
     clearDetails: detail.clearDetails,
     loadDocuments: documents.loadDocuments,
     onStatusChange,
@@ -54,6 +56,7 @@ export function useReviewQueue({
 
   return {
     actionBusy: actions.actionBusy,
+    allFilteredSelected: documents.allFilteredSelected,
     approveSelected: actions.approveSelected,
     busy: documents.busy,
     canLoadMoreChunks,
@@ -72,13 +75,20 @@ export function useReviewQueue({
     loadDocuments: documents.loadDocuments,
     message: actions.message,
     reindexDocument: actions.reindexDocument,
+    reindexSelectedDocuments: actions.reindexSelectedDocuments,
     removeDocument: actions.removeDocument,
+    removeSelectedDocuments: actions.removeSelectedDocuments,
     scopeAudit: detail.scopeAudit,
     selected: documents.selected,
     selectedDocument: documents.selectedDocument,
+    selectedDocuments: documents.selectedDocuments,
+    selectedSources: documents.selectedSources,
     setChunkLimit,
+    clearSelection: documents.clearSelection,
     setFilter: documents.setFilter,
     setSelected,
+    selectAllFiltered: documents.selectAllFiltered,
+    toggleSelection: documents.toggleSelection,
     totalChunkCount
   };
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -21,6 +22,14 @@ class DocumentScopeRequest(BaseModel):
     source: str = ""
     scope: str = "global"
     reason: str = ""
+
+
+class DocumentBatchActionRequest(BaseModel):
+    sources: list[str] = []
+    action: str = "approve"
+    includeImages: bool = True
+    deleteFile: bool = True
+    scope: str = "global"
 
 
 def review_document_payload(row: Any) -> dict:
@@ -155,6 +164,47 @@ def create_router(
             return user, scope, JSONResponse({"error": "Document is not in your entity."}, status_code=403)
         return user, scope, None
 
+    def response_error_message(response: JSONResponse) -> str:
+        try:
+            payload = json.loads(response.body.decode("utf-8"))
+        except Exception:
+            return "Request failed."
+        return str(payload.get("error") or payload.get("message") or "Request failed.")
+
+    def unique_sources(sources: list[str]) -> list[str]:
+        seen = set()
+        clean = []
+        for source in sources:
+            value = str(source or "").strip()
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            clean.append(value)
+        return clean[:1000]
+
+    def batch_result(source: str, *, ok: bool, action: str, error: str = "", status_code: int = 200, extra: dict | None = None) -> dict:
+        payload = {
+            "source": source,
+            "ok": ok,
+            "action": action,
+            "statusCode": status_code,
+        }
+        if error:
+            payload["error"] = error
+        if extra:
+            payload.update(extra)
+        return payload
+
+    def active_entity_for_scope_change(user: Any, target_scope: str):
+        if target_scope == "global":
+            return None, True, None
+        if target_scope != "entity":
+            return None, None, JSONResponse({"error": "Scope must be global or entity."}, status_code=400)
+        active_entity = deps.entity_store.current_for_user(deps.user_id_for_user(user))
+        if not active_entity:
+            return None, None, JSONResponse({"error": "No active entity available for private scope."}, status_code=400)
+        return active_entity.entity_id, False, None
+
     @router.get("/api/review/documents")
     async def review_documents(req: Request):
         user, error = deps.require_authenticated_user(req)
@@ -217,6 +267,104 @@ def create_router(
         image_count = refresh_active_state_from_db()
         return {"ok": True, "document": dict(row), "imageCount": image_count}
 
+    @router.post("/api/review/documents/batch")
+    async def review_documents_batch(req: Request, payload: DocumentBatchActionRequest):
+        action = payload.action.strip().lower()
+        sources = unique_sources(payload.sources)
+        if not sources:
+            return JSONResponse({"error": "Select at least one document."}, status_code=400)
+        if action not in {"approve", "remove", "reindex", "scope"}:
+            return JSONResponse({"error": "Batch action must be approve, remove, reindex, or scope."}, status_code=400)
+
+        results = []
+        changed_catalog = False
+        scope_user = None
+        scope_entity_id = None
+        scope_is_global = None
+        if action == "scope":
+            scope_user, scope_error = deps.require_system_admin_user(req)
+            if scope_error:
+                return scope_error
+            scope_entity_id, scope_is_global, scope_target_error = active_entity_for_scope_change(
+                scope_user,
+                payload.scope.strip().lower(),
+            )
+            if scope_target_error:
+                return scope_target_error
+
+        for source in sources:
+            try:
+                if action == "approve":
+                    user, _, error = authorize_review_read(req, source)
+                    if error:
+                        results.append(batch_result(source, ok=False, action=action, error=response_error_message(error), status_code=error.status_code))
+                        continue
+                    if not payload.includeImages:
+                        image_store.delete_document_images(source)
+                    row = vector_store.set_document_status(source, DocumentStatusId.INDEXED, user.username)
+                    if not row:
+                        results.append(batch_result(source, ok=False, action=action, error="Document not found.", status_code=404))
+                        continue
+                    changed_catalog = True
+                    results.append(batch_result(source, ok=True, action=action, extra={"document": dict(row)}))
+                    continue
+
+                if action == "remove":
+                    _, _, error = authorize_review_read(req, source)
+                    if error:
+                        results.append(batch_result(source, ok=False, action=action, error=response_error_message(error), status_code=error.status_code))
+                        continue
+                    result, status_code = remove_document_from_store(source, delete_file=payload.deleteFile)
+                    if status_code != 200:
+                        results.append(batch_result(source, ok=False, action=action, error=str(result.get("error") or "Remove failed."), status_code=status_code))
+                        continue
+                    changed_catalog = True
+                    results.append(batch_result(source, ok=True, action=action, extra={"document": result.get("document")}))
+                    continue
+
+                if action == "reindex":
+                    user, _, error = authorize_review_read(req, source)
+                    if error:
+                        results.append(batch_result(source, ok=False, action=action, error=response_error_message(error), status_code=error.status_code))
+                        continue
+                    result = start_index_check(
+                        f"reindex:{source}",
+                        requested_by_user_id=deps.user_id_for_user(user),
+                    )
+                    results.append(batch_result(source, ok=True, action=action, extra={"queued": True, "indexing": result}))
+                    continue
+
+                if action == "scope":
+                    row = vector_store.set_document_scope(
+                        source,
+                        is_global=bool(scope_is_global),
+                        entity_id=scope_entity_id,
+                        changed_by_user_id=deps.user_id_for_user(scope_user),
+                        reason=f"Batch review changed scope to {payload.scope.strip().lower()}",
+                    )
+                    if not row:
+                        results.append(batch_result(source, ok=False, action=action, error="Document not found.", status_code=404))
+                        continue
+                    changed_catalog = True
+                    results.append(batch_result(source, ok=True, action=action, extra={"document": dict(row)}))
+            except Exception as exc:
+                results.append(batch_result(source, ok=False, action=action, error=str(exc), status_code=500))
+
+        if changed_catalog:
+            image_count = refresh_active_state_from_db()
+        else:
+            image_count = None
+        ok_count = sum(1 for item in results if item.get("ok"))
+        return {
+            "ok": ok_count == len(results),
+            "action": action,
+            "count": len(results),
+            "okCount": ok_count,
+            "failedCount": len(results) - ok_count,
+            "results": results,
+            "imageCount": image_count,
+        }
+
     @router.post("/api/review/document/reindex")
     async def review_document_reindex(req: Request, payload: DocumentActionRequest):
         user, _, error = authorize_review_read(req, payload.source)
@@ -254,17 +402,9 @@ def create_router(
         if error:
             return error
         target_scope = payload.scope.strip().lower()
-        active_entity = deps.entity_store.current_for_user(deps.user_id_for_user(user))
-        if target_scope == "global":
-            entity_id = None
-            is_global = True
-        elif target_scope == "entity":
-            if not active_entity:
-                return JSONResponse({"error": "No active entity available for private scope."}, status_code=400)
-            entity_id = active_entity.entity_id
-            is_global = False
-        else:
-            return JSONResponse({"error": "Scope must be global or entity."}, status_code=400)
+        entity_id, is_global, target_error = active_entity_for_scope_change(user, target_scope)
+        if target_error:
+            return target_error
         try:
             row = vector_store.set_document_scope(
                 payload.source,

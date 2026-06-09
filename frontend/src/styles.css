@@ -1138,6 +1138,23 @@ nav {
   display: none;
 }
 
+.review-selection-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.review-selection-toolbar > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
 .settings-grid {
   grid-template-columns: minmax(380px, 0.95fr) minmax(480px, 1.3fr);
 }
@@ -2380,6 +2397,25 @@ nav {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+
+.review-row-shell {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.review-row-shell.active .document-row {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.review-row-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .scope-badge {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   approveReviewDocument,
+  batchReviewDocuments,
   downloadReviewDocumentSource,
   reindexReviewDocument,
   removeReviewDocument,
@@ -15,14 +16,18 @@ type ReviewActionDocument = Pick<ReviewDocument, "source"> & { displayName?: str
 
 export function useReviewActions({
   selectedDocument,
+  selectedDocuments,
   clearDetails,
+  clearSelection,
   loadDocuments,
   onStatusChange,
   onScopeAuditChange,
   setError
 }: {
   selectedDocument: ReviewDocument | null;
+  selectedDocuments: ReviewDocument[];
   clearDetails: () => void;
+  clearSelection: () => void;
   loadDocuments: () => Promise<void>;
   onStatusChange: () => void;
   onScopeAuditChange: (audit: ReviewScopeAudit[]) => void;
@@ -47,6 +52,23 @@ export function useReviewActions({
   }
 
   async function approveSelected(includeImages: boolean) {
+    if (selectedDocuments.length > 0) {
+      await runDocumentAction("Could not approve selected documents", async () => {
+        const result = await batchReviewDocuments({
+          sources: selectedDocuments.map((document) => document.source),
+          action: "approve",
+          includeImages
+        });
+        setMessage(
+          includeImages
+            ? `${formatInteger(result.okCount)} documents approved for retrieval with images${result.failedCount ? `; ${formatInteger(result.failedCount)} failed` : ""}.`
+            : `${formatInteger(result.okCount)} documents approved for retrieval without images${result.failedCount ? `; ${formatInteger(result.failedCount)} failed` : ""}.`
+        );
+        clearDetails();
+        clearSelection();
+      });
+      return;
+    }
     if (!selectedDocument) {
       return;
     }
@@ -81,6 +103,21 @@ export function useReviewActions({
     });
   }
 
+  async function reindexSelectedDocuments() {
+    if (selectedDocuments.length === 0) {
+      await reindexDocument(selectedDocument);
+      return;
+    }
+    await runDocumentAction("Could not re-index selected documents", async () => {
+      const result = await batchReviewDocuments({
+        sources: selectedDocuments.map((document) => document.source),
+        action: "reindex"
+      });
+      setMessage(`${formatInteger(result.okCount)} documents queued for re-index${result.failedCount ? `; ${formatInteger(result.failedCount)} failed` : ""}.`);
+      clearSelection();
+    });
+  }
+
   async function downloadDocument(document: ReviewActionDocument | null) {
     if (!document) {
       return;
@@ -100,6 +137,19 @@ export function useReviewActions({
   }
 
   async function changeSelectedScope(scope: "global" | "entity") {
+    if (selectedDocuments.length > 0) {
+      await runDocumentAction("Could not change selected document scopes", async () => {
+        const label = scope === "global" ? "global corpus" : "entity private";
+        const result = await batchReviewDocuments({
+          sources: selectedDocuments.map((document) => document.source),
+          action: "scope",
+          scope
+        });
+        setMessage(`${formatInteger(result.okCount)} documents changed to ${label}${result.failedCount ? `; ${formatInteger(result.failedCount)} failed` : ""}.`);
+        clearSelection();
+      });
+      return;
+    }
     if (!selectedDocument) {
       return;
     }
@@ -117,7 +167,24 @@ export function useReviewActions({
     changeSelectedScope,
     downloadDocument,
     reindexDocument,
+    reindexSelectedDocuments,
     message,
     removeDocument,
+    async removeSelectedDocuments() {
+      if (selectedDocuments.length === 0) {
+        await removeDocument(selectedDocument);
+        return;
+      }
+      await runDocumentAction("Could not remove selected documents", async () => {
+        const result = await batchReviewDocuments({
+          sources: selectedDocuments.map((document) => document.source),
+          action: "remove",
+          deleteFile: true
+        });
+        setMessage(`${formatInteger(result.okCount)} documents removed${result.failedCount ? `; ${formatInteger(result.failedCount)} failed` : ""}.`);
+        clearDetails();
+        clearSelection();
+      });
+    },
   };
 }

@@ -7,6 +7,7 @@ import { filterReviewDocuments, selectNextReviewSource } from "../../libs/review
 export function useReviewDocuments() {
   const [documents, setDocuments] = useState<ReviewDocument[]>([]);
   const [selected, setSelected] = useState("");
+  const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -22,12 +23,24 @@ export function useReviewDocuments() {
     [documents, selected]
   );
 
+  const selectedDocuments = useMemo(
+    () => documents.filter((doc) => selectedSources.has(doc.source)),
+    [documents, selectedSources]
+  );
+
+  const allFilteredSelected = useMemo(
+    () => filteredDocuments.length > 0 && filteredDocuments.every((doc) => selectedSources.has(doc.source)),
+    [filteredDocuments, selectedSources]
+  );
+
   const loadDocuments = useCallback(async () => {
     setBusy(true);
     setError("");
     try {
       const response = await getReviewDocuments();
       setDocuments(response.documents);
+      const available = new Set(response.documents.map((doc) => doc.source));
+      setSelectedSources((current) => new Set([...current].filter((source) => available.has(source))));
       setSelected(selectNextReviewSource(response.documents, selectedRef.current));
     } catch (err) {
       setError(errorMessage(err, "Could not load review queue"));
@@ -41,8 +54,36 @@ export function useReviewDocuments() {
     setSelected(source);
   }, []);
 
+  const toggleSelection = useCallback((source: string) => {
+    setSelectedSources((current) => {
+      const next = new Set(current);
+      if (next.has(source)) {
+        next.delete(source);
+      } else {
+        next.add(source);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAllFiltered = useCallback(() => {
+    setSelectedSources((current) => {
+      const next = new Set(current);
+      for (const document of filteredDocuments) {
+        next.add(document.source);
+      }
+      return next;
+    });
+  }, [filteredDocuments]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedSources(new Set());
+  }, []);
+
   return {
+    allFilteredSelected,
     busy,
+    clearSelection,
     documents,
     error,
     filter,
@@ -50,8 +91,12 @@ export function useReviewDocuments() {
     loadDocuments,
     selected,
     selectedDocument,
+    selectedDocuments,
+    selectedSources: [...selectedSources],
     setError,
     setFilter,
-    setSelected: selectDocument
+    setSelected: selectDocument,
+    selectAllFiltered,
+    toggleSelection
   };
 }

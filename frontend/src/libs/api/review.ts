@@ -1,4 +1,4 @@
-import type { DatasheetIntelligence, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../../types";
+import type { DatasheetIntelligence, ReviewBatchActionResponse, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../../types";
 import { readSessionToken, requestJson } from "./core";
 
 export function getReviewDocuments(): Promise<{ documents: ReviewDocument[] }> {
@@ -41,6 +41,25 @@ export function approveReviewDocument(source: string, includeImages = true): Pro
   return requestJson<{ ok: boolean }>("/api/review/document/approve", {
     method: "POST",
     body: JSON.stringify({ source, includeImages })
+  });
+}
+
+export function batchReviewDocuments({
+  sources,
+  action,
+  includeImages = true,
+  deleteFile = true,
+  scope = "global"
+}: {
+  sources: string[];
+  action: "approve" | "remove" | "reindex" | "scope";
+  includeImages?: boolean;
+  deleteFile?: boolean;
+  scope?: "global" | "entity";
+}): Promise<ReviewBatchActionResponse> {
+  return requestJson<ReviewBatchActionResponse>("/api/review/documents/batch", {
+    method: "POST",
+    body: JSON.stringify({ sources, action, includeImages, deleteFile, scope })
   });
 }
 

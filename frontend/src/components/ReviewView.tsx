@@ -47,10 +47,10 @@ export function ReviewView({
   }
 
   async function reindexSelectedDocument() {
-    if (!review.selectedDocument) {
+    if (!review.selectedDocument && review.selectedDocuments.length === 0) {
       return;
     }
-    await review.reindexDocument(review.selectedDocument);
+    await review.reindexSelectedDocuments();
   }
 
   async function downloadSelectedDocument() {
@@ -61,10 +61,21 @@ export function ReviewView({
   }
 
   async function removeSelectedDocument() {
-    if (!review.selectedDocument) {
+    const selectedDocument = review.selectedDocument;
+    if (!selectedDocument && review.selectedDocuments.length === 0) {
       return;
     }
-    await removeDocument(review.selectedDocument);
+    if (review.selectedDocuments.length > 0) {
+      const confirmed = window.confirm(`Remove ${review.selectedDocuments.length} selected documents from CircuitShelf?\n\nThis removes the pending review documents and deletes their source files from the training folder.`);
+      if (!confirmed) {
+        return;
+      }
+      await review.removeSelectedDocuments();
+      return;
+    }
+    if (selectedDocument) {
+      await removeDocument(selectedDocument);
+    }
   }
 
   return (
@@ -77,10 +88,14 @@ export function ReviewView({
         filter={review.filter}
         message={review.message}
         onContextMenu={openDocumentContextMenu}
+        onClearSelection={review.clearSelection}
         onFilterChange={review.setFilter}
         onRefresh={review.loadDocuments}
         onSelect={selectReviewDocument}
+        onSelectAll={review.selectAllFiltered}
+        onToggleSelection={review.toggleSelection}
         selected={review.selected}
+        selectedSources={review.selectedSources}
       />
       <ReviewDocumentDetail
         actionBusy={review.actionBusy}
@@ -98,6 +113,7 @@ export function ReviewView({
         reindexSelected={() => void reindexSelectedDocument()}
         removeSelected={() => void removeSelectedDocument()}
         scopeAudit={review.scopeAudit}
+        selectedCount={review.selectedDocuments.length}
         selectedDocument={review.selectedDocument}
         setChunkLimit={review.setChunkLimit}
         totalChunkCount={review.totalChunkCount}
