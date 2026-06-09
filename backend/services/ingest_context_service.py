@@ -1,4 +1,5 @@
 import os
+import re
 
 from backend.ingestion.chunking_util import ChunkingUtils
 from backend.services.ingestion_ai_review_service import IngestionAiReviewService
@@ -45,8 +46,10 @@ class IngestContextService:
             "created_by_user_id": scope.get("created_by_user_id") if scope else None,
         }
 
-    def sample_ingested_text(self, target_state, rel_path: str, max_chars: int = 6000) -> str:
-        samples = []
+    def ingested_document_payload(self, target_state, rel_path: str) -> tuple[list[str], list[dict]]:
+        chunks: list[str] = []
+        metadata: list[dict] = []
+        seen_image_ids = set()
         for chunk, source, meta in zip(
             target_state.get_chunks(),
             target_state.get_sources(),
@@ -56,13 +59,55 @@ class IngestContextService:
             if self.vector_store.rel_path_for_source(source, meta) != rel_path:
                 continue
             text = str(chunk or "").strip()
-            if text:
-                samples.append(text)
-            if sum(len(item) for item in samples) >= max_chars:
+            if not text:
+                continue
+            chunks.append(text)
+            metadata.append({**meta, "source": rel_path, "parent_source": rel_path})
+            image_id = meta.get("source_image_id")
+            if image_id:
+                seen_image_ids.add(str(image_id))
+
+        for image_id, text in target_state.get_image_page_text().items():
+            if not text or str(image_id) in seen_image_ids:
+                continue
+            if not self.source_matches_training_file(image_id, rel_path):
+                continue
+            chunks.append(str(text).strip())
+            metadata.append({
+                "source": rel_path,
+                "parent_source": rel_path,
+                "page": self._page_number_from_image_id(image_id),
+                "source_image_id": image_id,
+                "is_ocr": True,
+            })
+        return chunks, metadata
+
+    def sample_ingested_text(self, target_state, rel_path: str, max_chars: int = 6000) -> str:
+        chunks, _metadata = self.ingested_document_payload(target_state, rel_path)
+        samples: list[str] = []
+        total = 0
+        for text in chunks:
+            samples.append(text)
+            total += len(text)
+            if total >= max_chars:
                 break
         return "\n\n".join(samples)[:max_chars]
 
-    def maybe_review_ingestion_with_openai(self, source: str, ingested_state, document_stats: dict | None, progress_callback=None):
+    def build_document_intelligence_for_ingest(self, source: str, ingested_state, document_intelligence_service):
+        chunks, metadata = self.ingested_document_payload(ingested_state, source)
+        if not chunks:
+            return None
+        return document_intelligence_service.get_or_build(source, chunks, metadata)
+
+    def maybe_review_ingestion_with_openai(
+        self,
+        source: str,
+        ingested_state,
+        document_stats: dict | None,
+        *,
+        intelligence: dict | None = None,
+        progress_callback=None,
+    ):
         scope = self.source_ingest_scope(source)
         stats = (document_stats or {}).get(source, {})
         result = self.ai_review_service.review(
@@ -72,6 +117,7 @@ class IngestContextService:
             user_id=scope.get("created_by_user_id"),
             stats=stats,
             sample_text=self.sample_ingested_text(ingested_state, source),
+            intelligence=intelligence,
             openai_enabled=bool(self.config.get("INGEST_OPENAI_ASSIST_ENABLED", False)),
             progress_callback=progress_callback,
         )
@@ -82,6 +128,16 @@ class IngestContextService:
                 f"cost=${float(result.get('estimatedCost') or 0):.6f}."
             )
         return result
+
+    @staticmethod
+    def _page_number_from_image_id(image_id) -> int | None:
+        match = re.search(r"_page(\d+)(?:_|$)", str(image_id or ""), re.IGNORECASE)
+        if not match:
+            return None
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
 
     def build_ingest_context(self):
         ingest_state = StateManager(use_lock=True, cache_capacity=0, trace_logger=self.trace_logger)

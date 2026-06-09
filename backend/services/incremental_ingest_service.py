@@ -25,6 +25,7 @@ class IncrementalIngestService:
         prune_training_files_from_state,
         persist_db_image_state,
         maybe_review_ingestion_with_openai,
+        build_document_intelligence,
         collect_ingest_stats,
         count_ingest_chunks_by_document,
         count_ingest_images_by_document,
@@ -54,6 +55,7 @@ class IncrementalIngestService:
         self.prune_training_files_from_state = prune_training_files_from_state
         self.persist_db_image_state = persist_db_image_state
         self.maybe_review_ingestion_with_openai = maybe_review_ingestion_with_openai
+        self.build_document_intelligence = build_document_intelligence
         self.collect_ingest_stats = collect_ingest_stats
         self.count_ingest_chunks_by_document = count_ingest_chunks_by_document
         self.count_ingest_images_by_document = count_ingest_images_by_document
@@ -80,6 +82,7 @@ class IncrementalIngestService:
             process_file_by_type=process_file_by_type,
             persist_db_image_state=persist_db_image_state,
             maybe_review_ingestion_with_openai=maybe_review_ingestion_with_openai,
+            build_document_intelligence=build_document_intelligence,
             collect_ingest_stats=collect_ingest_stats,
             count_ingest_chunks_by_document=count_ingest_chunks_by_document,
             count_ingest_images_by_document=count_ingest_images_by_document,
@@ -370,9 +373,26 @@ class IncrementalIngestService:
         )
         image_result = self.persist_db_image_state(current_manifest, target_state=ingested_state, rel_paths=[source])
         self.update_index_progress(stage="readying_review", details={**self.summarize_document_ingest_stats(document_stats), **image_result})
+        intelligence = None
+        if self.build_document_intelligence:
+            self.update_index_progress(stage="datasheet_intelligence", details={"documents": 1})
+            try:
+                intelligence = self.build_document_intelligence(source, ingested_state)
+            except Exception as exc:
+                self.trace_logger.warning(f"Datasheet intelligence unavailable for {source}: {exc}")
         self.mark_source_ready_for_review(source)
-        ai_review = self.maybe_review_ingestion_with_openai(source, ingested_state, document_stats)
-        final_details = {**self.summarize_document_ingest_stats(document_stats), **image_result, **selected_ocr_mode(self.config)}
+        ai_review = self.maybe_review_ingestion_with_openai(
+            source,
+            ingested_state,
+            document_stats,
+            intelligence=intelligence,
+        )
+        final_details = {
+            **self.summarize_document_ingest_stats(document_stats),
+            **image_result,
+            **selected_ocr_mode(self.config),
+            **self.document_processor._intelligence_details(intelligence),
+        }
         ai_part = "ai=none"
         if ai_review:
             try:

@@ -5,6 +5,7 @@ import time
 from typing import Any, Callable
 
 from backend.ingestion.document_classifier import detect_component_candidates, is_plausible_component
+from backend.services.datasheet_repair_service import pinout_has_gaps
 from backend.services.openai_assist_prompts import (
     LOCAL_INGESTION_REVIEW_SYSTEM_PROMPT,
     build_local_ingestion_review_prompt,
@@ -40,9 +41,10 @@ class IngestionAiReviewService:
         stats: dict[str, Any],
         sample_text: str,
         openai_enabled: bool,
+        intelligence: dict[str, Any] | None = None,
         progress_callback: Callable[..., None] | None = None,
     ) -> dict[str, Any] | None:
-        decision = self.decision(source_path=source_path, stats=stats, sample_text=sample_text)
+        decision = self.decision(source_path=source_path, stats=stats, sample_text=sample_text, intelligence=intelligence)
         if not decision["shouldReview"]:
             self.trace_logger.debug(f"🤖 Ingestion AI review skipped for {source_path}: {decision['reason']}")
             return None
@@ -137,7 +139,14 @@ class IngestionAiReviewService:
             }
         return None
 
-    def decision(self, *, source_path: str, stats: dict[str, Any], sample_text: str) -> dict[str, Any]:
+    def decision(
+        self,
+        *,
+        source_path: str,
+        stats: dict[str, Any],
+        sample_text: str,
+        intelligence: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         reasons: list[str] = []
         text = sample_text or ""
         lowered = text.lower()
@@ -175,6 +184,7 @@ class IngestionAiReviewService:
         )
         if len(text.strip()) < 800 and (images or raw_chunks) and component_or_datasheet:
             reasons.append("sample text is very short for extracted content")
+        reasons.extend(self.intelligence_risk_reasons(intelligence))
 
         should_review = bool(reasons) and bool(self.config.get("INGEST_LOCAL_AI_REVIEW_ENABLED", True))
         return {
@@ -182,6 +192,30 @@ class IngestionAiReviewService:
             "reasons": reasons,
             "reason": "; ".join(reasons) if reasons else "no component/datasheet extraction risk detected",
         }
+
+    @staticmethod
+    def intelligence_risk_reasons(intelligence: dict[str, Any] | None) -> list[str]:
+        if not intelligence or intelligence.get("documentType") != "component_datasheet":
+            return []
+        component_name = str(intelligence.get("componentName") or "").strip()
+        if not component_name or not is_plausible_component(component_name):
+            return []
+        reasons: list[str] = []
+        pins = (intelligence.get("pinout") or {}).get("pins") or []
+        facts = intelligence.get("facts") or []
+        if not pins:
+            reasons.append(f"component datasheet {component_name} has no detected pinout")
+        elif pinout_has_gaps(intelligence):
+            reasons.append(f"component datasheet {component_name} has incomplete pin numbering")
+        if len(facts) < 2:
+            reasons.append(f"component datasheet {component_name} has only {len(facts)} extracted facts")
+        try:
+            confidence = float(intelligence.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        if confidence and confidence < 0.82:
+            reasons.append(f"component datasheet {component_name} confidence {confidence:.2f} is low")
+        return reasons
 
     def run_local_review(
         self,

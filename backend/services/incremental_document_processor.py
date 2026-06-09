@@ -23,6 +23,7 @@ class IncrementalDocumentProcessor:
         process_file_by_type,
         persist_db_image_state,
         maybe_review_ingestion_with_openai,
+        build_document_intelligence,
         collect_ingest_stats,
         count_ingest_chunks_by_document,
         count_ingest_images_by_document,
@@ -42,6 +43,7 @@ class IncrementalDocumentProcessor:
         self.process_file_by_type = process_file_by_type
         self.persist_db_image_state = persist_db_image_state
         self.maybe_review_ingestion_with_openai = maybe_review_ingestion_with_openai
+        self.build_document_intelligence = build_document_intelligence
         self.collect_ingest_stats = collect_ingest_stats
         self.count_ingest_chunks_by_document = count_ingest_chunks_by_document
         self.count_ingest_images_by_document = count_ingest_images_by_document
@@ -171,11 +173,13 @@ class IncrementalDocumentProcessor:
             rel_paths=[source],
             progress_file=source,
         )
+        intelligence = self._build_document_intelligence(source, ingested_state)
         self.mark_source_ready_for_review(source)
         ai_review = self.maybe_review_ingestion_with_openai(
             source,
             ingested_state,
             document_stats,
+            intelligence=intelligence,
             progress_callback=lambda **details: self.update_index_progress(
                 stage="processing_documents",
                 current_file=source,
@@ -187,6 +191,7 @@ class IncrementalDocumentProcessor:
             **image_result,
             **selected_ocr_mode(self.config),
             **(extracted.get("ocrStats") or {}),
+            **self._intelligence_details(intelligence),
         }
         if ai_review:
             final_details["aiIngestionReviews"] = 1
@@ -208,6 +213,37 @@ class IncrementalDocumentProcessor:
             )
         )
         return build_result, final_details
+
+    def _build_document_intelligence(self, source: str, ingested_state) -> dict | None:
+        if not self.build_document_intelligence:
+            return None
+        self.update_index_progress(
+            current_file=source,
+            file_details={"documentPhase": "Datasheet intelligence"},
+        )
+        try:
+            intelligence = self.build_document_intelligence(source, ingested_state)
+        except Exception as exc:
+            self.trace_logger.warning(f"Datasheet intelligence unavailable for {source}: {exc}")
+            return None
+        if intelligence and intelligence.get("componentName"):
+            pin_count = len((intelligence.get("pinout") or {}).get("pins") or [])
+            fact_count = len(intelligence.get("facts") or [])
+            self.trace_logger.info(
+                f"🧩 Datasheet intelligence for {source}: "
+                f"{intelligence.get('componentName')} ({intelligence.get('componentType') or 'component'}), "
+                f"pins={pin_count}, facts={fact_count}, confidence={float(intelligence.get('confidence') or 0):.2f}."
+            )
+        return intelligence
+
+    @staticmethod
+    def _intelligence_details(intelligence: dict | None) -> dict:
+        if not intelligence:
+            return {}
+        return {
+            "detectedPins": len((intelligence.get("pinout") or {}).get("pins") or []),
+            "facts": len(intelligence.get("facts") or []),
+        }
 
     def mark_source_ready_for_review(self, source):
         ready_sources = self.vector_store.set_sources_status([source], DocumentStatusId.NEEDS_REVIEW)

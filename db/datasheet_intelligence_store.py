@@ -5,6 +5,7 @@ from psycopg.errors import UndefinedColumn, UndefinedTable
 from db.connection import Database
 from db.sql import load_query
 from db.text import clean_db_text
+from backend.services.datasheet_intelligence import DATASHEET_INTELLIGENCE_VERSION
 
 
 class DatasheetIntelligenceStore:
@@ -87,6 +88,7 @@ class DatasheetIntelligenceStore:
             "summary": summary["summary"] or "",
             "confidence": float(summary["confidence"] or 0.0),
             "updatedAt": summary["updated_at"].isoformat() if summary["updated_at"] else None,
+            "extractorVersion": DATASHEET_INTELLIGENCE_VERSION,
             "facts": [
                 {
                     "type": row["fact_type"],

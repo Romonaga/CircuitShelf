@@ -267,6 +267,19 @@ class CircuitShelfRuntime:
             finish_document_worker=self.ingest_progress.finish_document_worker,
             pdf_ext=self.pdf_ext,
         )
+        self.document_intelligence_service = DocumentIntelligenceService(
+            state=self.state,
+            vector_store=stores.vector_store,
+            intelligence_store=stores.intelligence_store,
+            trace_logger=self.trace_logger,
+            training_dir=self.training_dir,
+            display_source_name=display_source_name,
+            document_source_from_metadata=document_source_from_metadata,
+            image_asset_belongs_to_document=image_asset_belongs_to_document,
+            extract_page_number=self.ingestion_pipeline.extract_page_number,
+            config=self.config,
+            openai_assist_service=stores.openai_assist_service,
+        )
 
     def apply_gpu_runtime_settings(self):
         self.local_gpu_llm_slots = resolve_local_gpu_llm_slots(self.config, detected_gpus=self.detected_local_gpus)
@@ -402,6 +415,11 @@ class CircuitShelfRuntime:
             prune_training_files_from_state=self.ingest_context_service.prune_training_files_from_state,
             persist_db_image_state=self.image_state_service.persist_db_image_state,
             maybe_review_ingestion_with_openai=self.ingest_context_service.maybe_review_ingestion_with_openai,
+            build_document_intelligence=lambda source, ingested_state: self.ingest_context_service.build_document_intelligence_for_ingest(
+                source,
+                ingested_state,
+                self.document_intelligence_service,
+            ),
             collect_ingest_stats=collect_document_ingest_stats,
             count_ingest_chunks_by_document=count_state_chunks_by_document,
             count_ingest_images_by_document=count_state_images_by_document,
@@ -455,19 +473,6 @@ class CircuitShelfRuntime:
 
     def _build_query_services(self):
         stores = self.stores
-        self.document_intelligence_service = DocumentIntelligenceService(
-            state=self.state,
-            vector_store=stores.vector_store,
-            intelligence_store=stores.intelligence_store,
-            trace_logger=self.trace_logger,
-            training_dir=self.training_dir,
-            display_source_name=display_source_name,
-            document_source_from_metadata=document_source_from_metadata,
-            image_asset_belongs_to_document=image_asset_belongs_to_document,
-            extract_page_number=self.ingestion_pipeline.extract_page_number,
-            config=self.config,
-            openai_assist_service=stores.openai_assist_service,
-        )
         self.query_preprocessor = QueryPreprocessor(
             config=self.config,
             trace_logger=self.trace_logger,

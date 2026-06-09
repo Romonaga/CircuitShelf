@@ -1,4 +1,4 @@
-from backend.services.document_intelligence_service import merge_datasheet_repair
+from backend.services.document_intelligence_service import DocumentIntelligenceService, merge_datasheet_repair
 
 
 def test_datasheet_repair_fills_missing_pinout_without_losing_local_facts():
@@ -64,3 +64,16 @@ def test_datasheet_repair_does_not_replace_stronger_local_pinout():
 
     assert [pin["pin"] for pin in merged["pinout"]["pins"]] == [1, 2, 3, 4]
     assert merged["confidence"] == 0.97
+
+
+def test_stored_datasheet_intelligence_with_store_version_is_usable():
+    stored = {
+        "componentName": "ESP32",
+        "componentType": "microcontroller",
+        "confidence": 0.91,
+        "extractorVersion": 2,
+        "facts": [],
+        "pinout": {"pins": [{"pin": 1, "label": "GND", "function": "Ground"}]},
+    }
+
+    assert DocumentIntelligenceService.stored_is_usable(stored)

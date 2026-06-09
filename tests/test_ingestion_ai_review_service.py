@@ -216,3 +216,42 @@ def test_general_book_skips_ai_review():
     assert result is None
     assert store.reviews == []
     assert openai.calls == []
+
+
+def test_component_datasheet_without_pinout_triggers_ai_review_from_intelligence():
+    service, store, openai = make_service(
+        local_response=(
+            '{"quality":"weak","useful":false,"confidence":0.55,'
+            '"warnings":["component datasheet lacks pinout"],"suggestedReviewFocus":"pinout table",'
+            '"escalateToOpenAI":true,"reason":"pinout is missing"}'
+        )
+    )
+
+    result = service.review(
+        source_path="Espressif ESP32 datasheet.pdf",
+        is_global=True,
+        entity_id=None,
+        user_id=1,
+        stats={
+            "rawChunkCount": 220,
+            "chunkCount": 213,
+            "extractedImageCount": 16,
+            "indexedImageTextCount": 16,
+            "ocrImageTextCount": 16,
+        },
+        sample_text="ESP32 Series Datasheet electrical characteristics recommended operating conditions",
+        intelligence={
+            "documentType": "component_datasheet",
+            "componentName": "ESP32",
+            "componentType": "microcontroller",
+            "confidence": 0.91,
+            "facts": [{"type": "voltage", "label": "VDD", "value": "3.3", "unit": "V"}],
+            "pinout": {"pins": []},
+        },
+        openai_enabled=True,
+    )
+
+    assert result["provider"] == "ollama+openai"
+    assert len(store.reviews) == 1
+    assert len(openai.calls) == 1
+    assert "has no detected pinout" in openai.calls[0]["decision_reason"]
