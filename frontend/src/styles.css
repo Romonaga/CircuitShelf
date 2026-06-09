@@ -81,6 +81,16 @@ body {
   background-size: 44px 44px;
 }
 
+html,
+#root {
+  min-height: 100%;
+  background:
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(0deg, var(--bg-grid) 1px, transparent 1px),
+    var(--bg);
+  background-size: 44px 44px;
+}
+
 button,
 input,
 select,
@@ -1062,7 +1072,32 @@ nav {
 
 .docs-grid {
   grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
-  align-items: start;
+  align-items: stretch;
+  height: calc(100dvh - 120px);
+  min-height: 620px;
+  overflow: hidden;
+}
+
+.docs-grid > .document-list-panel,
+.docs-grid > .document-detail-panel {
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+}
+
+.docs-grid > .document-list-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.docs-grid > .document-list-panel .document-list {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.docs-grid > .document-detail-panel {
+  overflow: auto;
 }
 
 .review-grid {
@@ -4209,7 +4244,7 @@ nav {
   gap: 10px;
   min-width: 0;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .document-page-inspector .empty-state {
@@ -5585,6 +5620,22 @@ nav {
   .settings-grid,
   .resource-panel {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .docs-grid {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .docs-grid > .document-list-panel,
+  .docs-grid > .document-detail-panel {
+    height: auto;
+    max-height: none;
+  }
+
+  .docs-grid > .document-list-panel .document-list {
+    max-height: min(520px, 46dvh);
   }
 
   .ask-grid,
