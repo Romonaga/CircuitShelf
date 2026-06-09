@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v git >/dev/null 2>&1; then
+  exit 0
+fi
+
+if git diff --cached --name-only | grep -q '^$'; then
+  exit 0
+fi
+
+if git diff --cached -- . ':(exclude).git-hooks/pre-commit' | grep -E -i '(BEGIN (RSA |EC )?PRIVATE KEY|sk-[A-Za-z0-9_-]{10,}|api[_-]?key|secret[_-]?key|password\s*=)' >/dev/null; then
+  echo "Potential secret-like content detected in staged changes."
+  echo "Review the diff before committing."
+  exit 1
+fi
+
+exit 0
