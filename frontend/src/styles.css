@@ -3511,11 +3511,13 @@ nav {
 
 .ingest-file-grid {
   --ingest-file-columns: minmax(220px, 1.35fr) 84px 132px 82px 92px 132px;
+  align-content: start;
   max-height: 340px;
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
+  grid-auto-rows: max-content;
   overflow: auto;
   scrollbar-gutter: stable;
 }
