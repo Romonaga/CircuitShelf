@@ -464,6 +464,14 @@ class LocalGpuWorkCoordinator:
         self._last_cleanup_at = now
         try:
             with self.database.connection() as conn:
+                dead_pids = self._dead_gpu_work_process_ids(conn)
+                if dead_pids:
+                    conn.execute(load_query("local_gpu_work_cleanup_dead_processes.sql"), (dead_pids,))
+                    if self.logger:
+                        self.logger.warning(
+                            "⚠️ Recovered local GPU work owned by dead process IDs: "
+                            + ", ".join(str(pid) for pid in sorted(dead_pids))
+                        )
                 conn.execute(
                     load_query("local_gpu_work_cleanup_abandoned.sql"),
                     (
@@ -474,6 +482,26 @@ class LocalGpuWorkCoordinator:
         except Exception as exc:
             if self.logger:
                 self.logger.warning(f"⚠️ Local GPU queue abandoned-work cleanup failed: {exc}")
+
+    def _dead_gpu_work_process_ids(self, conn) -> list[int]:
+        rows = conn.execute(load_query("local_gpu_work_live_process_ids.sql")).fetchall()
+        dead: list[int] = []
+        for row in rows:
+            pid = row.get("process_id")
+            if pid is None:
+                continue
+            pid = int(pid)
+            if pid <= 0:
+                continue
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                dead.append(pid)
+            except PermissionError:
+                continue
+            except Exception:
+                continue
+        return dead
 
     def _start_heartbeat(self, task_id: str) -> tuple[threading.Event, threading.Thread]:
         stop_event = threading.Event()

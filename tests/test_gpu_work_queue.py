@@ -10,7 +10,15 @@ class FakeConnection:
 
     def execute(self, query, params=None):
         self.executed.append((query, params))
-        return None
+        return FakeResult([])
+
+
+class FakeResult:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def fetchall(self):
+        return self.rows
 
 
 class FakeDatabase:
@@ -37,13 +45,20 @@ def test_abandoned_gpu_work_cleanup_runs_periodically(monkeypatch):
     coordinator.cleanup_abandoned()
     coordinator.cleanup_abandoned()
 
-    assert len(fake_database.conn.executed) == 1
+    assert [query for query, _ in fake_database.conn.executed] == [
+        "local_gpu_work_live_process_ids.sql",
+        "local_gpu_work_cleanup_abandoned.sql",
+    ]
 
     clock["now"] += 31
     coordinator.cleanup_abandoned()
 
-    assert len(fake_database.conn.executed) == 2
-    assert fake_database.conn.executed[0][0] == "local_gpu_work_cleanup_abandoned.sql"
+    assert [query for query, _ in fake_database.conn.executed] == [
+        "local_gpu_work_live_process_ids.sql",
+        "local_gpu_work_cleanup_abandoned.sql",
+        "local_gpu_work_live_process_ids.sql",
+        "local_gpu_work_cleanup_abandoned.sql",
+    ]
 
 
 def test_cleanup_abandoned_once_still_only_runs_once(monkeypatch):
@@ -54,4 +69,7 @@ def test_cleanup_abandoned_once_still_only_runs_once(monkeypatch):
     coordinator.cleanup_abandoned_once()
     coordinator.cleanup_abandoned_once()
 
-    assert len(fake_database.conn.executed) == 1
+    assert [query for query, _ in fake_database.conn.executed] == [
+        "local_gpu_work_live_process_ids.sql",
+        "local_gpu_work_cleanup_abandoned.sql",
+    ]
