@@ -294,7 +294,7 @@ class ImageStore:
 
     def delete_document_images(self, source_path: str) -> None:
         with self.database.connection() as conn:
-            conn.execute(load_query("review_document_images_delete.sql"), (source_path, source_path))
+            conn.execute(load_query("review_document_images_delete.sql"), (source_path,))
 
     def _metadata_by_image_key(self, metadata: list[dict]) -> dict[str, dict]:
         result = {}
