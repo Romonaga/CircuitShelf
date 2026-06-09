@@ -6,12 +6,7 @@ import yaml
 
 class Config:
     REQUIRED_KEYS = [
-        "EMBED_MODEL_NAME", "CROSS_ENCODER_MODEL",
-        "LLM_MODEL_NAME", "LLM_MODEL_OPTIONS", "OLLAMA_API_URL",
-        "TRAINING_DIR", "BUILD_INDEX_LOG_FILE",
-        "DOC_EXT", "PDF_EXT", "MD_EXT", "IMG_EXTENSIONS",
-        "CHUNK_SIZE", "CHUNK_OVERLAP", "SPECIAL_SECTION_PRIORITY",
-        "TRACE_LOG_FILE", "PROMPT_DIR"
+        "DATABASE_URL",
     ]
 
     def __init__(self, config_path, trace_logger):

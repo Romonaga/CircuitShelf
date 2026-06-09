@@ -5,7 +5,7 @@ from typing import Any
 
 from backend.api.dependencies import ApiDependencies
 from backend.auth_dependencies import AuthDependencyService
-from backend.bootstrap_environment import configure_nltk_and_tesseract
+from backend.bootstrap_environment import configure_tesseract
 from backend.bootstrap_settings import bootstrap_database_settings
 from backend.runtime_container import CircuitShelfRuntime
 from backend.services.app_runtime_helpers import TraceLogHelper
@@ -51,7 +51,7 @@ def bootstrap_runtime(*, ingest_status_callback=None, ingest_status_provider=Non
     stores.assert_available()
     trace_logger.info("🛠️ Configuration and logger successfully initialized.")
 
-    configure_nltk_and_tesseract(config=config, trace_logger=trace_logger)
+    configure_tesseract(config=config, trace_logger=trace_logger)
 
     runtime_settings = RuntimeSettingsManager(config, globals(), trace_logger)
     trace_log_file = config.get("TRACE_LOG_FILE", "logs/trace.log")

@@ -11,17 +11,17 @@ class ConfigStub:
 
 class RuntimeSettingsManagerTests(unittest.TestCase):
     def test_applies_live_setting_to_config_and_module_globals(self):
-        config = ConfigStub({"PDF_RENDER_MAX_PAGES_PER_DOC": 8})
-        module_globals = {"PDF_RENDER_MAX_PAGES_PER_DOC": 8}
+        config = ConfigStub({"LOG_RETENTION_DAYS": 7})
+        module_globals = {"LOG_RETENTION_DAYS": 7}
         manager = RuntimeSettingsManager(config, module_globals)
 
-        change = manager.apply_update("PDF_RENDER_MAX_PAGES_PER_DOC", 20)
+        change = manager.apply_update("LOG_RETENTION_DAYS", 1)
 
         self.assertTrue(change.changed)
         self.assertTrue(change.runtime_applied)
         self.assertFalse(change.restart_required)
-        self.assertEqual(config.config["PDF_RENDER_MAX_PAGES_PER_DOC"], 20)
-        self.assertEqual(module_globals["PDF_RENDER_MAX_PAGES_PER_DOC"], 20)
+        self.assertEqual(config.config["LOG_RETENTION_DAYS"], 1)
+        self.assertEqual(module_globals["LOG_RETENTION_DAYS"], 1)
 
     def test_startup_setting_updates_config_but_not_live_global(self):
         config = ConfigStub({"EMBED_MODEL_NAME": "old-model"})
@@ -59,7 +59,7 @@ class RuntimeSettingsManagerTests(unittest.TestCase):
     def test_restart_required_catalog_marks_known_startup_settings(self):
         self.assertTrue(setting_restart_required("APP_PORT"))
         self.assertTrue(setting_restart_required("CROSS_ENCODER_MODEL"))
-        self.assertFalse(setting_restart_required("PDF_RENDER_MAX_PAGES_PER_DOC"))
+        self.assertFalse(setting_restart_required("LOG_RETENTION_DAYS"))
         self.assertFalse(setting_restart_required("LLM_NUM_PREDICT"))
 
     def test_auto_batches_use_gpu_recommendations(self):

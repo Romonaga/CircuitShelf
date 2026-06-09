@@ -6,7 +6,6 @@
 
 
 import re
-from nltk.tokenize import sent_tokenize
 
 from backend.ingestion.chunking_math import MathDetectionMixin
 from backend.ingestion.chunking_ocr_quality import OcrQualityMixin
@@ -24,20 +23,12 @@ class ChunkingUtils(TextHeuristicsMixin, MathDetectionMixin, ChunkQualityMixin, 
         self.scoring_heurustics = self.config.get('SCORING_HEURISTICS', {})
         self.chunk_categories = self.config.get('CHUNK_CATEGORIES', {})
         self.equation_detection = self.config.get('EQUATION_DETECTION', {})
-        self._nltk_sentence_tokenizer_available = True
 
         self.trace_logger.debug(f"🔧 Loaded SCORING_HEURISTICS: {self.scoring_heurustics}")
         self.trace_logger.debug(f"📊 Loaded CHUNK_CATEGORIES: {self.chunk_categories}")
         self.trace_logger.debug(f"📊 Loaded EQUATION_DETECTION: {self.equation_detection}")
 
     def sentence_tokenize(self, text):
-        if self._nltk_sentence_tokenizer_available:
-            try:
-                return sent_tokenize(text)
-            except LookupError:
-                self._nltk_sentence_tokenizer_available = False
-                if self.trace_logger:
-                    self.trace_logger.warning("NLTK sentence tokenizer data is unavailable; using regex sentence splitter.")
         return [item.strip() for item in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])|\n+", text) if item.strip()]
 
     def split_lines_to_budget(self, lines, chunk_size, overlap):
@@ -156,18 +147,17 @@ class ChunkingUtils(TextHeuristicsMixin, MathDetectionMixin, ChunkQualityMixin, 
         chunks_out, meta = [], []
         
         if(chunk_size is None):
-            chunk_size = self.config.get("CHUNK_SIZE")
+            chunk_size = int(self.config.get("CHUNK_SIZE", 420) or 420)
 
         if(overlap is None):
-            overlap  =  self.config.get("CHUNK_OVERLAP")
+            overlap = int(self.config.get("CHUNK_OVERLAP", 80) or 80)
 
         text = self.normalize_extracted_text(text)
         if not text:
             return [], []
     
 
-        enable_math_chunking = self.config.get("ENABLE_MATH_HEAVY_CHUNKING", False)
-        if enable_math_chunking and not force_math and self.is_math_heavy(text):
+        if not force_math and self.is_math_heavy(text):
             force_math = True            
             self.trace_logger.info(f"🔍 Auto-detected math-heavy content in {source_file}. Switching to math chunking.")
 

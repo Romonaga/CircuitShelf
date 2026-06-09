@@ -82,9 +82,6 @@ class IncrementalDocumentProcessor:
                 ingest_token_utils,
                 progress_callback=detail_progress,
             )
-            if self.config.get("ENABLE_TOKEN_NORMALIZATION", False):
-                ingest_token_utils.normalize_token_distribution()
-
             elapsed = time.time() - start
             self.update_index_progress(
                 stage="processing_documents",

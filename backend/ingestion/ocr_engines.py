@@ -104,7 +104,7 @@ def run_tesseract_fallback_ocr(
 
 
 def _run_paddle_ocr(image: Image.Image, config: dict[str, Any]) -> OcrResult:
-    external_python = str(_config_value(config, "PADDLEOCR_PYTHON", "") or "").strip()
+    external_python = os.environ.get("CIRCUITSHELF_PADDLEOCR_PYTHON", "").strip()
     if external_python:
         return _run_external_paddle_ocr(image, config, external_python)
 

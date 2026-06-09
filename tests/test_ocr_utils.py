@@ -275,6 +275,7 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertTrue(all(result.fallback_from == "paddleocr" for result in results))
         self.assertIn("circuit breaker", results[-1].error)
 
+    @patch.dict("os.environ", {"CIRCUITSHELF_PADDLEOCR_PYTHON": "/tmp/ocr-python"})
     def test_paddleocr_external_python_runner_is_supported(self):
         image = Image.new("RGB", (120, 80), "white")
 
@@ -284,7 +285,6 @@ class OcrUtilsTests(unittest.TestCase):
                 image,
                 {
                     "OCR_ENGINE": "paddleocr",
-                    "PADDLEOCR_PYTHON": "/tmp/ocr-python",
                     "PADDLEOCR_DEVICE": "gpu",
                     "PADDLEOCR_LANG": "en",
                     "OCR_MIN_IMAGE_WIDTH": 20,

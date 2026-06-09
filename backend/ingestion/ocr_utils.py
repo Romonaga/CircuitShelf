@@ -68,7 +68,7 @@ def _config_value(config: dict[str, Any], key: str, default: Any = None) -> Any:
 
 
 def _tesseract_command(config: dict[str, Any]) -> str:
-    return str(_config_value(config, "TESSERACT_CMD", "tesseract") or "tesseract")
+    return os.environ.get("CIRCUITSHELF_TESSERACT_CMD") or "tesseract"
 
 
 def _tesseract_timeout(config: dict[str, Any]) -> float:

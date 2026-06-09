@@ -5,6 +5,22 @@ import yaml
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 
 CONFIG_PATH = os.path.join("config", "config.yaml")
+
+BOOTSTRAP_DEFAULTS = {
+    "APP_HOST": "0.0.0.0",
+    "APP_PORT": 1964,
+    "REACT_DIST_DIR": "frontend/dist",
+    "DB_MIGRATIONS_DIR": "db/migrations",
+    "DB_SCHEMA_VERSION_TABLE": "schema_migrations",
+    "PROMPT_DIR": "prompts",
+    "TRACE_LOG_FILE": "logs/trace.log",
+    "TRACE_LOG_LEVEL": "INFO",
+    "TRACE_ROTATE": "time",
+    "TRACE_MAX_BYTES": 10_485_760,
+    "TRACE_BACKUP_COUNT": 7,
+    "TRACE_WHEN": "midnight",
+    "TRACE_TIMESTAMPED_NAME": False,
+}
 class ConfigWrapper:
     def __init__(self, config_dict):
         self.config = config_dict
@@ -143,7 +159,9 @@ class SystemInit:
             raise FileNotFoundError(f"Config file not found at {CONFIG_PATH}")
 
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
+            config = yaml.safe_load(f) or {}
+        for key, value in BOOTSTRAP_DEFAULTS.items():
+            config.setdefault(key, value)
         if os.environ.get("DATABASE_URL"):
             config["DATABASE_URL"] = os.environ["DATABASE_URL"]
 

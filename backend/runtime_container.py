@@ -97,9 +97,9 @@ class CircuitShelfRuntime:
         self.react_dist_dir = config.get("REACT_DIST_DIR", "frontend/dist")
         self.query_retries = config.get("QUERY_RETRIES", 3)
         self.query_retry_delay = config.get("QUERY_RETRY_DELAY", 5)
-        self.doc_ext = config.get("DOC_EXT")
-        self.pdf_ext = config.get("PDF_EXT")
-        self.md_ext = config.get("MD_EXT")
+        self.doc_ext = config.get("DOC_EXT", ".docx") or ".docx"
+        self.pdf_ext = config.get("PDF_EXT", ".pdf") or ".pdf"
+        self.md_ext = config.get("MD_EXT", ".md") or ".md"
         self.prompt_dir = config.get("PROMPT_DIR", "prompts")
         self.training_dir = config.get("TRAINING_DIR", "training")
         self.trace_log_file = config.get("TRACE_LOG_FILE", "logs/trace.log")
@@ -570,14 +570,6 @@ class CircuitShelfRuntime:
         )
         self.runtime_settings.register_config_live_keys(
             {
-                "CHUNK_SIZE",
-                "CHUNK_OVERLAP",
-                "CHUNKING_MODE",
-                "MIN_TOKENS_PER_CHUNK",
-                "MAX_TOKENS_PER_CHUNK",
-                "MIN_CHUNK_QUALITY",
-                "MIN_ACCEPTED_SCORE",
-                "RERANK_FALLBACK_TOP_K",
                 "RERANK_MAX_CONTEXT_CHUNKS",
                 "EMBED_BATCH_SIZE",
                 "EMBED_BATCH_AUTO",
@@ -586,7 +578,6 @@ class CircuitShelfRuntime:
                 "TRAINING_RECURSIVE",
                 "TRAINING_EXCLUDE_DIRS",
                 "PDF_RENDER_VECTOR_PAGES",
-                "PDF_RENDER_MAX_PAGES_PER_DOC",
                 "PDF_RENDER_MIN_DRAWINGS",
                 "PDF_RENDER_ZOOM",
                 "PDF_RENDER_RASTER_PAGES",
@@ -599,7 +590,6 @@ class CircuitShelfRuntime:
                 "PADDLEOCR_DEVICE",
                 "PADDLEOCR_LANG",
                 "PADDLEOCR_ENGINE",
-                "PADDLEOCR_PYTHON",
                 "PADDLEOCR_TIMEOUT_SECONDS",
                 "OCR_INDEX_TEXT_MIN_CHARS",
                 "OCR_MIN_CONFIDENCE",
@@ -680,7 +670,9 @@ class CircuitShelfRuntime:
             self.pdf_ext,
             self.md_ext,
             ".txt",
-            *self.config.get("IMG_EXTENSIONS", []),
+            ".png",
+            ".jpg",
+            ".jpeg",
         }
 
     def build_ingest_manifest(self):

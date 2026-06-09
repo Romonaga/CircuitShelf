@@ -20,7 +20,8 @@ class AppSettingsStoreTests(unittest.TestCase):
         self.assertFalse(store._should_store("QUERY_SYNONYMS", []))
         self.assertFalse(store._should_store("SAVE_EXTRACTED_IMAGES", False))
         self.assertFalse(store._should_store("EXTRACTED_IMAGES_DIR", "extracted_images"))
-        self.assertTrue(store._should_store("CHUNK_SIZE", 500))
+        self.assertFalse(store._should_store("CHUNK_SIZE", 500))
+        self.assertTrue(store._should_store("SITE_NAME", "CircuitShelf"))
 
     def test_coerce_value_validates_booleans_and_numbers(self):
         store = AppSettingsStore(None)

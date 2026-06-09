@@ -75,10 +75,13 @@ class AppSettingsStore:
         if not self.database.configured:
             return 0
 
+        seedable_keys = {key for key in SETTING_UI if key not in BOOTSTRAP_SETTING_KEYS | SENSITIVE_SETTING_KEYS | DEPRECATED_SETTING_KEYS}
         existing = self.load()
         seeded = 0
         with self.database.connection() as conn:
             for key, value in sorted(config.items()):
+                if key not in seedable_keys:
+                    continue
                 if key in existing or not self._should_store(key, value):
                     continue
                 value_type, text_value, integer_value, numeric_value, boolean_value = self._typed_values(value)
@@ -131,6 +134,8 @@ class AppSettingsStore:
 
     def _should_store(self, key: str, value: Any) -> bool:
         if key in BOOTSTRAP_SETTING_KEYS or key in SENSITIVE_SETTING_KEYS or key in DEPRECATED_SETTING_KEYS:
+            return False
+        if key not in SETTING_UI:
             return False
         return isinstance(value, (str, int, float, bool)) and value is not None
 

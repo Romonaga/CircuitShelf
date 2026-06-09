@@ -1,7 +1,6 @@
 bcrypt
 fastapi
 lxml
-nltk
 numpy
 pandas
 pdfminer.six

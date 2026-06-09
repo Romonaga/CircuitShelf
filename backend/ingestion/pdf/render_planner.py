@@ -45,10 +45,6 @@ class PdfRenderPlanner:
                 )
             )
 
-        if scanned_ratio < 0.6:
-            max_pages = int(self.config.get("PDF_RENDER_MAX_PAGES_PER_DOC", 8) or 0)
-            if max_pages > 0:
-                requests = sorted(requests, key=lambda item: (-item[0], item[1].page_number))[:max_pages]
         requests.sort(key=lambda item: item[1].page_number)
         return [request for _score, request in requests]
 
