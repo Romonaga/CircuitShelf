@@ -119,11 +119,11 @@ def test_adaptive_ocr_slots_use_full_capacity_with_headroom():
 def test_adaptive_ocr_slots_step_down_under_pressure():
     moderate = resolve_adaptive_ocr_slots(
         8,
-        {"available": True, "gpuPercent": 76, "memoryUsedPercent": 60, "temperatureC": 58},
+        {"available": True, "gpuPercent": 84, "memoryUsedPercent": 60, "temperatureC": 58},
     )
     high = resolve_adaptive_ocr_slots(
         8,
-        {"available": True, "gpuPercent": 90, "memoryUsedPercent": 66, "temperatureC": 64},
+        {"available": True, "gpuPercent": 94, "memoryUsedPercent": 66, "temperatureC": 64},
     )
 
     assert moderate["activeSlots"] == 6
@@ -134,10 +134,21 @@ def test_adaptive_ocr_slots_step_down_under_pressure():
     assert high["reason"] == "high GPU pressure"
 
 
+def test_adaptive_ocr_slots_keep_capacity_with_low_gpu_and_resident_vram():
+    payload = resolve_adaptive_ocr_slots(
+        8,
+        {"available": True, "gpuPercent": 23, "memoryUsedPercent": 87, "temperatureC": 55},
+    )
+
+    assert payload["activeSlots"] == 8
+    assert payload["targetSlots"] == 8
+    assert payload["reason"] == "GPU headroom available"
+
+
 def test_adaptive_ocr_slots_clamp_on_vram_or_thermal_guard():
     vram = resolve_adaptive_ocr_slots(
         8,
-        {"available": True, "gpuPercent": 30, "memoryUsedPercent": 93, "temperatureC": 60},
+        {"available": True, "gpuPercent": 30, "memoryUsedPercent": 95, "temperatureC": 60},
     )
     thermal = resolve_adaptive_ocr_slots(
         8,
@@ -164,7 +175,7 @@ def test_adaptive_ocr_slots_fall_back_to_configured_capacity_without_telemetry()
 def test_adaptive_ocr_slots_do_not_report_below_running_work():
     payload = resolve_adaptive_ocr_slots(
         6,
-        {"available": True, "gpuPercent": 92, "memoryUsedPercent": 65, "temperatureC": 60},
+        {"available": True, "gpuPercent": 94, "memoryUsedPercent": 65, "temperatureC": 60},
         running_slots=5,
     )
 

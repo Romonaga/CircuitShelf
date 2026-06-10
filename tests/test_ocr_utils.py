@@ -388,7 +388,7 @@ class OcrUtilsTests(unittest.TestCase):
                 detected_gpus=1,
                 gpu_memory_total_mib=16 * 1024,
             ),
-            3,
+            4,
         )
         self.assertEqual(
             resolve_local_gpu_ocr_slots(
@@ -396,7 +396,7 @@ class OcrUtilsTests(unittest.TestCase):
                 detected_gpus=1,
                 gpu_memory_total_mib=24 * 1024,
             ),
-            6,
+            8,
         )
         self.assertEqual(
             resolve_local_gpu_ocr_slots(
@@ -404,7 +404,7 @@ class OcrUtilsTests(unittest.TestCase):
                 detected_gpus=4,
                 gpu_memory_total_mib=48 * 1024,
             ),
-            32,
+            40,
         )
         self.assertEqual(resolve_local_gpu_ocr_slots(ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "8"}), detected_gpus=1), 8)
 

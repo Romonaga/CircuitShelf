@@ -177,15 +177,13 @@ def resolve_adaptive_ocr_slots(
     gpu_percent = _optional_float(pressure.get("gpuPercent")) or 0.0
     vram_percent = _optional_float(pressure.get("memoryUsedPercent")) or 0.0
     temperature_c = _optional_float(pressure.get("temperatureC")) or 0.0
-    pressure_score = max(gpu_percent, vram_percent)
-
-    if temperature_c >= 82 or vram_percent >= 92:
+    if temperature_c >= 82 or vram_percent >= 94:
         ratio = 0.25
         reason = "thermal or VRAM guard"
-    elif pressure_score >= 88:
+    elif gpu_percent >= 92 or vram_percent >= 90:
         ratio = 0.50
         reason = "high GPU pressure"
-    elif pressure_score >= 72:
+    elif gpu_percent >= 82 or vram_percent >= 88:
         ratio = 0.75
         reason = "moderate GPU pressure"
     else:
@@ -260,15 +258,15 @@ def resolve_local_gpu_ocr_slots(
     else:
         total_gib = float(total_mib) / 1024.0
         if total_gib >= 40:
-            lanes_per_gpu = 8
+            lanes_per_gpu = 10
         elif total_gib >= 20:
-            lanes_per_gpu = 6
+            lanes_per_gpu = 8
         elif total_gib >= 12:
-            lanes_per_gpu = 3
+            lanes_per_gpu = 4
         else:
             lanes_per_gpu = 1
 
-    return max(1, min(detected * lanes_per_gpu, detected * 8, 32))
+    return max(1, min(detected * lanes_per_gpu, detected * 10, 40))
 
 
 def resolve_local_gpu_ocr_pending_cap(
