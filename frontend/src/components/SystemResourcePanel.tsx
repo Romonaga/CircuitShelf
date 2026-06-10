@@ -5,6 +5,10 @@ function queueCount(queue: LocalGpuQueueStatus | null | undefined, resource: str
   return queue?.byResource?.[resource]?.[status] ?? 0;
 }
 
+function queueMetric(queue: LocalGpuQueueStatus | null | undefined, resource: string, key: string) {
+  return queue?.byResource?.[resource]?.[key] ?? null;
+}
+
 function queueWait(queue: LocalGpuQueueStatus | null | undefined) {
   const wait = queue?.wait?.currentMaxWaitSeconds;
   return wait == null ? "n/a" : `${formatNumber(wait)}s`;
@@ -41,6 +45,9 @@ export function SystemResourcePanel({
   const gpu = resources?.gpu;
   const gpuQueued = queue?.queued ?? 0;
   const gpuRunning = queue?.active ?? 0;
+  const ocrSlots = queue?.adaptiveSlots?.ocr_cuda;
+  const ocrWait = queueMetric(queue, "ocr_cuda", "currentMaxWaitSeconds");
+  const ocrReason = ocrSlots?.reason || "n/a";
 
   return (
     <div className="system-resource-panel">
@@ -69,13 +76,16 @@ export function SystemResourcePanel({
           <span><small>VRAM</small><strong>{gpuMemoryLabel(resources)}</strong></span>
           <span><small>Power</small><strong>{gpu?.available && gpu.powerW != null ? `${formatNumber(gpu.powerW)} W` : "n/a"}</strong></span>
           <span><small>Temp</small><strong>{gpu?.available && gpu.temperatureC != null ? `${formatNumber(gpu.temperatureC)} C` : "n/a"}</strong></span>
-          <span><small>Queue</small><strong>{formatInteger(gpuRunning)} active / {formatInteger(gpuQueued)} queued</strong></span>
+          <span><small>Total queue</small><strong>{formatInteger(gpuRunning)} running / {formatInteger(gpuQueued)} queued</strong></span>
           <span><small>Oldest wait</small><strong>{queueWait(queue)}</strong></span>
         </div>
         <div className="resource-queue-grid">
-          <span><small>LLM</small><strong>{formatInteger(queueCount(queue, "local_llm", "running"))} / {formatInteger(queueCount(queue, "local_llm", "queued"))}</strong></span>
-          <span><small>CUDA</small><strong>{formatInteger(queueCount(queue, "cuda_batch", "running"))} / {formatInteger(queueCount(queue, "cuda_batch", "queued"))}</strong></span>
-          <span><small>OCR</small><strong>{formatInteger(queueCount(queue, "ocr_cuda", "running"))} / {formatInteger(queueCount(queue, "ocr_cuda", "queued"))}</strong></span>
+          <span><small>LLM running / queued</small><strong>{formatInteger(queueCount(queue, "local_llm", "running"))} / {formatInteger(queueCount(queue, "local_llm", "queued"))}</strong></span>
+          <span><small>CUDA running / queued</small><strong>{formatInteger(queueCount(queue, "cuda_batch", "running"))} / {formatInteger(queueCount(queue, "cuda_batch", "queued"))}</strong></span>
+          <span><small>OCR running / queued</small><strong>{formatInteger(queueCount(queue, "ocr_cuda", "running"))} / {formatInteger(queueCount(queue, "ocr_cuda", "queued"))}</strong></span>
+          <span><small>OCR lanes</small><strong>{formatInteger(ocrSlots?.runningSlots)} / {formatInteger(ocrSlots?.activeSlots)} active, {formatInteger(ocrSlots?.maxSlots)} max</strong></span>
+          <span><small>OCR oldest wait</small><strong>{ocrWait == null ? "n/a" : `${formatNumber(ocrWait)}s`}</strong></span>
+          <span className="resource-queue-reason"><small>OCR lane reason</small><strong>{ocrReason}</strong></span>
         </div>
       </section>
     </div>
