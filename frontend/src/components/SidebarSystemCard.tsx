@@ -141,8 +141,8 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
         <span><small>Rank</small><strong>{formatInteger(batches?.reranker?.active)}</strong></span>
         <span>
           <small>LLM</small>
-          <strong title={`Waiting ${formatInteger(llmQueue?.waiting)} | keep alive ${llmQueue?.keepAlive ?? "n/a"}`}>
-            {formatInteger(llmQueue?.active)} / {formatInteger(llmQueue?.maxConcurrent)}
+          <strong title={`Queued ${formatInteger(localLlmGpuQueue?.queued)} | completed ${formatInteger(localLlmGpuQueue?.completed)} | Ollama gate waiting ${formatInteger(llmQueue?.waiting)} | keep alive ${llmQueue?.keepAlive ?? "n/a"}`}>
+            {formatInteger(localLlmGpuQueue?.running)} / {formatInteger(gpuQueue?.llmSlots)}
           </strong>
         </span>
       </div>
