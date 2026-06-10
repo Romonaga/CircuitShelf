@@ -161,15 +161,15 @@ def resolve_local_gpu_ocr_slots(
     else:
         total_gib = float(total_mib) / 1024.0
         if total_gib >= 40:
-            lanes_per_gpu = 4
+            lanes_per_gpu = 8
         elif total_gib >= 20:
-            lanes_per_gpu = 3
+            lanes_per_gpu = 6
         elif total_gib >= 12:
-            lanes_per_gpu = 2
+            lanes_per_gpu = 3
         else:
             lanes_per_gpu = 1
 
-    return max(1, min(detected * lanes_per_gpu, detected * 4, 16))
+    return max(1, min(detected * lanes_per_gpu, detected * 8, 32))
 
 
 def resolve_local_gpu_ocr_pending_cap(
@@ -187,7 +187,7 @@ def resolve_local_gpu_ocr_pending_cap(
     else:
         total_gib = float(total_mib) / 1024.0
         multiplier = 3 if total_gib >= 20 else 2
-    return max(slots, min(slots * multiplier, detected * 8, 24))
+    return max(slots, min(slots * multiplier, detected * 16, 48))
 
 
 @dataclass(frozen=True)

@@ -4231,14 +4231,14 @@ nav {
 }
 
 .document-detail-panel > .ingest-status-panel.expanded.with-file-progress {
-  min-height: clamp(640px, calc(100vh - 190px), 1080px);
-  grid-template-rows: auto auto auto auto minmax(420px, 1fr) auto auto;
+  min-height: auto;
+  grid-auto-rows: max-content;
+  align-content: start;
 }
 
 .document-detail-panel > .ingest-status-panel.expanded.with-file-progress .ingest-file-grid {
-  height: 100%;
-  min-height: 420px;
-  max-height: none;
+  min-height: 0;
+  max-height: clamp(360px, 56vh, 820px);
 }
 
 .document-detail-panel .intelligence-panel {
