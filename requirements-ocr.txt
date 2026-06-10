@@ -1,0 +1,12 @@
+# Optional isolated OCR runtime.
+#
+# Install this into .venv-ocr, not the main .venv. Paddle and Torch currently
+# want different CUDA Python package versions, so keeping OCR isolated prevents
+# PaddleOCR from breaking embeddings, reranking, and local model work.
+#
+#   python3 -m venv .venv-ocr
+#   .venv-ocr/bin/python -m pip install --upgrade pip
+#   .venv-ocr/bin/python -m pip install -r requirements-ocr.txt
+
+paddlepaddle-gpu==3.3.1
+paddleocr==3.6.0

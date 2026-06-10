@@ -12,6 +12,7 @@ from backend.ingestion.ocr_assets import OcrAssetProcessor
 from backend.ingestion.pdf.embedded_image_extractor import EmbeddedPdfImageExtractor
 from backend.ingestion.pdf.extractor import PdfDocumentExtractor
 from backend.ingestion.ocr_engines import (
+    _external_paddleocr_python,
     _extract_paddle_text_and_confidence,
     _paddleocr_kwargs,
     clear_ocr_engine_cache,
@@ -298,6 +299,11 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertEqual(result.text, "VCC GND")
         self.assertEqual(result.confidence, 91.5)
         self.assertEqual(run_mock.call_args.args[0][0], "/tmp/ocr-python")
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_paddleocr_external_python_defaults_to_ocr_venv(self):
+        with patch("backend.ingestion.ocr_engines.Path.exists", return_value=True):
+            self.assertTrue(_external_paddleocr_python().endswith(".venv-ocr/bin/python"))
 
     def test_paddleocr_result_normalization_handles_current_json_shape(self):
         text, confidence = _extract_paddle_text_and_confidence(

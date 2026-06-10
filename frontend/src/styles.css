@@ -3905,6 +3905,7 @@ nav {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
+  align-self: start;
   gap: 6px;
   padding: 7px 9px;
   border: 1px solid var(--line);
@@ -3934,6 +3935,9 @@ nav {
 
 .ingest-queue-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  align-items: start;
 }
 
 .ingest-worker-budget {

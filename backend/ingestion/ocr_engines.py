@@ -105,7 +105,7 @@ def run_tesseract_fallback_ocr(
 
 
 def _run_paddle_ocr(image: Image.Image, config: dict[str, Any]) -> OcrResult:
-    external_python = os.environ.get("CIRCUITSHELF_PADDLEOCR_PYTHON", "").strip()
+    external_python = _external_paddleocr_python()
     if external_python:
         return _run_external_paddle_ocr(image, config, external_python)
 
@@ -122,6 +122,17 @@ def _run_paddle_ocr(image: Image.Image, config: dict[str, Any]) -> OcrResult:
 
     text, confidence = _extract_paddle_text_and_confidence(raw_result)
     return OcrResult(text=text, confidence=confidence, engine=f"paddleocr/{_paddle_device(config)}")
+
+
+def _external_paddleocr_python() -> str:
+    configured = os.environ.get("CIRCUITSHELF_PADDLEOCR_PYTHON", "").strip()
+    if configured:
+        return configured
+    repo_root = Path(__file__).resolve().parents[2]
+    bundled_venv_python = repo_root / ".venv-ocr" / "bin" / "python"
+    if bundled_venv_python.exists():
+        return str(bundled_venv_python)
+    return ""
 
 
 def _run_external_paddle_ocr(image: Image.Image, config: dict[str, Any], python_path: str) -> OcrResult:
