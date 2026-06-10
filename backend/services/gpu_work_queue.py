@@ -719,11 +719,11 @@ class LocalGpuWorkCoordinator:
             if elapsed >= timeout_seconds:
                 raise TimeoutError(f"Local GPU queue timed out after {timeout_seconds:.0f}s.")
 
-            if not self._task_is_eligible(task_id):
+            effective_slot_count = self._effective_slot_count_for(resource_class)
+            if not self._task_is_eligible(task_id, effective_slot_count):
                 time.sleep(self.poll_seconds)
                 continue
 
-            effective_slot_count = self._effective_slot_count_for(resource_class)
             for slot_index in range(effective_slot_count):
                 conn = self.database._connection_pool().getconn()
                 lock_key = self._lock_key(resource_class, slot_index)
@@ -757,9 +757,12 @@ class LocalGpuWorkCoordinator:
 
             time.sleep(self.poll_seconds)
 
-    def _task_is_eligible(self, task_id: str) -> bool:
+    def _task_is_eligible(self, task_id: str, slot_count: int) -> bool:
         with self.database.connection() as conn:
-            row = conn.execute(load_query("local_gpu_work_eligible.sql"), (task_id,)).fetchone()
+            row = conn.execute(
+                load_query("local_gpu_work_eligible.sql"),
+                (max(1, int(slot_count or 1)), task_id),
+            ).fetchone()
         return bool(row and row.get("eligible"))
 
     def _finish_task(self, conn, task_id: str, status: LocalGpuWorkStatusId, error_message: str | None) -> None:
