@@ -106,6 +106,88 @@ def detect_local_gpu_memory_total_mib() -> int | None:
     return max(1, min(totals)) if totals else None
 
 
+def read_local_gpu_pressure() -> dict[str, Any]:
+    """Return a small, cheap pressure sample for queue admission decisions."""
+    rows = _query_nvidia_smi_gpu_lines("utilization.gpu,memory.used,memory.total,temperature.gpu")
+    samples: list[dict[str, float]] = []
+    for row in rows:
+        if len(row) < 4:
+            continue
+        try:
+            gpu_percent = float(row[0])
+            memory_used = float(row[1])
+            memory_total = float(row[2])
+            temperature_c = float(row[3])
+        except (TypeError, ValueError):
+            continue
+        samples.append(
+            {
+                "gpuPercent": gpu_percent,
+                "memoryUsedMiB": memory_used,
+                "memoryTotalMiB": memory_total,
+                "memoryUsedPercent": round((memory_used / memory_total) * 100.0, 2) if memory_total else 0.0,
+                "temperatureC": temperature_c,
+            }
+        )
+    if not samples:
+        return {"available": False}
+    return {
+        "available": True,
+        "gpuPercent": max(sample["gpuPercent"] for sample in samples),
+        "memoryUsedPercent": max(sample["memoryUsedPercent"] for sample in samples),
+        "memoryUsedMiB": max(sample["memoryUsedMiB"] for sample in samples),
+        "memoryTotalMiB": min(sample["memoryTotalMiB"] for sample in samples),
+        "temperatureC": max(sample["temperatureC"] for sample in samples),
+    }
+
+
+def _optional_float(value: Any) -> float | None:
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def resolve_adaptive_ocr_slots(max_slots: int, pressure: dict[str, Any]) -> dict[str, Any]:
+    """Choose currently admitted OCR lanes from live GPU pressure."""
+    max_slots = max(1, int(max_slots or 1))
+    if not pressure.get("available"):
+        return {
+            "enabled": False,
+            "activeSlots": max_slots,
+            "maxSlots": max_slots,
+            "reason": "gpu telemetry unavailable",
+            "pressure": pressure,
+        }
+
+    gpu_percent = _optional_float(pressure.get("gpuPercent")) or 0.0
+    vram_percent = _optional_float(pressure.get("memoryUsedPercent")) or 0.0
+    temperature_c = _optional_float(pressure.get("temperatureC")) or 0.0
+    pressure_score = max(gpu_percent, vram_percent)
+
+    if temperature_c >= 82 or vram_percent >= 92:
+        ratio = 0.25
+        reason = "thermal or VRAM guard"
+    elif pressure_score >= 88:
+        ratio = 0.50
+        reason = "high GPU pressure"
+    elif pressure_score >= 72:
+        ratio = 0.75
+        reason = "moderate GPU pressure"
+    else:
+        ratio = 1.0
+        reason = "GPU headroom available"
+
+    active_slots = max(1, min(max_slots, round(max_slots * ratio)))
+    return {
+        "enabled": True,
+        "activeSlots": active_slots,
+        "maxSlots": max_slots,
+        "reason": reason,
+        "pressure": pressure,
+    }
+
+
 def _resolve_slot_count(
     config: Any,
     key: str,
@@ -244,6 +326,8 @@ class LocalGpuWorkCoordinator:
         self.process_id = os.getpid()
         self._cleaned_abandoned = False
         self._last_cleanup_at = 0.0
+        self._pressure_lock = threading.Lock()
+        self._pressure_sample: tuple[float, dict[str, Any]] | None = None
 
     @property
     def slot_count(self) -> int:
@@ -310,8 +394,7 @@ class LocalGpuWorkCoordinator:
         heartbeat_stop: threading.Event | None = None
         heartbeat_thread: threading.Thread | None = None
         try:
-            conn, slot_index, wait_seconds = self._wait_for_slot(task_id, resource_class, timeout)
-            slot_count = self._slot_count_for(resource_class)
+            conn, slot_index, wait_seconds, slot_count = self._wait_for_slot(task_id, resource_class, timeout)
             lock_key = self._lock_key(resource_class, slot_index)
             lease = LocalGpuLease(
                 task_id=task_id,
@@ -372,6 +455,7 @@ class LocalGpuWorkCoordinator:
         window = f"{max(60, int(window_seconds))} seconds"
         try:
             self.cleanup_abandoned()
+            adaptive_slots = self._adaptive_slots_payload()
             with self.database.connection() as conn:
                 count_rows = conn.execute(load_query("local_gpu_work_counts.sql"), (window,)).fetchall()
                 live_count_rows = conn.execute(load_query("local_gpu_work_live_by_resource_counts.sql")).fetchall()
@@ -388,6 +472,7 @@ class LocalGpuWorkCoordinator:
                 "llmSlots": self.llm_slot_count,
                 "cudaSlots": self.cuda_slot_count,
                 "ocrSlots": self.ocr_slot_count,
+                "adaptiveSlots": self._adaptive_slots_payload(),
                 "detectedGpus": self.detected_gpu_count,
             }
         counts: dict[str, int] = {}
@@ -415,6 +500,7 @@ class LocalGpuWorkCoordinator:
             "llmSlots": self.llm_slot_count,
             "cudaSlots": self.cuda_slot_count,
             "ocrSlots": self.ocr_slot_count,
+            "adaptiveSlots": adaptive_slots,
             "detectedGpus": self.detected_gpu_count,
             "processId": self.process_id,
             "queueTimeoutSeconds": self.queue_timeout_seconds,
@@ -451,6 +537,7 @@ class LocalGpuWorkCoordinator:
             "enabled": True,
             "resourceClass": resource_class,
             "slots": self._slot_count_for(resource_class),
+            "admittedSlots": self._effective_slot_count_for(resource_class),
             "queued": queued,
             "running": running,
             "pending": queued + running,
@@ -636,7 +723,8 @@ class LocalGpuWorkCoordinator:
                 time.sleep(self.poll_seconds)
                 continue
 
-            for slot_index in range(slot_count):
+            effective_slot_count = self._effective_slot_count_for(resource_class)
+            for slot_index in range(effective_slot_count):
                 conn = self.database._connection_pool().getconn()
                 lock_key = self._lock_key(resource_class, slot_index)
                 try:
@@ -656,7 +744,7 @@ class LocalGpuWorkCoordinator:
                     ).fetchone()
                     conn.commit()
                     wait_seconds = float((running_row or {}).get("wait_seconds") or 0.0)
-                    return conn, slot_index, wait_seconds
+                    return conn, slot_index, wait_seconds, effective_slot_count
                 except Exception:
                     conn.rollback()
                     try:
@@ -706,6 +794,26 @@ class LocalGpuWorkCoordinator:
         if resource_class == "ocr_cuda":
             return self.ocr_slot_count
         return self.llm_slot_count
+
+    def _effective_slot_count_for(self, resource_class: str) -> int:
+        if resource_class != "ocr_cuda":
+            return self._slot_count_for(resource_class)
+        return self._adaptive_ocr_slot_count()["activeSlots"]
+
+    def _adaptive_slots_payload(self) -> dict[str, Any]:
+        return {"ocr_cuda": self._adaptive_ocr_slot_count()}
+
+    def _adaptive_ocr_slot_count(self) -> dict[str, Any]:
+        return resolve_adaptive_ocr_slots(self._slot_count_for("ocr_cuda"), self._cached_gpu_pressure())
+
+    def _cached_gpu_pressure(self, *, max_age_seconds: float = 1.0) -> dict[str, Any]:
+        now = time.monotonic()
+        with self._pressure_lock:
+            if self._pressure_sample and (now - self._pressure_sample[0]) <= max_age_seconds:
+                return dict(self._pressure_sample[1])
+            pressure = read_local_gpu_pressure()
+            self._pressure_sample = (now, dict(pressure))
+            return pressure
 
     @staticmethod
     def _lock_key(resource_class: str, slot_index: int) -> int:
@@ -758,13 +866,6 @@ class LocalGpuWorkCoordinator:
             context.append(detail_text)
         return " | ".join(context)
 
-    @staticmethod
-    def _optional_float(value: Any) -> float | None:
-        try:
-            return None if value is None else float(value)
-        except (TypeError, ValueError):
-            return None
-
     @classmethod
     def _wait_summary_payload(cls, rows: list[dict[str, Any]]) -> dict[str, Any]:
         by_resource: dict[str, dict[str, float | int | None]] = {}
@@ -774,10 +875,10 @@ class LocalGpuWorkCoordinator:
             payload = {
                 "queued": int(row.get("queued") or 0),
                 "running": int(row.get("running") or 0),
-                "currentAvgWaitSeconds": cls._optional_float(row.get("current_avg_wait_seconds")),
-                "currentMaxWaitSeconds": cls._optional_float(row.get("current_max_wait_seconds")),
-                "recentAvgWaitSeconds": cls._optional_float(row.get("recent_avg_wait_seconds")),
-                "recentMaxWaitSeconds": cls._optional_float(row.get("recent_max_wait_seconds")),
+                "currentAvgWaitSeconds": _optional_float(row.get("current_avg_wait_seconds")),
+                "currentMaxWaitSeconds": _optional_float(row.get("current_max_wait_seconds")),
+                "recentAvgWaitSeconds": _optional_float(row.get("recent_avg_wait_seconds")),
+                "recentMaxWaitSeconds": _optional_float(row.get("recent_max_wait_seconds")),
             }
             if resource == "all":
                 overall = payload

@@ -79,6 +79,21 @@ export interface LocalGpuQueueItem {
   updatedAt?: string | null;
 }
 
+export interface LocalGpuAdaptiveSlots {
+  enabled?: boolean;
+  activeSlots?: number;
+  maxSlots?: number;
+  reason?: string;
+  pressure?: {
+    available?: boolean;
+    gpuPercent?: number | null;
+    memoryUsedPercent?: number | null;
+    memoryUsedMiB?: number | null;
+    memoryTotalMiB?: number | null;
+    temperatureC?: number | null;
+  };
+}
+
 export interface LocalGpuQueueStatus {
   enabled: boolean;
   slots?: number;
@@ -101,6 +116,7 @@ export interface LocalGpuQueueStatus {
     recentAvgWaitSeconds?: number | null;
     recentMaxWaitSeconds?: number | null;
   };
+  adaptiveSlots?: Record<string, LocalGpuAdaptiveSlots | undefined>;
   byResource?: Record<string, Record<string, number | null | undefined>>;
   recent?: LocalGpuQueueItem[];
   error?: string | null;

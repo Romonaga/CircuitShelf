@@ -29,6 +29,24 @@ function formatSeconds(value?: number | null) {
   return value >= 60 ? `${formatNumber(value / 60)}m` : `${formatNumber(value)}s`;
 }
 
+function adaptiveSlotTitle(
+  reason?: string | null,
+  activeSlots?: number | null,
+  maxSlots?: number | null,
+  pressure?: {
+    gpuPercent?: number | null;
+    memoryUsedPercent?: number | null;
+    temperatureC?: number | null;
+  }
+) {
+  const pressureText = pressure
+    ? `GPU ${formatPercent(pressure.gpuPercent)} | VRAM ${formatPercent(pressure.memoryUsedPercent)} | temp ${
+        pressure.temperatureC == null ? "n/a" : `${formatNumber(pressure.temperatureC)} C`
+      }`
+    : "No pressure sample";
+  return `${reason || "adaptive admission"} | admitted ${formatInteger(activeSlots)} of ${formatInteger(maxSlots)} | ${pressureText}`;
+}
+
 export function SidebarSystemCard({ status, detailed = false }: { status: StatusPayload | null; detailed?: boolean }) {
   const resources = status?.systemResources;
   const gpu = resources?.gpu;
@@ -40,6 +58,7 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
   const gpuQueue = status?.localGpuQueue;
   const cudaQueue = gpuQueue?.byResource?.cuda_batch;
   const ocrGpuQueue = gpuQueue?.byResource?.ocr_cuda;
+  const ocrAdaptive = gpuQueue?.adaptiveSlots?.ocr_cuda;
   const localLlmGpuQueue = gpuQueue?.byResource?.local_llm;
   const workers = status?.ingestWorkerBudget;
   const workerCapacity = workers?.documentWorkerCapacity ?? workers?.activeDocumentWorkers;
@@ -103,8 +122,13 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
         </span>
         <span>
           <small>OCR</small>
-          <strong title={`Queued ${formatInteger(ocrGpuQueue?.queued)} | completed ${formatInteger(ocrGpuQueue?.completed)}`}>
-            {formatInteger(ocrGpuQueue?.running)} / {formatInteger(gpuQueue?.ocrSlots)}
+          <strong title={`Queued ${formatInteger(ocrGpuQueue?.queued)} | completed ${formatInteger(ocrGpuQueue?.completed)} | ${adaptiveSlotTitle(
+            ocrAdaptive?.reason,
+            ocrAdaptive?.activeSlots,
+            ocrAdaptive?.maxSlots ?? gpuQueue?.ocrSlots,
+            ocrAdaptive?.pressure,
+          )}`}>
+            {formatInteger(ocrGpuQueue?.running)} / {formatInteger(ocrAdaptive?.activeSlots ?? gpuQueue?.ocrSlots)}
           </strong>
         </span>
         <span><small>Emb</small><strong>{formatInteger(batches?.embedding?.active)}</strong></span>
@@ -143,7 +167,17 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
             <span><small>CUDA queued</small><strong>{formatInteger(cudaQueue?.queued)}</strong></span>
             <span><small>CUDA lanes</small><strong>{formatInteger(gpuQueue?.cudaSlots)}</strong></span>
             <span><small>OCR queued</small><strong>{formatInteger(ocrGpuQueue?.queued)}</strong></span>
-            <span><small>OCR lanes</small><strong>{formatInteger(gpuQueue?.ocrSlots)}</strong></span>
+            <span>
+              <small>OCR lanes</small>
+              <strong title={adaptiveSlotTitle(
+                ocrAdaptive?.reason,
+                ocrAdaptive?.activeSlots,
+                ocrAdaptive?.maxSlots ?? gpuQueue?.ocrSlots,
+                ocrAdaptive?.pressure,
+              )}>
+                {formatInteger(ocrAdaptive?.activeSlots ?? gpuQueue?.ocrSlots)} / {formatInteger(gpuQueue?.ocrSlots)}
+              </strong>
+            </span>
             <span><small>LLM GPU queued</small><strong>{formatInteger(localLlmGpuQueue?.queued)}</strong></span>
             <span><small>LLM GPU slots</small><strong>{formatInteger(gpuQueue?.llmSlots)}</strong></span>
             <span><small>LLM waiting</small><strong>{formatInteger(llmQueue?.waiting)}</strong></span>

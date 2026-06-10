@@ -49,6 +49,25 @@ function queueTimestamp(item: LocalGpuQueueItem) {
   return value ? new Date(value).toLocaleString() : "n/a";
 }
 
+function adaptiveSlotInfo(queue: LocalGpuQueueStatus, resourceClass: string, configuredSlots?: number) {
+  const adaptive = queue.adaptiveSlots?.[resourceClass];
+  return {
+    admittedSlots: adaptive?.activeSlots ?? configuredSlots,
+    configuredSlots: adaptive?.maxSlots ?? configuredSlots,
+    reason: adaptive?.reason,
+    pressure: adaptive?.pressure,
+  };
+}
+
+function adaptiveDetail(queue: LocalGpuQueueStatus, resourceClass: string, configuredSlots?: number) {
+  const adaptive = adaptiveSlotInfo(queue, resourceClass, configuredSlots);
+  const pressure = adaptive.pressure;
+  const pressureText = pressure?.available
+    ? `GPU ${formatNumber(pressure.gpuPercent)}%, VRAM ${formatNumber(pressure.memoryUsedPercent)}%, ${formatNumber(pressure.temperatureC)} C`
+    : "no pressure sample";
+  return `${adaptive.reason || "fixed admission"} | admitted ${formatInteger(adaptive.admittedSlots)} of ${formatInteger(adaptive.configuredSlots)} | ${pressureText}`;
+}
+
 function resourceRows(queue: LocalGpuQueueStatus) {
   const byResource = queue.byResource || {};
   const configured = [
@@ -62,6 +81,7 @@ function resourceRows(queue: LocalGpuQueueStatus) {
   return [...configured, ...extras].map(([resourceClass, slots]) => ({
     resourceClass,
     slots,
+    adaptive: adaptiveSlotInfo(queue, resourceClass, slots),
     counts: byResource[resourceClass] || {},
   }));
 }
@@ -87,8 +107,10 @@ export function LocalGpuQueuePanel({ queue }: { queue?: LocalGpuQueueStatus | nu
           <strong>{formatInteger(queue.cudaSlots)}</strong>
         </div>
         <div className="status-stat">
-          <span>OCR slots</span>
-          <strong>{formatInteger(queue.ocrSlots)}</strong>
+          <span>OCR lanes</span>
+          <strong title={adaptiveDetail(queue, "ocr_cuda", queue.ocrSlots)}>
+            {formatInteger(queue.adaptiveSlots?.ocr_cuda?.activeSlots ?? queue.ocrSlots)} / {formatInteger(queue.ocrSlots)}
+          </strong>
         </div>
         <div className="status-stat">
           <span>Active</span>
@@ -124,7 +146,10 @@ export function LocalGpuQueuePanel({ queue }: { queue?: LocalGpuQueueStatus | nu
               <strong>{formatInteger(row.counts.running)} running</strong>
             </div>
             <div className="gpu-queue-lane-metrics">
-              <span><small>Slots</small>{row.slots == null ? "n/a" : formatInteger(row.slots)}</span>
+              <span title={adaptiveDetail(queue, row.resourceClass, row.slots)}>
+                <small>Admitted</small>
+                {row.adaptive.admittedSlots == null ? "n/a" : `${formatInteger(row.adaptive.admittedSlots)} / ${formatInteger(row.adaptive.configuredSlots)}`}
+              </span>
               <span><small>Queued</small>{formatInteger(row.counts.queued)}</span>
               <span><small>Done</small>{formatInteger(row.counts.completed)}</span>
               <span><small>Failed</small>{formatInteger(row.counts.failed)}</span>

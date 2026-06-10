@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 from backend.services import gpu_work_queue
-from backend.services.gpu_work_queue import LocalGpuWorkCoordinator
+from backend.services.gpu_work_queue import LocalGpuWorkCoordinator, resolve_adaptive_ocr_slots
 
 
 class FakeConnection:
@@ -101,3 +101,55 @@ def test_wait_summary_payload_splits_overall_and_resource_rows():
     assert payload["overall"]["currentMaxWaitSeconds"] == 5.0
     assert payload["byResource"]["cuda_batch"]["running"] == 1
     assert payload["byResource"]["cuda_batch"]["recentAvgWaitSeconds"] == 0.5
+
+
+def test_adaptive_ocr_slots_use_full_capacity_with_headroom():
+    payload = resolve_adaptive_ocr_slots(
+        6,
+        {"available": True, "gpuPercent": 35, "memoryUsedPercent": 40, "temperatureC": 55},
+    )
+
+    assert payload["enabled"] is True
+    assert payload["activeSlots"] == 6
+    assert payload["maxSlots"] == 6
+    assert payload["reason"] == "GPU headroom available"
+
+
+def test_adaptive_ocr_slots_step_down_under_pressure():
+    moderate = resolve_adaptive_ocr_slots(
+        8,
+        {"available": True, "gpuPercent": 76, "memoryUsedPercent": 60, "temperatureC": 58},
+    )
+    high = resolve_adaptive_ocr_slots(
+        8,
+        {"available": True, "gpuPercent": 90, "memoryUsedPercent": 66, "temperatureC": 64},
+    )
+
+    assert moderate["activeSlots"] == 6
+    assert moderate["reason"] == "moderate GPU pressure"
+    assert high["activeSlots"] == 4
+    assert high["reason"] == "high GPU pressure"
+
+
+def test_adaptive_ocr_slots_clamp_on_vram_or_thermal_guard():
+    vram = resolve_adaptive_ocr_slots(
+        8,
+        {"available": True, "gpuPercent": 30, "memoryUsedPercent": 93, "temperatureC": 60},
+    )
+    thermal = resolve_adaptive_ocr_slots(
+        8,
+        {"available": True, "gpuPercent": 30, "memoryUsedPercent": 40, "temperatureC": 83},
+    )
+
+    assert vram["activeSlots"] == 2
+    assert vram["reason"] == "thermal or VRAM guard"
+    assert thermal["activeSlots"] == 2
+    assert thermal["reason"] == "thermal or VRAM guard"
+
+
+def test_adaptive_ocr_slots_fall_back_to_configured_capacity_without_telemetry():
+    payload = resolve_adaptive_ocr_slots(5, {"available": False})
+
+    assert payload["enabled"] is False
+    assert payload["activeSlots"] == 5
+    assert payload["maxSlots"] == 5
