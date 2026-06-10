@@ -182,3 +182,78 @@ def test_adaptive_ocr_slots_do_not_report_below_running_work():
     assert payload["targetSlots"] == 3
     assert payload["activeSlots"] == 5
     assert payload["runningSlots"] == 5
+
+
+def test_coordinator_keeps_ocr_lanes_on_transient_pressure(monkeypatch):
+    coordinator = LocalGpuWorkCoordinator(database=FakeDatabase(), ocr_slot_count=8)
+    samples = iter(
+        [
+            {"available": True, "gpuPercent": 30, "memoryUsedPercent": 40, "temperatureC": 55},
+            {"available": True, "gpuPercent": 94, "memoryUsedPercent": 40, "temperatureC": 55},
+            {"available": True, "gpuPercent": 30, "memoryUsedPercent": 40, "temperatureC": 55},
+        ]
+    )
+    monkeypatch.setattr(coordinator, "_cached_gpu_pressure", lambda: next(samples))
+
+    assert coordinator._adaptive_ocr_slot_count()["targetSlots"] == 8
+    pressure = coordinator._adaptive_ocr_slot_count()
+    assert pressure["rawTargetSlots"] == 4
+    assert pressure["targetSlots"] == 8
+    assert pressure["activeSlots"] == 8
+    assert pressure["pressureStrikes"] == 1
+    assert coordinator._adaptive_ocr_slot_count()["targetSlots"] == 8
+
+
+def test_coordinator_reduces_ocr_lanes_after_sustained_pressure(monkeypatch):
+    coordinator = LocalGpuWorkCoordinator(database=FakeDatabase(), ocr_slot_count=8)
+    samples = iter(
+        [
+            {"available": True, "gpuPercent": 30, "memoryUsedPercent": 40, "temperatureC": 55},
+            {"available": True, "gpuPercent": 94, "memoryUsedPercent": 40, "temperatureC": 55},
+            {"available": True, "gpuPercent": 94, "memoryUsedPercent": 40, "temperatureC": 55},
+            {"available": True, "gpuPercent": 94, "memoryUsedPercent": 40, "temperatureC": 55},
+        ]
+    )
+    monkeypatch.setattr(coordinator, "_cached_gpu_pressure", lambda: next(samples))
+
+    assert coordinator._adaptive_ocr_slot_count()["targetSlots"] == 8
+    assert coordinator._adaptive_ocr_slot_count()["targetSlots"] == 8
+    assert coordinator._adaptive_ocr_slot_count()["targetSlots"] == 8
+    sustained = coordinator._adaptive_ocr_slot_count()
+    assert sustained["rawTargetSlots"] == 4
+    assert sustained["targetSlots"] == 4
+    assert sustained["activeSlots"] == 4
+
+
+def test_coordinator_reduces_ocr_lanes_immediately_for_hard_guard(monkeypatch):
+    coordinator = LocalGpuWorkCoordinator(database=FakeDatabase(), ocr_slot_count=8)
+    samples = iter(
+        [
+            {"available": True, "gpuPercent": 30, "memoryUsedPercent": 40, "temperatureC": 55},
+            {"available": True, "gpuPercent": 30, "memoryUsedPercent": 95, "temperatureC": 55},
+        ]
+    )
+    monkeypatch.setattr(coordinator, "_cached_gpu_pressure", lambda: next(samples))
+
+    assert coordinator._adaptive_ocr_slot_count()["targetSlots"] == 8
+    guarded = coordinator._adaptive_ocr_slot_count()
+    assert guarded["rawTargetSlots"] == 2
+    assert guarded["targetSlots"] == 2
+    assert guarded["activeSlots"] == 2
+
+
+def test_coordinator_reports_running_ocr_lanes_even_when_target_is_lower(monkeypatch):
+    coordinator = LocalGpuWorkCoordinator(database=FakeDatabase(), ocr_slot_count=8)
+    samples = iter(
+        [
+            {"available": True, "gpuPercent": 30, "memoryUsedPercent": 40, "temperatureC": 55},
+            {"available": True, "gpuPercent": 30, "memoryUsedPercent": 95, "temperatureC": 55},
+        ]
+    )
+    monkeypatch.setattr(coordinator, "_cached_gpu_pressure", lambda: next(samples))
+
+    assert coordinator._adaptive_ocr_slot_count()["targetSlots"] == 8
+    guarded = coordinator._adaptive_ocr_slot_count(running_slots=6)
+    assert guarded["targetSlots"] == 2
+    assert guarded["activeSlots"] == 6
+    assert guarded["runningSlots"] == 6

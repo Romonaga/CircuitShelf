@@ -180,15 +180,19 @@ def resolve_adaptive_ocr_slots(
     if temperature_c >= 82 or vram_percent >= 94:
         ratio = 0.25
         reason = "thermal or VRAM guard"
+        pressure_level = "hard"
     elif gpu_percent >= 92 or vram_percent >= 90:
         ratio = 0.50
         reason = "high GPU pressure"
+        pressure_level = "high"
     elif gpu_percent >= 82 or vram_percent >= 88:
         ratio = 0.75
         reason = "moderate GPU pressure"
+        pressure_level = "moderate"
     else:
         ratio = 1.0
         reason = "GPU headroom available"
+        pressure_level = "headroom"
 
     target_slots = max(1, min(max_slots, math.ceil(max_slots * ratio)))
     active_slots = max(target_slots, running_slots)
@@ -196,9 +200,11 @@ def resolve_adaptive_ocr_slots(
         "enabled": True,
         "activeSlots": active_slots,
         "targetSlots": target_slots,
+        "rawTargetSlots": target_slots,
         "maxSlots": max_slots,
         "runningSlots": running_slots,
         "reason": reason,
+        "pressureLevel": pressure_level,
         "pressure": pressure,
     }
 
@@ -318,7 +324,7 @@ class LocalGpuWorkCoordinator:
         queue_timeout_seconds: float = 300,
         stale_running_after_seconds: int = 900,
         stale_queued_after_seconds: int | None = None,
-        poll_seconds: float = 0.1,
+        poll_seconds: float = 0.05,
         cleanup_interval_seconds: float = 30,
         heartbeat_interval_seconds: float = 15,
     ):
@@ -335,7 +341,7 @@ class LocalGpuWorkCoordinator:
             60,
             int(stale_queued_after_seconds or max(600, self.queue_timeout_seconds * 2)),
         )
-        self.poll_seconds = max(0.02, float(poll_seconds or 0.1))
+        self.poll_seconds = max(0.02, float(poll_seconds or 0.05))
         self.cleanup_interval_seconds = max(5.0, float(cleanup_interval_seconds or 30))
         self.heartbeat_interval_seconds = max(5.0, float(heartbeat_interval_seconds or 15))
         self.process_id = os.getpid()
@@ -343,6 +349,9 @@ class LocalGpuWorkCoordinator:
         self._last_cleanup_at = 0.0
         self._pressure_lock = threading.Lock()
         self._pressure_sample: tuple[float, dict[str, Any]] | None = None
+        self._ocr_adaptive_lock = threading.Lock()
+        self._ocr_target_slots: int | None = None
+        self._ocr_pressure_strikes = 0
 
     @property
     def slot_count(self) -> int:
@@ -365,6 +374,9 @@ class LocalGpuWorkCoordinator:
             self.cuda_slot_count = max(1, int(cuda_slot_count or 1))
         if ocr_slot_count is not None:
             self.ocr_slot_count = max(1, int(ocr_slot_count or 1))
+            with self._ocr_adaptive_lock:
+                self._ocr_target_slots = min(self._ocr_target_slots or self.ocr_slot_count, self.ocr_slot_count)
+                self._ocr_pressure_strikes = 0
         if queue_timeout_seconds is not None:
             self.queue_timeout_seconds = max(1.0, float(queue_timeout_seconds or 300))
 
@@ -824,11 +836,63 @@ class LocalGpuWorkCoordinator:
         return {"ocr_cuda": self._adaptive_ocr_slot_count(running_slots=running_by_resource.get("ocr_cuda", 0))}
 
     def _adaptive_ocr_slot_count(self, *, running_slots: int = 0) -> dict[str, Any]:
-        return resolve_adaptive_ocr_slots(
+        payload = resolve_adaptive_ocr_slots(
             self._slot_count_for("ocr_cuda"),
             self._cached_gpu_pressure(),
             running_slots=running_slots,
         )
+        return self._stabilize_adaptive_ocr_slots(payload)
+
+    def _stabilize_adaptive_ocr_slots(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Smooth OCR lane changes so telemetry noise does not churn the queue.
+
+        OCR admission should use all configured lanes while there is headroom,
+        back off immediately for hard thermal/VRAM guards, and otherwise reduce
+        capacity only after sustained pressure. The result is still capped by
+        the detected hardware-derived max slot count.
+        """
+        if not payload.get("enabled"):
+            return payload
+
+        max_slots = max(1, int(payload.get("maxSlots") or self.ocr_slot_count or 1))
+        proposed_target = max(1, min(max_slots, int(payload.get("targetSlots") or max_slots)))
+        running_slots = max(0, min(max_slots, int(payload.get("runningSlots") or 0)))
+        pressure_level = str(payload.get("pressureLevel") or "")
+        hard_guard = pressure_level == "hard"
+        with self._ocr_adaptive_lock:
+            current_target = self._ocr_target_slots
+            if current_target is None or current_target > max_slots:
+                current_target = max_slots
+
+            if proposed_target < current_target:
+                if hard_guard:
+                    target = proposed_target
+                    self._ocr_pressure_strikes = 0
+                else:
+                    self._ocr_pressure_strikes += 1
+                    target = current_target
+                    if self._ocr_pressure_strikes >= 3:
+                        target = proposed_target
+                        self._ocr_pressure_strikes = 0
+                    else:
+                        payload["reason"] = (
+                            f"{payload.get('reason')}; waiting for sustained pressure "
+                            f"({self._ocr_pressure_strikes}/3)"
+                        )
+            elif proposed_target > current_target:
+                target = proposed_target
+                self._ocr_pressure_strikes = 0
+            else:
+                target = current_target
+                if pressure_level == "headroom":
+                    self._ocr_pressure_strikes = 0
+
+            self._ocr_target_slots = max(1, min(max_slots, target))
+            payload["targetSlots"] = self._ocr_target_slots
+            payload["activeSlots"] = max(self._ocr_target_slots, running_slots)
+            payload["pressureStrikes"] = self._ocr_pressure_strikes
+            payload["rawTargetSlots"] = proposed_target
+        return payload
 
     @staticmethod
     def _running_counts_by_resource(rows: list[dict[str, Any]]) -> dict[str, int]:
