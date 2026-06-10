@@ -108,7 +108,7 @@ def test_component_datasheet_runs_local_review_without_openai_when_usable():
     assert openai.calls == []
 
 
-def test_local_ingestion_review_uses_gpu_admission_backpressure():
+def test_local_ingestion_review_enters_visible_gpu_queue_without_admission_cap():
     captured = {}
     service, store, openai = make_service(
         local_response=(
@@ -116,10 +116,6 @@ def test_local_ingestion_review_uses_gpu_admission_backpressure():
             '"warnings":[],"suggestedReviewFocus":"pinout","escalateToOpenAI":false,'
             '"reason":"deterministic extraction looks complete"}'
         ),
-        config={
-            "INGEST_LOCAL_AI_MAX_PENDING": 2,
-            "INGEST_LOCAL_AI_ADMISSION_TIMEOUT_SECONDS": 45,
-        },
         captured_local_kwargs=captured,
     )
 
@@ -136,8 +132,8 @@ def test_local_ingestion_review_uses_gpu_admission_backpressure():
     assert result["provider"] == "ollama"
     assert captured["gpu_resource_class"] == "local_llm"
     assert captured["gpu_owner"] == "ingest-ai"
-    assert captured["gpu_admission_max_pending"] == 2
-    assert captured["gpu_admission_timeout_seconds"] == 45.0
+    assert "gpu_admission_max_pending" not in captured
+    assert "gpu_admission_timeout_seconds" not in captured
 
 
 def test_local_review_can_escalate_to_openai_with_reason():

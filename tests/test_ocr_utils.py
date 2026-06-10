@@ -21,7 +21,7 @@ from backend.ingestion.ocr_engines import (
     selected_ocr_mode,
 )
 from backend.ingestion.ocr_utils import parse_tesseract_tsv, should_skip_image, should_skip_image_dimensions
-from backend.services.gpu_work_queue import resolve_local_gpu_ocr_pending_cap, resolve_local_gpu_ocr_slots
+from backend.services.gpu_work_queue import resolve_local_gpu_ocr_slots
 
 
 class ConfigWrapper:
@@ -407,26 +407,6 @@ class OcrUtilsTests(unittest.TestCase):
             40,
         )
         self.assertEqual(resolve_local_gpu_ocr_slots(ConfigWrapper({"LOCAL_GPU_OCR_SLOTS": "8"}), detected_gpus=1), 8)
-
-    def test_auto_gpu_ocr_pending_cap_uses_vram_class(self):
-        self.assertEqual(
-            resolve_local_gpu_ocr_pending_cap(
-                ConfigWrapper({}),
-                ocr_slots=1,
-                detected_gpus=1,
-                gpu_memory_total_mib=10 * 1024,
-            ),
-            2,
-        )
-        self.assertEqual(
-            resolve_local_gpu_ocr_pending_cap(
-                ConfigWrapper({}),
-                ocr_slots=3,
-                detected_gpus=1,
-                gpu_memory_total_mib=24 * 1024,
-            ),
-            9,
-        )
 
     def test_cpu_ocr_worker_count_keeps_cpu_budget_sizing(self):
         ocr_assets = OcrAssetProcessor(

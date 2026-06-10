@@ -8,15 +8,17 @@ import { RuntimeBatchPanel } from "./RuntimeBatchPanel";
 import { SectionHeader } from "./SectionHeader";
 import { Stat } from "./Stat";
 import { CollapsibleSection } from "./CollapsibleSection";
+import { SystemResourcePanel } from "./SystemResourcePanel";
 import { useUserPreference } from "../hooks/useUserPreference";
 
-type StatusSectionId = "catalog" | "cache" | "database" | "runtime" | "gpuQueue" | "ingestion" | "rawIngest" | "logs";
+type StatusSectionId = "catalog" | "cache" | "database" | "resources" | "runtime" | "gpuQueue" | "ingestion" | "rawIngest" | "logs";
 type StatusSectionPreference = Partial<Record<StatusSectionId, boolean>>;
 
 const statusSectionDefaults: StatusSectionPreference = {
   catalog: false,
   cache: true,
   database: true,
+  resources: false,
   runtime: false,
   gpuQueue: false,
   ingestion: false,
@@ -91,6 +93,14 @@ export function StatusView({
         onToggle={() => toggleSection("database")}
       >
         <pre className="json-view">{formatObject(status?.databasePool)}</pre>
+      </CollapsibleSection>
+      <CollapsibleSection
+        title="System resources"
+        description="CPU, memory, GPU, and current local GPU queue depth."
+        collapsed={Boolean(collapsedSections.resources)}
+        onToggle={() => toggleSection("resources")}
+      >
+        <SystemResourcePanel resources={status?.systemResources} queue={status?.localGpuQueue} />
       </CollapsibleSection>
       <CollapsibleSection
         title="Runtime batches"

@@ -36,7 +36,6 @@ from backend.services.gpu_work_queue import (
     detect_local_gpu_memory_total_mib,
     resolve_local_gpu_cuda_slots,
     resolve_local_gpu_llm_slots,
-    resolve_local_gpu_ocr_pending_cap,
     resolve_local_gpu_ocr_slots,
 )
 from backend.services.model_runtime import LazySentenceTransformer, release_accelerator_memory, resolve_model_device
@@ -334,13 +333,6 @@ class CircuitShelfRuntime:
         ocr_slots = max(1, int(getattr(self, "local_gpu_ocr_slots", 1) or 1))
         paddle_timeout = max(10.0, float(self.config.get("PADDLEOCR_TIMEOUT_SECONDS", 120) or 120))
         slot_timeout = min(max(30.0, paddle_timeout), float(self.local_gpu_queue_timeout_seconds or 300))
-        admission_timeout = max(slot_timeout, min(float(self.local_gpu_queue_timeout_seconds or 300), paddle_timeout * 4))
-        max_pending = resolve_local_gpu_ocr_pending_cap(
-            self.config,
-            ocr_slots=ocr_slots,
-            detected_gpus=self.detected_local_gpus,
-            gpu_memory_total_mib=self.detected_local_gpu_memory_mib,
-        )
         self._wait_for_interactive_gpu_headroom(task_type="paddleocr")
         try:
             with self.local_gpu_coordinator.lease(
@@ -349,14 +341,11 @@ class CircuitShelfRuntime:
                 priority=max(60, int(self.local_gpu_priority or 50)),
                 owner=self.local_gpu_owner,
                 timeout_seconds=slot_timeout,
-                admission_max_pending=max_pending,
-                admission_timeout_seconds=admission_timeout,
                 details={
                     "engine": "paddleocr",
                     "device": "gpu",
                     "width": width,
                     "height": height,
-                    "pendingCap": max_pending,
                     "ocrSlots": ocr_slots,
                     "timeoutSeconds": paddle_timeout,
                 },
@@ -611,8 +600,6 @@ class CircuitShelfRuntime:
                 "STATUS_POLL_ACTIVE_INTERVAL_SECONDS",
                 "SESSION_TIMEOUT_SECONDS",
                 "INGEST_LOCAL_AI_REVIEW_ENABLED",
-                "INGEST_LOCAL_AI_MAX_PENDING",
-                "INGEST_LOCAL_AI_ADMISSION_TIMEOUT_SECONDS",
                 "INGEST_OPENAI_ASSIST_ENABLED",
                 "DATASHEET_OPENAI_REPAIR_ENABLED",
                 "PROMPT_TEMPLATE_GENERAL",

@@ -275,24 +275,6 @@ def resolve_local_gpu_ocr_slots(
     return max(1, min(detected * lanes_per_gpu, detected * 10, 40))
 
 
-def resolve_local_gpu_ocr_pending_cap(
-    config: Any,
-    *,
-    ocr_slots: int,
-    detected_gpus: int | None = None,
-    gpu_memory_total_mib: int | None = None,
-) -> int:
-    detected = max(1, int(detected_gpus or detect_local_gpu_count()))
-    slots = max(1, int(ocr_slots or 1))
-    total_mib = gpu_memory_total_mib or detect_local_gpu_memory_total_mib()
-    if not total_mib:
-        multiplier = 2
-    else:
-        total_gib = float(total_mib) / 1024.0
-        multiplier = 3 if total_gib >= 20 else 2
-    return max(slots, min(slots * multiplier, detected * 16, 48))
-
-
 @dataclass(frozen=True)
 class LocalGpuLease:
     task_id: str

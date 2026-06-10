@@ -4662,6 +4662,88 @@ nav {
   gap: 12px;
 }
 
+.system-resource-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.resource-group-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(77, 195, 255, 0.08), transparent 44%),
+    var(--panel-soft);
+}
+
+.resource-group-card.gpu {
+  background:
+    linear-gradient(135deg, rgba(255, 178, 75, 0.1), transparent 44%),
+    var(--panel-soft);
+}
+
+.resource-group-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resource-group-heading span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.resource-group-heading strong {
+  min-width: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-metric-grid,
+.resource-queue-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.resource-metric-grid span,
+.resource-queue-grid span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(3, 13, 18, 0.24);
+}
+
+.resource-metric-grid small,
+.resource-queue-grid small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.resource-metric-grid strong,
+.resource-queue-grid strong {
+  min-width: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .gpu-queue-lanes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -5992,8 +6074,14 @@ nav {
   .ask-settings-grid,
   .review-qa-panel,
   .review-qa-metrics,
-  .performance-stats {
+  .performance-stats,
+  .system-resource-panel {
     grid-template-columns: 1fr;
+  }
+
+  .resource-metric-grid,
+  .resource-queue-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
