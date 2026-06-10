@@ -33,6 +33,8 @@ function adaptiveSlotTitle(
   reason?: string | null,
   activeSlots?: number | null,
   maxSlots?: number | null,
+  targetSlots?: number | null,
+  runningSlots?: number | null,
   pressure?: {
     gpuPercent?: number | null;
     memoryUsedPercent?: number | null;
@@ -44,7 +46,9 @@ function adaptiveSlotTitle(
         pressure.temperatureC == null ? "n/a" : `${formatNumber(pressure.temperatureC)} C`
       }`
     : "No pressure sample";
-  return `${reason || "adaptive admission"} | admitted ${formatInteger(activeSlots)} of ${formatInteger(maxSlots)} | ${pressureText}`;
+  const targetText = targetSlots == null ? "" : ` | target ${formatInteger(targetSlots)}`;
+  const runningText = runningSlots == null ? "" : ` | running ${formatInteger(runningSlots)}`;
+  return `${reason || "adaptive admission"} | admitted ${formatInteger(activeSlots)} of ${formatInteger(maxSlots)}${targetText}${runningText} | ${pressureText}`;
 }
 
 export function SidebarSystemCard({ status, detailed = false }: { status: StatusPayload | null; detailed?: boolean }) {
@@ -126,6 +130,8 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
             ocrAdaptive?.reason,
             ocrAdaptive?.activeSlots,
             ocrAdaptive?.maxSlots ?? gpuQueue?.ocrSlots,
+            ocrAdaptive?.targetSlots,
+            ocrAdaptive?.runningSlots,
             ocrAdaptive?.pressure,
           )}`}>
             {formatInteger(ocrGpuQueue?.running)} / {formatInteger(ocrAdaptive?.activeSlots ?? gpuQueue?.ocrSlots)}
@@ -173,6 +179,8 @@ export function SidebarSystemCard({ status, detailed = false }: { status: Status
                 ocrAdaptive?.reason,
                 ocrAdaptive?.activeSlots,
                 ocrAdaptive?.maxSlots ?? gpuQueue?.ocrSlots,
+                ocrAdaptive?.targetSlots,
+                ocrAdaptive?.runningSlots,
                 ocrAdaptive?.pressure,
               )}>
                 {formatInteger(ocrAdaptive?.activeSlots ?? gpuQueue?.ocrSlots)} / {formatInteger(gpuQueue?.ocrSlots)}

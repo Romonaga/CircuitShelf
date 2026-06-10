@@ -65,7 +65,10 @@ function adaptiveDetail(queue: LocalGpuQueueStatus, resourceClass: string, confi
   const pressureText = pressure?.available
     ? `GPU ${formatNumber(pressure.gpuPercent)}%, VRAM ${formatNumber(pressure.memoryUsedPercent)}%, ${formatNumber(pressure.temperatureC)} C`
     : "no pressure sample";
-  return `${adaptive.reason || "fixed admission"} | admitted ${formatInteger(adaptive.admittedSlots)} of ${formatInteger(adaptive.configuredSlots)} | ${pressureText}`;
+  const rawAdaptive = queue.adaptiveSlots?.[resourceClass];
+  const targetText = rawAdaptive?.targetSlots == null ? "" : ` | target ${formatInteger(rawAdaptive.targetSlots)}`;
+  const runningText = rawAdaptive?.runningSlots == null ? "" : ` | running ${formatInteger(rawAdaptive.runningSlots)}`;
+  return `${adaptive.reason || "fixed admission"} | admitted ${formatInteger(adaptive.admittedSlots)} of ${formatInteger(adaptive.configuredSlots)}${targetText}${runningText} | ${pressureText}`;
 }
 
 function resourceRows(queue: LocalGpuQueueStatus) {

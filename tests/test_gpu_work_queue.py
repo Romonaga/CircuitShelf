@@ -111,6 +111,7 @@ def test_adaptive_ocr_slots_use_full_capacity_with_headroom():
 
     assert payload["enabled"] is True
     assert payload["activeSlots"] == 6
+    assert payload["targetSlots"] == 6
     assert payload["maxSlots"] == 6
     assert payload["reason"] == "GPU headroom available"
 
@@ -126,8 +127,10 @@ def test_adaptive_ocr_slots_step_down_under_pressure():
     )
 
     assert moderate["activeSlots"] == 6
+    assert moderate["targetSlots"] == 6
     assert moderate["reason"] == "moderate GPU pressure"
     assert high["activeSlots"] == 4
+    assert high["targetSlots"] == 4
     assert high["reason"] == "high GPU pressure"
 
 
@@ -142,8 +145,10 @@ def test_adaptive_ocr_slots_clamp_on_vram_or_thermal_guard():
     )
 
     assert vram["activeSlots"] == 2
+    assert vram["targetSlots"] == 2
     assert vram["reason"] == "thermal or VRAM guard"
     assert thermal["activeSlots"] == 2
+    assert thermal["targetSlots"] == 2
     assert thermal["reason"] == "thermal or VRAM guard"
 
 
@@ -152,4 +157,17 @@ def test_adaptive_ocr_slots_fall_back_to_configured_capacity_without_telemetry()
 
     assert payload["enabled"] is False
     assert payload["activeSlots"] == 5
+    assert payload["targetSlots"] == 5
     assert payload["maxSlots"] == 5
+
+
+def test_adaptive_ocr_slots_do_not_report_below_running_work():
+    payload = resolve_adaptive_ocr_slots(
+        6,
+        {"available": True, "gpuPercent": 92, "memoryUsedPercent": 65, "temperatureC": 60},
+        running_slots=5,
+    )
+
+    assert payload["targetSlots"] == 3
+    assert payload["activeSlots"] == 5
+    assert payload["runningSlots"] == 5

@@ -22,7 +22,9 @@ function laneTitle(queue: LocalGpuQueueStatus | null | undefined, resource: stri
   const pressureText = pressure?.available
     ? `GPU ${formatNumber(pressure.gpuPercent)}%, VRAM ${formatNumber(pressure.memoryUsedPercent)}%, ${formatNumber(pressure.temperatureC)} C`
     : "GPU telemetry unavailable";
-  return `${adaptive.reason || "adaptive admission"} | admitted ${formatInteger(adaptive.activeSlots)} of ${formatInteger(adaptive.maxSlots)} | ${pressureText}`;
+  const targetText = adaptive.targetSlots == null ? "" : ` | target ${formatInteger(adaptive.targetSlots)}`;
+  const runningText = adaptive.runningSlots == null ? "" : ` | running ${formatInteger(adaptive.runningSlots)}`;
+  return `${adaptive.reason || "adaptive admission"} | admitted ${formatInteger(adaptive.activeSlots)} of ${formatInteger(adaptive.maxSlots)}${targetText}${runningText} | ${pressureText}`;
 }
 
 function QueueLane({

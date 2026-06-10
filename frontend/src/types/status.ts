@@ -82,7 +82,9 @@ export interface LocalGpuQueueItem {
 export interface LocalGpuAdaptiveSlots {
   enabled?: boolean;
   activeSlots?: number;
+  targetSlots?: number;
   maxSlots?: number;
+  runningSlots?: number;
   reason?: string;
   pressure?: {
     available?: boolean;

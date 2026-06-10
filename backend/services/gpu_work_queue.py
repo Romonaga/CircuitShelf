@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import threading
@@ -148,14 +149,27 @@ def _optional_float(value: Any) -> float | None:
         return None
 
 
-def resolve_adaptive_ocr_slots(max_slots: int, pressure: dict[str, Any]) -> dict[str, Any]:
-    """Choose currently admitted OCR lanes from live GPU pressure."""
+def resolve_adaptive_ocr_slots(
+    max_slots: int,
+    pressure: dict[str, Any],
+    *,
+    running_slots: int = 0,
+) -> dict[str, Any]:
+    """Choose currently admitted OCR lanes from live GPU pressure.
+
+    The target is the number of new OCR lanes we are willing to admit right now.
+    The reported active slot count is never allowed below already-running work,
+    because running OCR jobs cannot be revoked and displaying 4/3 is misleading.
+    """
     max_slots = max(1, int(max_slots or 1))
+    running_slots = max(0, min(max_slots, int(running_slots or 0)))
     if not pressure.get("available"):
         return {
             "enabled": False,
             "activeSlots": max_slots,
+            "targetSlots": max_slots,
             "maxSlots": max_slots,
+            "runningSlots": running_slots,
             "reason": "gpu telemetry unavailable",
             "pressure": pressure,
         }
@@ -178,11 +192,14 @@ def resolve_adaptive_ocr_slots(max_slots: int, pressure: dict[str, Any]) -> dict
         ratio = 1.0
         reason = "GPU headroom available"
 
-    active_slots = max(1, min(max_slots, round(max_slots * ratio)))
+    target_slots = max(1, min(max_slots, math.ceil(max_slots * ratio)))
+    active_slots = max(target_slots, running_slots)
     return {
         "enabled": True,
         "activeSlots": active_slots,
+        "targetSlots": target_slots,
         "maxSlots": max_slots,
+        "runningSlots": running_slots,
         "reason": reason,
         "pressure": pressure,
     }
@@ -455,7 +472,6 @@ class LocalGpuWorkCoordinator:
         window = f"{max(60, int(window_seconds))} seconds"
         try:
             self.cleanup_abandoned()
-            adaptive_slots = self._adaptive_slots_payload()
             with self.database.connection() as conn:
                 count_rows = conn.execute(load_query("local_gpu_work_counts.sql"), (window,)).fetchall()
                 live_count_rows = conn.execute(load_query("local_gpu_work_live_by_resource_counts.sql")).fetchall()
@@ -464,6 +480,8 @@ class LocalGpuWorkCoordinator:
                     load_query("local_gpu_work_recent.sql"),
                     (window, max(1, int(recent_limit))),
                 ).fetchall()
+            running_by_resource = self._running_counts_by_resource(live_count_rows)
+            adaptive_slots = self._adaptive_slots_payload(running_by_resource=running_by_resource)
         except Exception as exc:
             return {
                 "enabled": False,
@@ -537,7 +555,7 @@ class LocalGpuWorkCoordinator:
             "enabled": True,
             "resourceClass": resource_class,
             "slots": self._slot_count_for(resource_class),
-            "admittedSlots": self._effective_slot_count_for(resource_class),
+            "admittedSlots": self._effective_slot_count_for(resource_class, running_slots=running),
             "queued": queued,
             "running": running,
             "pending": queued + running,
@@ -798,16 +816,31 @@ class LocalGpuWorkCoordinator:
             return self.ocr_slot_count
         return self.llm_slot_count
 
-    def _effective_slot_count_for(self, resource_class: str) -> int:
+    def _effective_slot_count_for(self, resource_class: str, *, running_slots: int = 0) -> int:
         if resource_class != "ocr_cuda":
             return self._slot_count_for(resource_class)
-        return self._adaptive_ocr_slot_count()["activeSlots"]
+        return self._adaptive_ocr_slot_count(running_slots=running_slots)["activeSlots"]
 
-    def _adaptive_slots_payload(self) -> dict[str, Any]:
-        return {"ocr_cuda": self._adaptive_ocr_slot_count()}
+    def _adaptive_slots_payload(self, *, running_by_resource: dict[str, int] | None = None) -> dict[str, Any]:
+        running_by_resource = running_by_resource or {}
+        return {"ocr_cuda": self._adaptive_ocr_slot_count(running_slots=running_by_resource.get("ocr_cuda", 0))}
 
-    def _adaptive_ocr_slot_count(self) -> dict[str, Any]:
-        return resolve_adaptive_ocr_slots(self._slot_count_for("ocr_cuda"), self._cached_gpu_pressure())
+    def _adaptive_ocr_slot_count(self, *, running_slots: int = 0) -> dict[str, Any]:
+        return resolve_adaptive_ocr_slots(
+            self._slot_count_for("ocr_cuda"),
+            self._cached_gpu_pressure(),
+            running_slots=running_slots,
+        )
+
+    @staticmethod
+    def _running_counts_by_resource(rows: list[dict[str, Any]]) -> dict[str, int]:
+        running: dict[str, int] = {}
+        for row in rows:
+            if str(row.get("status") or "") != "running":
+                continue
+            resource = str(row.get("resource_class") or "unknown")
+            running[resource] = running.get(resource, 0) + int(row.get("count") or 0)
+        return running
 
     def _cached_gpu_pressure(self, *, max_age_seconds: float = 1.0) -> dict[str, Any]:
         now = time.monotonic()
