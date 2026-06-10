@@ -28,6 +28,7 @@ _PADDLE_ENGINES: dict[tuple[str, str, str], Any] = {}
 _PADDLE_CIRCUIT_LOCK = threading.Lock()
 _PADDLE_FAILURE_COUNT = 0
 _PADDLE_DISABLED_UNTIL = 0.0
+_PADDLE_LAST_FAILURE = ""
 _PADDLE_FAILURE_LIMIT = 3
 _PADDLE_FAILURE_COOLDOWN_SECONDS = 300.0
 
@@ -80,7 +81,7 @@ def _run_paddle_ocr_with_fallback(image: Image.Image, config: dict[str, Any]) ->
         _record_paddle_success()
         return result
     except Exception as exc:
-        _record_paddle_failure()
+        _record_paddle_failure(exc)
         return run_tesseract_fallback_ocr(image, config, fallback_from="paddleocr", error=exc)
 
 
@@ -238,10 +239,11 @@ def clear_ocr_engine_cache() -> None:
     """Clear cached OCR engine instances. Primarily used by tests."""
 
     _PADDLE_ENGINES.clear()
-    global _PADDLE_FAILURE_COUNT, _PADDLE_DISABLED_UNTIL
+    global _PADDLE_FAILURE_COUNT, _PADDLE_DISABLED_UNTIL, _PADDLE_LAST_FAILURE
     with _PADDLE_CIRCUIT_LOCK:
         _PADDLE_FAILURE_COUNT = 0
         _PADDLE_DISABLED_UNTIL = 0.0
+        _PADDLE_LAST_FAILURE = ""
 
 
 def _paddle_disabled_reason() -> str:
@@ -249,7 +251,8 @@ def _paddle_disabled_reason() -> str:
         if _PADDLE_DISABLED_UNTIL <= time.monotonic():
             return ""
         remaining = max(1, int(_PADDLE_DISABLED_UNTIL - time.monotonic()))
-        return f"PaddleOCR circuit breaker open after repeated failures; retrying in {remaining}s."
+        last_failure = f" Last failure: {_PADDLE_LAST_FAILURE}" if _PADDLE_LAST_FAILURE else ""
+        return f"PaddleOCR circuit breaker open after repeated failures; retrying in {remaining}s.{last_failure}"
 
 
 def _record_paddle_success() -> None:
@@ -259,9 +262,10 @@ def _record_paddle_success() -> None:
         _PADDLE_DISABLED_UNTIL = 0.0
 
 
-def _record_paddle_failure() -> None:
-    global _PADDLE_FAILURE_COUNT, _PADDLE_DISABLED_UNTIL
+def _record_paddle_failure(error: Exception) -> None:
+    global _PADDLE_FAILURE_COUNT, _PADDLE_DISABLED_UNTIL, _PADDLE_LAST_FAILURE
     with _PADDLE_CIRCUIT_LOCK:
+        _PADDLE_LAST_FAILURE = str(error)[:500]
         _PADDLE_FAILURE_COUNT += 1
         if _PADDLE_FAILURE_COUNT >= _PADDLE_FAILURE_LIMIT:
             _PADDLE_DISABLED_UNTIL = time.monotonic() + _PADDLE_FAILURE_COOLDOWN_SECONDS

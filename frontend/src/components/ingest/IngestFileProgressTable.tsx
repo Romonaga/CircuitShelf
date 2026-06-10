@@ -37,7 +37,14 @@ export function IngestFileProgressTable({ running, rows }: { running: boolean; r
             {fileSizeProgress(progress)}
           </span>
           <span className="ingest-file-cell ingest-file-cell-phase">
-            <span className={`ingest-phase-badge ${phaseTone(progress)}`} title={formatDetailValue(progress.documentPhase ?? "Active")}>
+            <span
+              className={`ingest-phase-badge ${phaseTone(progress)}`}
+              title={
+                phaseTone(progress) === "ocr"
+                  ? "This file is in the OCR phase. Image OCR jobs are admitted through the OCR queue lanes shown above."
+                  : formatDetailValue(progress.documentPhase ?? "Active")
+              }
+            >
               {compactPhase(progress)}
             </span>
           </span>

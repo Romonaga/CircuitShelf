@@ -67,6 +67,7 @@ export function DocumentDetailPanel({
           ingest={status?.ingest}
           workerBudget={status?.ingestWorkerBudget}
           runtimeBatches={status?.runtimeBatches}
+          localGpuQueue={status?.localGpuQueue}
           pendingReview={status?.pendingReview}
           onOpenReview={onOpenReview}
         />

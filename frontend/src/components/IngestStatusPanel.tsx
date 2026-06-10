@@ -1,8 +1,10 @@
 import type { IngestStatus, IngestWorkerBudget, RuntimeBatches } from "../types";
+import type { LocalGpuQueueStatus } from "../types/status";
 import { activeFileRows } from "../libs/ingest/format";
 import { IngestChangeSummary } from "./ingest/IngestChangeSummary";
 import { IngestDetailGrid } from "./ingest/IngestDetailGrid";
 import { IngestFileProgressTable } from "./ingest/IngestFileProgressTable";
+import { IngestGpuQueueSummary } from "./ingest/IngestGpuQueueSummary";
 import { IngestQueueSummary } from "./ingest/IngestQueueSummary";
 import { IngestStatusHeader } from "./ingest/IngestStatusHeader";
 import { IngestWorkerBudgetPanel } from "./ingest/IngestWorkerBudgetPanel";
@@ -11,6 +13,7 @@ export function IngestStatusPanel({
   ingest,
   workerBudget,
   runtimeBatches,
+  localGpuQueue,
   pendingReview,
   onOpenReview,
   display = "standard"
@@ -18,6 +21,7 @@ export function IngestStatusPanel({
   ingest?: IngestStatus | null;
   workerBudget?: IngestWorkerBudget | null;
   runtimeBatches?: RuntimeBatches | null;
+  localGpuQueue?: LocalGpuQueueStatus | null;
   pendingReview?: number;
   onOpenReview?: () => void;
   display?: "standard" | "expanded";
@@ -44,6 +48,7 @@ export function IngestStatusPanel({
       <IngestStatusHeader running={isRunning} pendingReview={pending} reason={ingest.lastReason} onOpenReview={onOpenReview} />
       <IngestDetailGrid ingest={ingest} />
       <IngestWorkerBudgetPanel workerBudget={workerBudget} runtimeBatches={runtimeBatches} />
+      <IngestGpuQueueSummary queue={localGpuQueue} />
       <IngestQueueSummary
         running={isRunning}
         totalFiles={totalFiles}

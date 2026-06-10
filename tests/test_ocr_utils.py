@@ -274,6 +274,7 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertEqual(paddle_mock.call_count, 3)
         self.assertTrue(all(result.fallback_from == "paddleocr" for result in results))
         self.assertIn("circuit breaker", results[-1].error)
+        self.assertIn("paddle wedged", results[-1].error)
 
     @patch.dict("os.environ", {"CIRCUITSHELF_PADDLEOCR_PYTHON": "/tmp/ocr-python"})
     def test_paddleocr_external_python_runner_is_supported(self):

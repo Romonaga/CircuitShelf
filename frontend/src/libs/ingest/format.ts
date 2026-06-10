@@ -220,7 +220,7 @@ export function compactPhase(progress: IngestProgress): string {
     scanning_pdf_pages: "Scan PDF",
     selecting_visual_pdf_pages: "Find visuals",
     saving_rendered_pdf_pages: "Save visuals",
-    ocr_image_extraction: "OCR images",
+    ocr_image_extraction: "OCR stage",
     chunking: "Chunks",
     embedding_chunks: "Embedding",
     persisting_chunks: "Saving text",

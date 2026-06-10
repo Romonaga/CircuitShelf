@@ -3716,6 +3716,49 @@ nav {
   scrollbar-gutter: stable;
 }
 
+.ingest-gpu-queue-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ingest-gpu-queue-lane {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.ingest-gpu-queue-lane small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ingest-gpu-queue-lane strong {
+  color: var(--text);
+  font-size: 0.96rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.ingest-gpu-queue-lane em {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ingest-status-panel.expanded .ingest-file-grid {
   --ingest-file-columns: minmax(300px, 1.15fr) 96px minmax(150px, 0.8fr) 92px 108px minmax(180px, 1fr);
   max-height: clamp(760px, 82vh, 1280px);
@@ -5642,6 +5685,7 @@ nav {
 :root[data-theme="dark"] .ingest-status-panel,
 :root[data-theme="dark"] .ingest-current-files,
 :root[data-theme="dark"] .ingest-file-grid,
+:root[data-theme="dark"] .ingest-gpu-queue-lane,
 :root[data-theme="dark"] .settings-row,
 :root[data-theme="dark"] .settings-group-heading,
 :root[data-theme="dark"] .log-tail-follow,
