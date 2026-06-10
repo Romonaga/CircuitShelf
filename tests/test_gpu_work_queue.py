@@ -1,7 +1,12 @@
 from contextlib import contextmanager
 
 from backend.services import gpu_work_queue
-from backend.services.gpu_work_queue import LocalGpuWorkCoordinator, resolve_adaptive_ocr_slots
+from backend.services.gpu_work_queue import (
+    LocalGpuWorkCoordinator,
+    is_cuda_out_of_memory,
+    resolve_adaptive_ocr_slots,
+    resolve_cuda_batch_slots,
+)
 
 
 class FakeConnection:
@@ -170,6 +175,45 @@ def test_adaptive_ocr_slots_fall_back_to_configured_capacity_without_telemetry()
     assert payload["activeSlots"] == 5
     assert payload["targetSlots"] == 5
     assert payload["maxSlots"] == 5
+
+
+def test_cuda_batch_slots_wait_when_vram_guard_is_active():
+    payload = resolve_cuda_batch_slots(
+        2,
+        {"available": True, "gpuPercent": 40, "memoryUsedPercent": 95, "temperatureC": 58},
+    )
+
+    assert payload["targetSlots"] == 0
+    assert payload["activeSlots"] == 0
+    assert payload["reason"] == "thermal or VRAM guard"
+
+
+def test_cuda_batch_slots_report_running_work_even_when_guarded():
+    payload = resolve_cuda_batch_slots(
+        2,
+        {"available": True, "gpuPercent": 40, "memoryUsedPercent": 95, "temperatureC": 58},
+        running_slots=1,
+    )
+
+    assert payload["targetSlots"] == 0
+    assert payload["activeSlots"] == 1
+    assert payload["runningSlots"] == 1
+
+
+def test_cuda_batch_slots_use_full_capacity_with_memory_headroom():
+    payload = resolve_cuda_batch_slots(
+        2,
+        {"available": True, "gpuPercent": 96, "memoryUsedPercent": 60, "temperatureC": 58},
+    )
+
+    assert payload["targetSlots"] == 2
+    assert payload["activeSlots"] == 2
+    assert payload["reason"] == "GPU memory headroom available"
+
+
+def test_cuda_oom_detection_matches_torch_error_text():
+    assert is_cuda_out_of_memory(RuntimeError("CUDA out of memory. Tried to allocate 34 MiB"))
+    assert not is_cuda_out_of_memory(RuntimeError("some other cuda warning"))
 
 
 def test_adaptive_ocr_slots_do_not_report_below_running_work():

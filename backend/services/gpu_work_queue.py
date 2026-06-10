@@ -209,6 +209,65 @@ def resolve_adaptive_ocr_slots(
     }
 
 
+def resolve_cuda_batch_slots(
+    max_slots: int,
+    pressure: dict[str, Any],
+    *,
+    running_slots: int = 0,
+) -> dict[str, Any]:
+    """Choose currently admitted embedding/rerank lanes from live GPU pressure.
+
+    CUDA batch work is bursty and usually cheap, but launching it into a full
+    VRAM allocator turns a temporary pressure spike into a failed document. OCR
+    can keep running work it already owns; new embedding/rerank work should wait
+    when the card is in a hard memory or thermal guard.
+    """
+    max_slots = max(1, int(max_slots or 1))
+    running_slots = max(0, min(max_slots, int(running_slots or 0)))
+    if not pressure.get("available"):
+        return {
+            "enabled": False,
+            "activeSlots": max_slots,
+            "targetSlots": max_slots,
+            "maxSlots": max_slots,
+            "runningSlots": running_slots,
+            "reason": "gpu telemetry unavailable",
+            "pressure": pressure,
+        }
+
+    vram_percent = _optional_float(pressure.get("memoryUsedPercent")) or 0.0
+    temperature_c = _optional_float(pressure.get("temperatureC")) or 0.0
+    if temperature_c >= 82 or vram_percent >= 92:
+        target_slots = 0
+        reason = "thermal or VRAM guard"
+        pressure_level = "hard"
+    elif vram_percent >= 88:
+        target_slots = max(1, math.ceil(max_slots * 0.5))
+        reason = "high VRAM pressure"
+        pressure_level = "high"
+    else:
+        target_slots = max_slots
+        reason = "GPU memory headroom available"
+        pressure_level = "headroom"
+
+    return {
+        "enabled": True,
+        "activeSlots": max(target_slots, running_slots),
+        "targetSlots": target_slots,
+        "rawTargetSlots": target_slots,
+        "maxSlots": max_slots,
+        "runningSlots": running_slots,
+        "reason": reason,
+        "pressureLevel": pressure_level,
+        "pressure": pressure,
+    }
+
+
+def is_cuda_out_of_memory(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__}: {exc}".lower()
+    return "cuda out of memory" in text or ("outofmemoryerror" in text and "cuda" in text)
+
+
 def _resolve_slot_count(
     config: Any,
     key: str,
@@ -730,6 +789,9 @@ class LocalGpuWorkCoordinator:
                 raise TimeoutError(f"Local GPU queue timed out after {timeout_seconds:.0f}s.")
 
             effective_slot_count = self._effective_slot_count_for(resource_class)
+            if effective_slot_count <= 0:
+                time.sleep(self.poll_seconds)
+                continue
             if not self._task_is_eligible(task_id, effective_slot_count):
                 time.sleep(self.poll_seconds)
                 continue
@@ -809,13 +871,25 @@ class LocalGpuWorkCoordinator:
         return self.llm_slot_count
 
     def _effective_slot_count_for(self, resource_class: str, *, running_slots: int = 0) -> int:
+        if resource_class == "cuda_batch":
+            return self._adaptive_cuda_batch_slot_count(running_slots=running_slots)["activeSlots"]
         if resource_class != "ocr_cuda":
             return self._slot_count_for(resource_class)
         return self._adaptive_ocr_slot_count(running_slots=running_slots)["activeSlots"]
 
     def _adaptive_slots_payload(self, *, running_by_resource: dict[str, int] | None = None) -> dict[str, Any]:
         running_by_resource = running_by_resource or {}
-        return {"ocr_cuda": self._adaptive_ocr_slot_count(running_slots=running_by_resource.get("ocr_cuda", 0))}
+        return {
+            "cuda_batch": self._adaptive_cuda_batch_slot_count(running_slots=running_by_resource.get("cuda_batch", 0)),
+            "ocr_cuda": self._adaptive_ocr_slot_count(running_slots=running_by_resource.get("ocr_cuda", 0)),
+        }
+
+    def _adaptive_cuda_batch_slot_count(self, *, running_slots: int = 0) -> dict[str, Any]:
+        return resolve_cuda_batch_slots(
+            self._slot_count_for("cuda_batch"),
+            self._cached_gpu_pressure(),
+            running_slots=running_slots,
+        )
 
     def _adaptive_ocr_slot_count(self, *, running_slots: int = 0) -> dict[str, Any]:
         payload = resolve_adaptive_ocr_slots(
@@ -1001,14 +1075,32 @@ class GpuQueuedEmbedder:
 
     def encode(self, texts, *args, **kwargs):
         count = len(texts) if hasattr(texts, "__len__") else None
-        with self.coordinator.lease(
-            task_type="embedding",
-            resource_class="cuda_batch",
-            priority=self.priority,
-            owner=self.owner,
-            details={"items": count},
-        ):
-            return self.embedder.encode(texts, *args, **kwargs)
+        attempts = 2
+        for attempt in range(1, attempts + 1):
+            try:
+                with self.coordinator.lease(
+                    task_type="embedding",
+                    resource_class="cuda_batch",
+                    priority=self.priority,
+                    owner=self.owner,
+                    details={"items": count, "attempt": attempt},
+                ):
+                    return self.embedder.encode(texts, *args, **kwargs)
+            except Exception as exc:
+                if attempt >= attempts or not is_cuda_out_of_memory(exc):
+                    raise
+                if self.coordinator.logger:
+                    self.coordinator.logger.warning(
+                        "⚠️ CUDA embedding ran out of VRAM; releasing cache and retrying once."
+                    )
+                try:
+                    from backend.services.model_runtime import release_accelerator_memory
+
+                    release_accelerator_memory(self.coordinator.logger)
+                except Exception:
+                    pass
+                time.sleep(2.0)
+        raise RuntimeError("CUDA embedding retry loop exited unexpectedly.")
 
     def unload(self) -> bool:
         if hasattr(self.embedder, "unload"):

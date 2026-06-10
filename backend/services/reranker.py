@@ -2,6 +2,7 @@ import threading
 
 from sentence_transformers import CrossEncoder
 
+from backend.services.gpu_work_queue import is_cuda_out_of_memory
 from backend.services.model_runtime import release_accelerator_memory
 
 
@@ -152,19 +153,28 @@ class Reranker:
                 show_progress_bar=False,
                 device=self.device,
             )
-        with gpu_coordinator.lease(
-            task_type="rerank",
-            resource_class="cuda_batch",
-            priority=getattr(self, "gpu_priority", 30),
-            owner=getattr(self, "gpu_owner", "web"),
-            details={"pairs": len(combined_inputs), "batchSize": batch_size},
-        ):
-            return self._ensure_cross_encoder().predict(
-                combined_inputs,
-                batch_size=batch_size,
-                show_progress_bar=False,
-                device=self.device,
-            )
+        attempts = 2
+        for attempt in range(1, attempts + 1):
+            try:
+                with gpu_coordinator.lease(
+                    task_type="rerank",
+                    resource_class="cuda_batch",
+                    priority=getattr(self, "gpu_priority", 30),
+                    owner=getattr(self, "gpu_owner", "web"),
+                    details={"pairs": len(combined_inputs), "batchSize": batch_size, "attempt": attempt},
+                ):
+                    return self._ensure_cross_encoder().predict(
+                        combined_inputs,
+                        batch_size=batch_size,
+                        show_progress_bar=False,
+                        device=self.device,
+                    )
+            except Exception as exc:
+                if attempt >= attempts or not is_cuda_out_of_memory(exc):
+                    raise
+                self.trace_logger.warning("⚠️ CUDA reranker ran out of VRAM; releasing cache and retrying once.")
+                release_accelerator_memory(self.trace_logger)
+        raise RuntimeError("CUDA reranker retry loop exited unexpectedly.")
 
     @staticmethod
     def normalized_weights(weights):
