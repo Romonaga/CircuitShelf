@@ -12,10 +12,10 @@ export function GpuEnvelopeGraph({ history }: { history: StatusHistoryPoint[] })
       fixedMax={100}
       unit="%"
       series={[
-        { key: "gpu", label: "GPU compute", color: chartColors.orange },
-        { key: "vram", label: "VRAM", color: chartColors.purple },
-        { key: "gpuTempLoad", label: "Temp pressure", color: chartColors.vermillion },
-        { key: "gpuPowerLoad", label: "Power pressure", color: chartColors.yellow },
+        { key: "gpu", label: "GPU compute", color: chartColors.orange, symbol: "triangle" },
+        { key: "vram", label: "VRAM", color: chartColors.purple, lineType: "dashed", symbol: "circle" },
+        { key: "gpuTempLoad", label: "Temp pressure", color: chartColors.vermillion, lineType: "dotted", symbol: "diamond" },
+        { key: "gpuPowerLoad", label: "Power pressure", color: chartColors.yellow, lineType: "dashed", symbol: "rect" },
       ]}
     />
   );

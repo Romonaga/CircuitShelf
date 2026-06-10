@@ -62,6 +62,27 @@ function dataFor(history: StatusHistoryPoint[], key: keyof StatusHistoryPoint) {
   });
 }
 
+const queueSeries = [
+  { name: "Queued total", key: "gpuQueueQueued", yAxisIndex: 0, color: chartColors.orange, lineType: "solid", symbol: "circle" },
+  { name: "Active total", key: "gpuQueueActive", yAxisIndex: 0, color: chartColors.blue, lineType: "dashed", symbol: "triangle" },
+  { name: "CUDA queued", key: "gpuQueueCudaQueued", yAxisIndex: 0, color: chartColors.purple, lineType: "dotted", symbol: "rect" },
+  { name: "OCR queued", key: "gpuQueueOcrQueued", yAxisIndex: 0, color: chartColors.green, lineType: "dashed", symbol: "diamond" },
+  { name: "LLM queued", key: "gpuQueueLlmQueued", yAxisIndex: 0, color: chartColors.vermillion, lineType: "dotted", symbol: "triangle" },
+  { name: "Oldest wait", key: "gpuQueueCurrentWaitSeconds", yAxisIndex: 1, color: chartColors.yellow, lineType: "solid", symbol: "circle" },
+  { name: "Recent avg wait", key: "gpuQueueRecentAvgWaitSeconds", yAxisIndex: 1, color: chartColors.cyan, lineType: "dashed", symbol: "rect" },
+  { name: "Recent max wait", key: "gpuQueueRecentMaxWaitSeconds", yAxisIndex: 1, color: chartColors.slate, lineType: "dotted", symbol: "diamond" },
+] as const;
+
+function swatchBackground(color: string, lineType: string) {
+  if (lineType === "dashed") {
+    return `repeating-linear-gradient(90deg, ${color} 0 8px, transparent 8px 13px)`;
+  }
+  if (lineType === "dotted") {
+    return `repeating-linear-gradient(90deg, ${color} 0 3px, transparent 3px 8px)`;
+  }
+  return color;
+}
+
 export function GpuQueueGraph({ history }: { history: StatusHistoryPoint[] }) {
   const { chartRef, setOption, theme } = useEChart<QueueChartOption>();
   const latest = history[history.length - 1];
@@ -79,14 +100,7 @@ export function GpuQueueGraph({ history }: { history: StatusHistoryPoint[] }) {
   ]);
   const option = useMemo<QueueChartOption>(() => ({
     animation: false,
-    color: [
-      chartColors.orange,
-      chartColors.blue,
-      chartColors.purple,
-      chartColors.green,
-      chartColors.vermillion,
-      chartColors.yellow,
-    ],
+    color: queueSeries.map((item) => item.color),
     grid: {
       left: 12,
       right: 64,
@@ -187,27 +201,20 @@ export function GpuQueueGraph({ history }: { history: StatusHistoryPoint[] }) {
         }
       }
     ],
-    series: [
-      ["Queued total", "gpuQueueQueued", 0],
-      ["Active total", "gpuQueueActive", 0],
-      ["CUDA queued", "gpuQueueCudaQueued", 0],
-      ["OCR queued", "gpuQueueOcrQueued", 0],
-      ["LLM queued", "gpuQueueLlmQueued", 0],
-      ["Oldest wait", "gpuQueueCurrentWaitSeconds", 1],
-      ["Recent avg wait", "gpuQueueRecentAvgWaitSeconds", 1],
-      ["Recent max wait", "gpuQueueRecentMaxWaitSeconds", 1],
-    ].map(([name, key, yAxisIndex]) => ({
-      name: String(name),
+    series: queueSeries.map((item) => ({
+      name: item.name,
       type: "line",
-      yAxisIndex: Number(yAxisIndex),
+      yAxisIndex: item.yAxisIndex,
       showSymbol: history.length <= 30,
-      symbolSize: 4,
+      symbol: item.symbol,
+      symbolSize: item.symbol === "diamond" || item.symbol === "triangle" ? 7 : 5,
       smooth: false,
       sampling: "lttb",
       connectNulls: false,
-      lineStyle: { width: Number(yAxisIndex) ? 2 : 3 },
+      lineStyle: { width: item.yAxisIndex ? 2 : 3, color: item.color, type: item.lineType },
+      itemStyle: { color: item.color },
       emphasis: { focus: "series" },
-      data: dataFor(history, key as keyof StatusHistoryPoint)
+      data: dataFor(history, item.key as keyof StatusHistoryPoint)
     }))
   }), [history, maxQueue, maxWait, theme]);
 
@@ -226,9 +233,9 @@ export function GpuQueueGraph({ history }: { history: StatusHistoryPoint[] }) {
       </div>
       <div ref={chartRef} className="performance-echart" role="img" aria-label="GPU queue pressure" />
       <div className="chart-legend">
-        <span><i style={{ background: chartColors.orange }} />Queued<strong>{formatInteger(latest?.gpuQueueQueued)}</strong></span>
-        <span><i style={{ background: chartColors.blue }} />Active<strong>{formatInteger(latest?.gpuQueueActive)}</strong></span>
-        <span><i style={{ background: chartColors.yellow }} />Oldest wait<strong>{formatNumber(latest?.gpuQueueCurrentWaitSeconds)}s</strong></span>
+        <span><i style={{ background: swatchBackground(chartColors.orange, "solid") }} />Queued<strong>{formatInteger(latest?.gpuQueueQueued)}</strong></span>
+        <span><i style={{ background: swatchBackground(chartColors.blue, "dashed") }} />Active<strong>{formatInteger(latest?.gpuQueueActive)}</strong></span>
+        <span><i style={{ background: swatchBackground(chartColors.yellow, "solid") }} />Oldest wait<strong>{formatNumber(latest?.gpuQueueCurrentWaitSeconds)}s</strong></span>
         {latest ? <small className="chart-latest-time">Latest {new Date(latest.sampledAt).toLocaleString()}</small> : null}
       </div>
     </section>

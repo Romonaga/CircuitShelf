@@ -9,9 +9,9 @@ export function WorkerBatchGraph({ history }: { history: StatusHistoryPoint[] })
       subtitle="Document workers plus the active embedding and reranker batch sizes."
       history={history}
       series={[
-        { key: "workers", label: "Active doc workers", color: chartColors.green },
-        { key: "embeddingBatch", label: "Embedding batch", color: chartColors.blue },
-        { key: "rerankerBatch", label: "Reranker batch", color: chartColors.purple },
+        { key: "workers", label: "Active doc workers", color: chartColors.green, symbol: "diamond" },
+        { key: "embeddingBatch", label: "Embedding batch", color: chartColors.blue, lineType: "dashed", symbol: "circle" },
+        { key: "rerankerBatch", label: "Reranker batch", color: chartColors.purple, lineType: "dotted", symbol: "rect" },
       ]}
     />
   );

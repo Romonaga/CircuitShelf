@@ -169,7 +169,8 @@ export function buildLineChartOption({
       name: item.label,
       type: "line",
       showSymbol: history.length <= 30,
-      symbolSize: 4,
+      symbol: item.symbol ?? "circle",
+      symbolSize: item.symbol === "diamond" || item.symbol === "triangle" ? 7 : 5,
       smooth: false,
       sampling: "lttb",
       connectNulls: false,
@@ -195,7 +196,8 @@ export function buildLineChartOption({
           : undefined,
       lineStyle: {
         width: 3,
-        color: item.color
+        color: item.color,
+        type: item.lineType ?? "solid"
       },
       itemStyle: {
         color: item.color

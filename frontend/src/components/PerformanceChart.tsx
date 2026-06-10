@@ -8,6 +8,18 @@ export interface ChartSeries {
   key: keyof StatusHistoryPoint;
   label: string;
   color: string;
+  lineType?: "solid" | "dashed" | "dotted";
+  symbol?: "circle" | "rect" | "roundRect" | "triangle" | "diamond";
+}
+
+function swatchBackground(color: string, lineType: ChartSeries["lineType"] = "solid") {
+  if (lineType === "dashed") {
+    return `repeating-linear-gradient(90deg, ${color} 0 8px, transparent 8px 13px)`;
+  }
+  if (lineType === "dotted") {
+    return `repeating-linear-gradient(90deg, ${color} 0 3px, transparent 3px 8px)`;
+  }
+  return color;
 }
 
 function numericValues(history: StatusHistoryPoint[], series: ChartSeries[]) {
@@ -75,7 +87,10 @@ export function PerformanceChart({
       <div className="chart-legend">
         {series.map((item) => (
           <span key={item.label}>
-            <i style={{ background: item.color }} />
+            <i
+              className={item.lineType ? `chart-swatch-${item.lineType}` : undefined}
+              style={{ background: swatchBackground(item.color, item.lineType) }}
+            />
             {item.label}
             <strong>{latest ? formatNumber(latest[item.key] as number | null) : "n/a"}{unit}</strong>
           </span>

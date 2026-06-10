@@ -27,8 +27,8 @@ export function BatchEfficiencyGraph({ history }: { history: StatusHistoryPoint[
       fixedMax={100}
       unit="%"
       series={[
-        { key: "cpu", label: "GPU utilization", color: chartColors.orange },
-        { key: "gpu", label: "Worker pressure", color: chartColors.green },
+        { key: "cpu", label: "GPU utilization", color: chartColors.orange, symbol: "triangle" },
+        { key: "gpu", label: "Worker pressure", color: chartColors.green, lineType: "dashed", symbol: "diamond" },
       ]}
     />
   );

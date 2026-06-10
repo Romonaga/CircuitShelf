@@ -11,8 +11,8 @@ export function PowerGraph({ history }: { history: StatusHistoryPoint[] }) {
       fixedMin={0}
       unit=" W"
       series={[
-        { key: "cpuPower", label: "CPU package", color: chartColors.blue },
-        { key: "gpuPower", label: "GPU", color: chartColors.orange },
+        { key: "cpuPower", label: "CPU package", color: chartColors.blue, lineType: "dashed", symbol: "circle" },
+        { key: "gpuPower", label: "GPU", color: chartColors.orange, symbol: "triangle" },
       ]}
     />
   );

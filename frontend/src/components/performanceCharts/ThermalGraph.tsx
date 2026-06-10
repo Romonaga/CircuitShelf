@@ -11,8 +11,8 @@ export function ThermalGraph({ history }: { history: StatusHistoryPoint[] }) {
       fixedMin={0}
       unit=" C"
       series={[
-        { key: "cpuTemp", label: "CPU temp", color: chartColors.vermillion },
-        { key: "gpuTemp", label: "GPU temp", color: chartColors.orange },
+        { key: "cpuTemp", label: "CPU temp", color: chartColors.vermillion, lineType: "dashed", symbol: "diamond" },
+        { key: "gpuTemp", label: "GPU temp", color: chartColors.orange, symbol: "triangle" },
       ]}
     />
   );

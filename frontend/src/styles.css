@@ -5055,10 +5055,15 @@ nav {
 }
 
 .chart-legend i {
-  width: 10px;
-  height: 10px;
+  width: 22px;
+  height: 4px;
   flex: 0 0 auto;
   border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.chart-legend i.chart-swatch-dotted {
+  height: 5px;
 }
 
 .chart-legend strong {
@@ -5183,7 +5188,7 @@ nav {
 
 .outcome-legend span {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -5197,9 +5202,10 @@ nav {
 }
 
 .outcome-legend i {
-  width: 10px;
-  height: 10px;
+  width: 24px;
+  height: 12px;
   border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .outcome-legend strong {
