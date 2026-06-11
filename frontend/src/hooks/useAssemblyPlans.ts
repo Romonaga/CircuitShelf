@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { deleteAssemblyPlan, getAssemblyPlan, getAssemblyPlans } from "../libs/api";
+import { consumeBenchPlanSelection } from "../libs/benchSelection";
 import { errorMessage } from "../libs/errors";
 import type { AssemblyPlan, AssemblyPlanSummary } from "../types";
 
@@ -17,7 +18,8 @@ export function useAssemblyPlans(isActive: boolean) {
     try {
       const response = await getAssemblyPlans();
       setPlans(response.plans);
-      setSelectedPlanId((current) => current || response.plans[0]?.id || "");
+      const handoffPlanId = consumeBenchPlanSelection();
+      setSelectedPlanId((current) => handoffPlanId || current || response.plans[0]?.id || "");
     } catch (err) {
       setError(errorMessage(err, "Could not load assembly plans"));
     } finally {

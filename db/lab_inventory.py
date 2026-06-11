@@ -12,6 +12,24 @@ from db.sql import load_query
 from db.text import clean_db_text
 
 
+LOW_VALUE_TITLE_RE = re.compile(
+    r"\b(?:image\s+ocr|figure|fig\.?|table|parts?\s+for\s+fig|untitled|unknown)\b",
+    re.IGNORECASE,
+)
+LOW_VALUE_TEXT_RE = re.compile(
+    r"\b(?:copyright|all\s+rights\s+reserved|editorial|publisher|isbn|website|email)\b",
+    re.IGNORECASE,
+)
+BUILD_ACTION_RE = re.compile(
+    r"\b(?:build|make|construct|assemble|breadboard|wire|connect|solder|test|try|experiment|project)\b",
+    re.IGNORECASE,
+)
+CIRCUIT_CONTEXT_RE = re.compile(
+    r"\b(?:circuit|schematic|diagram|parts?\s+list|component|pin|resistor|capacitor|transistor|timer|led|arduino|raspberry\s*pi|gpio)\b",
+    re.IGNORECASE,
+)
+MIN_PROJECT_TEXT_CHARS = 90
+
 GENERIC_PART_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"\b(?:ne|lm)?555\b|\b555\s+timer\b", re.IGNORECASE), "NE555 timer", "timer"),
     (re.compile(r"\b4n35\b|\boptocoupler\b", re.IGNORECASE), "4N35 optocoupler", "optocoupler"),
@@ -307,17 +325,31 @@ class ProjectFinderStore:
         text = row["chunk_text"] or ""
         matched = self._matched_parts(row["matched_terms"] or [], inventory_index)
         required = infer_required_parts(text)
-        missing = self._missing_parts(required, inventory_index)
+        required_resolution = self._resolve_required_parts(required, inventory_index)
+        matched = self._merge_matched_parts(matched, required_resolution["matchedParts"])
+        missing = required_resolution["missingParts"]
         score = int(row["matched_count"] or 0) * 18 + float(row["quality_score"] or 0.0) * 10 - len(missing) * 4
-        project_like = self._is_project_like(text, required, matched)
+        project_like, rejection_reasons = self._project_qualification(text, row["section_title"], required, matched)
         if project_like:
             score += 10
         title = self._candidate_title(row["display_name"], row["section_title"], required, matched)
+        if rejection_reasons:
+            score -= len(rejection_reasons) * 8
+        objective = self._candidate_objective(
+            title=title,
+            summary=self._preview(text),
+            source=row["source_path"],
+            page=row["page_number"],
+            matched=matched,
+            missing=missing,
+            substitutions=required_resolution["suggestedSubstitutions"],
+            rejection_reasons=rejection_reasons,
+        )
         return {
             "id": self._candidate_id("chunk", row["source_path"], row["chunk_index"]),
             "kind": "project_chunk",
             "title": title,
-            "objective": f"Build or explore: {title}",
+            "objective": objective,
             "summary": self._preview(text),
             "source": row["source_path"],
             "displayName": row["display_name"],
@@ -327,7 +359,10 @@ class ProjectFinderStore:
             "matchedPartCount": len(matched),
             "requiredParts": required,
             "missingParts": missing,
-            "suggestedSubstitutions": [],
+            "suggestedSubstitutions": required_resolution["suggestedSubstitutions"],
+            "matchReasons": required_resolution["matchReasons"],
+            "missingReasons": required_resolution["missingReasons"],
+            "rejectionReasons": rejection_reasons,
             "buildable": len(missing) == 0 and len(matched) > 0,
             "projectLike": project_like,
             "score": round(score, 2),
@@ -337,11 +372,24 @@ class ProjectFinderStore:
         matched = self._matched_parts(row["matched_terms"] or [], inventory_index)
         component = row["component_name"] or row["display_name"]
         required = _dedupe_parts([{"name": component, "type": row["component_type"] or "component"}])
+        required_resolution = self._resolve_required_parts(required, inventory_index)
+        matched = self._merge_matched_parts(matched, required_resolution["matchedParts"])
+        missing = required_resolution["missingParts"]
+        title = f"{component} reference project starter"
         return {
             "id": self._candidate_id("intel", row["source_path"], component),
             "kind": "component_reference",
-            "title": f"{component} reference project starter",
-            "objective": f"Create a simple beginner project using {component}.",
+            "title": title,
+            "objective": self._candidate_objective(
+                title=title,
+                summary=row["summary"] or f"{component} appears in indexed sources.",
+                source=row["source_path"],
+                page=None,
+                matched=matched,
+                missing=missing,
+                substitutions=required_resolution["suggestedSubstitutions"],
+                rejection_reasons=[],
+            ),
             "summary": row["summary"] or f"{component} appears in your indexed sources and matches your inventory.",
             "source": row["source_path"],
             "displayName": row["display_name"],
@@ -350,9 +398,12 @@ class ProjectFinderStore:
             "matchedParts": matched,
             "matchedPartCount": len(matched),
             "requiredParts": required,
-            "missingParts": [],
-            "suggestedSubstitutions": [],
-            "buildable": len(matched) > 0,
+            "missingParts": missing,
+            "suggestedSubstitutions": required_resolution["suggestedSubstitutions"],
+            "matchReasons": required_resolution["matchReasons"],
+            "missingReasons": required_resolution["missingReasons"],
+            "rejectionReasons": [],
+            "buildable": len(missing) == 0 and len(matched) > 0,
             "projectLike": True,
             "score": round(14 + len(matched) * 20 + float(row["confidence"] or 0.0) * 15, 2),
         }
@@ -372,14 +423,88 @@ class ProjectFinderStore:
         return list(result.values())
 
     def _missing_parts(self, required_parts: list[dict[str, str]], inventory_index: dict[str, dict[str, Any]]) -> list[dict[str, str]]:
-        missing = []
+        return self._resolve_required_parts(required_parts, inventory_index)["missingParts"]
+
+    def _resolve_required_parts(
+        self,
+        required_parts: list[dict[str, str]],
+        inventory_index: dict[str, dict[str, Any]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        matched: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        missing: list[dict[str, Any]] = []
+        substitutions: list[dict[str, str]] = []
+        match_reasons: list[str] = []
+        missing_reasons: list[str] = []
         for part in required_parts:
-            if self._find_inventory_part(part["name"], part.get("type") or "", inventory_index):
+            name = part.get("name") or ""
+            part_type = part.get("type") or "component"
+            found = self._find_inventory_part(name, part_type, inventory_index)
+            if found:
+                part_id = str(found["id"])
+                matched.setdefault(
+                    part_id,
+                    {
+                        "id": part_id,
+                        "displayName": found["displayName"],
+                        "partType": found.get("partType") or found.get("part_type") or part_type,
+                        "quantity": int(found.get("quantity") or 0),
+                        "location": found.get("location") or "",
+                    },
+                )
+                if normalize_part_name(name) != normalize_part_name(found["displayName"]):
+                    substitutions.append(
+                        {
+                            "required": name,
+                            "use": found["displayName"],
+                            "reason": f"{found['displayName']} matches {name} through inventory aliases or family normalization.",
+                        }
+                    )
+                match_reasons.append(f"{name} satisfied by {found['displayName']}.")
                 continue
-            if part["type"] in {"resistor", "capacitor"} and part["type"] in inventory_index:
+            if part_type in {"resistor", "capacitor"} and part_type in inventory_index:
+                found = inventory_index[part_type]
+                matched.setdefault(
+                    str(found["id"]),
+                    {
+                        "id": str(found["id"]),
+                        "displayName": found["displayName"],
+                        "partType": found.get("partType") or found.get("part_type") or part_type,
+                        "quantity": int(found.get("quantity") or 0),
+                        "location": found.get("location") or "",
+                    },
+                )
+                substitutions.append(
+                    {
+                        "required": name,
+                        "use": found["displayName"],
+                        "reason": f"Inventory has generic {part_type} stock; verify the exact value before building.",
+                    }
+                )
+                match_reasons.append(f"{name} may be covered by generic {part_type} inventory.")
                 continue
-            missing.append(part)
-        return missing[:8]
+            reason = self._missing_reason(name, part_type)
+            missing.append({"name": name, "type": part_type, "reason": reason})
+            missing_reasons.append(reason)
+        return {
+            "matchedParts": list(matched.values()),
+            "missingParts": missing[:8],
+            "suggestedSubstitutions": substitutions[:8],
+            "matchReasons": _dedupe_strings(match_reasons)[:8],
+            "missingReasons": _dedupe_strings(missing_reasons)[:8],
+        }
+
+    def _merge_matched_parts(self, primary: list[dict[str, Any]], secondary: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        result: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        for part in [*primary, *secondary]:
+            part_id = str(part.get("id") or part.get("displayName") or part.get("name") or "")
+            if part_id:
+                result.setdefault(part_id, part)
+        return list(result.values())
+
+    def _missing_reason(self, name: str, part_type: str) -> str:
+        if part_type == "power" and not re.search(r"\b\d+(?:\.\d+)?\s*v\b|\b\d+(?:\.\d+)?\s*(?:ma|a)\b", name, re.IGNORECASE):
+            return f"{name} is underspecified; source evidence needs voltage/current before selecting a supply."
+        return f"{name} was not found in inventory aliases, part names, or normalized part families."
 
     def _find_inventory_part(
         self,
@@ -393,13 +518,31 @@ class ProjectFinderStore:
         return None
 
     def _is_project_like(self, text: str, required: list[dict[str, str]], matched: list[dict[str, Any]]) -> bool:
-        if re.search(
-            r"\b(project|experiment|build|breadboard|wire|connect|schematic|circuit|diagram|parts?|component|pin)\b",
-            text or "",
-            re.IGNORECASE,
-        ):
-            return True
-        return len(required) >= 2 and len(matched) > 0
+        return self._project_qualification(text, None, required, matched)[0]
+
+    def _project_qualification(
+        self,
+        text: str,
+        section_title: str | None,
+        required: list[dict[str, str]],
+        matched: list[dict[str, Any]],
+    ) -> tuple[bool, list[str]]:
+        reasons: list[str] = []
+        cleaned = re.sub(r"\s+", " ", text or "").strip()
+        title = section_title or ""
+        if len(cleaned) < MIN_PROJECT_TEXT_CHARS:
+            reasons.append("Evidence is too short to describe a buildable project.")
+        if LOW_VALUE_TITLE_RE.search(title) and not BUILD_ACTION_RE.search(cleaned):
+            reasons.append("Section title looks like OCR/table/figure noise rather than a project.")
+        if LOW_VALUE_TEXT_RE.search(cleaned[:260]) and not BUILD_ACTION_RE.search(cleaned):
+            reasons.append("Evidence is mostly publication or boilerplate text.")
+        action = bool(BUILD_ACTION_RE.search(cleaned))
+        context = bool(CIRCUIT_CONTEXT_RE.search(cleaned))
+        enough_parts = len(required) >= 2 or (len(required) >= 1 and len(matched) >= 2)
+        project_like = action and context and (enough_parts or len(matched) > 0)
+        if not project_like and not reasons:
+            reasons.append("No clear build action, circuit context, and parts evidence were found together.")
+        return project_like, _dedupe_strings(reasons)
 
     def _candidate_title(
         self,
@@ -408,13 +551,48 @@ class ProjectFinderStore:
         required: list[dict[str, str]],
         matched: list[dict[str, Any]],
     ) -> str:
-        if section_title and section_title.lower() not in {"unknown", "untitled section"}:
+        if (
+            section_title
+            and section_title.lower() not in {"unknown", "untitled section"}
+            and not LOW_VALUE_TITLE_RE.search(section_title)
+        ):
             return str(section_title)[:90]
         if required:
             return f"{required[0]['name']} circuit from {display_name}"
         if matched:
             return f"{matched[0]['displayName']} project from {display_name}"
         return f"Project candidate from {display_name}"
+
+    def _candidate_objective(
+        self,
+        *,
+        title: str,
+        summary: str,
+        source: str,
+        page: int | None,
+        matched: list[dict[str, Any]],
+        missing: list[dict[str, Any]],
+        substitutions: list[dict[str, str]],
+        rejection_reasons: list[str],
+    ) -> str:
+        lines = [
+            f"Create a Bench assembly plan from this Project Finder candidate: {title}.",
+            f"Source: {source}" + (f", page {page}." if page else "."),
+            f"Evidence summary: {summary}",
+        ]
+        if matched:
+            lines.append("Inventory matches: " + ", ".join(part.get("displayName") or part.get("name") or "" for part in matched if part))
+        if substitutions:
+            lines.append(
+                "Allowed substitutions or alias matches: "
+                + "; ".join(f"{item['required']} -> {item['use']} ({item['reason']})" for item in substitutions)
+            )
+        if missing:
+            lines.append("Unresolved or underspecified parts: " + "; ".join(part.get("reason") or part.get("name") or "" for part in missing))
+        if rejection_reasons:
+            lines.append("Candidate caveats: " + "; ".join(rejection_reasons))
+        lines.append("Use only cited source evidence. If wiring or required values are missing, say what is missing instead of inventing it.")
+        return "\n".join(lines)
 
     def _preview(self, text: str) -> str:
         cleaned = re.sub(r"\s+", " ", text or "").strip()
@@ -428,7 +606,11 @@ class ProjectFinderStore:
             key = self._candidate_dedupe_key(candidate)
             existing = result.get(key)
             if not existing or candidate["score"] > existing["score"]:
+                if existing:
+                    candidate["dedupeCount"] = int(existing.get("dedupeCount") or 1) + 1
                 result[key] = candidate
+            elif existing:
+                existing["dedupeCount"] = int(existing.get("dedupeCount") or 1) + 1
         return list(result.values())
 
     def _candidate_dedupe_key(self, candidate: dict[str, Any]) -> str:
@@ -436,6 +618,9 @@ class ProjectFinderStore:
             normalize_part_name(part.get("name") or part.get("displayName") or "")
             for part in candidate.get("requiredParts") or []
         )
+        title = normalize_part_name(candidate.get("title") or "")
+        if LOW_VALUE_TITLE_RE.search(title):
+            title = ""
         if required:
             signature = "|".join(required)
         else:
@@ -444,7 +629,7 @@ class ProjectFinderStore:
             [
                 str(candidate.get("kind") or ""),
                 str(candidate.get("source") or ""),
-                normalize_part_name(candidate.get("title") or ""),
+                title,
                 signature,
             ]
         )
@@ -503,4 +688,13 @@ def _dedupe_parts(parts: list[dict[str, str]]) -> list[dict[str, str]]:
         normalized = normalize_part_name(name)
         if name and normalized:
             result.setdefault(normalized, {"name": name, "type": part_type})
+    return list(result.values())
+
+
+def _dedupe_strings(values: list[str]) -> list[str]:
+    result = OrderedDict()
+    for value in values:
+        text = clean_db_text(value or "").strip()
+        if text:
+            result.setdefault(text.lower(), text)
     return list(result.values())

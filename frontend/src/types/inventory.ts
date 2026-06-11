@@ -61,6 +61,13 @@ export interface ProjectCandidatePart {
   type?: string;
   quantity?: number;
   location?: string;
+  reason?: string;
+}
+
+export interface ProjectCandidateSubstitution {
+  required: string;
+  use: string;
+  reason: string;
 }
 
 export interface ProjectCandidate {
@@ -77,7 +84,12 @@ export interface ProjectCandidate {
   matchedPartCount: number;
   requiredParts: ProjectCandidatePart[];
   missingParts: ProjectCandidatePart[];
-  suggestedSubstitutions: Array<Record<string, string>>;
+  suggestedSubstitutions: ProjectCandidateSubstitution[];
+  matchReasons?: string[];
+  missingReasons?: string[];
+  rejectionReasons?: string[];
+  dedupeCount?: number;
+  projectLike?: boolean;
   buildable: boolean;
   score: number;
 }

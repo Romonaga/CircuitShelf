@@ -86,6 +86,8 @@ class PdfDocumentExtractor:
             "ocrJobs": len(results),
             "ocrAccepted": 0,
             "ocrSkipped": 0,
+            "ocrFailed": 0,
+            "ocrTimedOut": 0,
             "ocrFallbacks": 0,
         }
         engines: dict[str, int] = {}
@@ -98,6 +100,10 @@ class PdfDocumentExtractor:
                 stats["ocrAccepted"] = int(stats["ocrAccepted"]) + 1
             if ocr_result.get("skipped"):
                 stats["ocrSkipped"] = int(stats["ocrSkipped"]) + 1
+            if ocr_result.get("failed"):
+                stats["ocrFailed"] = int(stats["ocrFailed"]) + 1
+            if ocr_result.get("timedOut"):
+                stats["ocrTimedOut"] = int(stats["ocrTimedOut"]) + 1
             if ocr_result.get("fallbackFrom"):
                 stats["ocrFallbacks"] = int(stats["ocrFallbacks"]) + 1
                 error = str(ocr_result.get("error") or "").strip()
