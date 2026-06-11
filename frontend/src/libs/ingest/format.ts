@@ -98,6 +98,11 @@ export function formatDetailLabel(key: string): string {
     imageEmbeddingTexts: "Embedded image texts",
     imageEmbeddingTotal: "Image texts to embed",
     ocrImageTexts: "OCR image texts",
+    ocrAccepted: "OCR accepted",
+    ocrFailed: "OCR failed",
+    ocrTimedOut: "OCR timed out",
+    ocrSkipped: "OCR skipped",
+    ocrJobs: "OCR jobs",
     currentImage: "Image",
     completedDocuments: "Indexed documents",
     failedDocuments: "Failed documents",
@@ -153,12 +158,50 @@ export function fileSizeProgress(progress: IngestProgress): string {
 }
 
 export function imageProgress(progress: IngestProgress): string {
-  const saved = progress.savedImages;
-  const total = progress.totalImagesToSave ?? progress.extractedImages ?? progress.imageCandidates;
-  if (total !== undefined) {
-    return `${formatDetailValue(saved ?? 0)} / ${formatDetailValue(total)}`;
+  const phase = formatDetailValue(progress.documentPhase ?? "").toLowerCase();
+  const saved = numberValue(progress.savedImages);
+  const totalToSave = numberValue(progress.totalImagesToSave);
+  if (phase.includes("save") || totalToSave !== undefined) {
+    return `${formatDetailValue(saved ?? 0)} / ${formatDetailValue(totalToSave ?? progress.extractedImages ?? progress.imageCandidates)}`;
+  }
+
+  const ocrAccepted = numberValue(progress.ocrAccepted ?? progress.ocrImageTexts);
+  const ocrJobs = numberValue(progress.ocrJobs ?? progress.imageCandidates);
+  if (phase.includes("ocr") && ocrJobs !== undefined) {
+    const failed = numberValue(progress.ocrFailed);
+    const timedOut = numberValue(progress.ocrTimedOut);
+    const suffixes = [];
+    if (failed) {
+      suffixes.push(`${formatDetailValue(failed)} failed`);
+    }
+    if (timedOut) {
+      suffixes.push(`${formatDetailValue(timedOut)} timed out`);
+    }
+    const suffix = suffixes.length ? `, ${suffixes.join(", ")}` : "";
+    return `${formatDetailValue(ocrAccepted ?? 0)} / ${formatDetailValue(ocrJobs)} OCR${suffix}`;
+  }
+
+  const extracted = numberValue(progress.extractedImages);
+  if (extracted !== undefined) {
+    return `${formatDetailValue(extracted)} extracted`;
+  }
+
+  const candidates = numberValue(progress.imageCandidates);
+  if (candidates !== undefined) {
+    return `${formatDetailValue(candidates)} queued`;
   }
   return "n/a";
+}
+
+function numberValue(value: string | number | boolean | null | undefined): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 export function chunkProgress(progress: IngestProgress): string {

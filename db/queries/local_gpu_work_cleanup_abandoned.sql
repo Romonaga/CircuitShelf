@@ -7,8 +7,4 @@ UPDATE local_gpu_work_items
  WHERE (
         status_id = 2
         AND updated_at < now() - (%s::text)::interval
-    )
-    OR (
-        status_id = 1
-        AND created_at < now() - (%s::text)::interval
     );

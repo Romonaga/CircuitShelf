@@ -2159,10 +2159,18 @@ nav {
   gap: 10px;
 }
 
+.project-part-columns.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .project-part-group {
   display: grid;
   gap: 7px;
   min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.42);
 }
 
 .project-part-group > div {
@@ -2172,6 +2180,8 @@ nav {
 }
 
 .project-part-group span {
+  display: grid;
+  gap: 2px;
   max-width: 100%;
   overflow: hidden;
   padding: 4px 8px;
@@ -2184,9 +2194,54 @@ nav {
   font-size: 0.82rem;
 }
 
+.project-part-group.missing span {
+  border-radius: 8px;
+  white-space: normal;
+}
+
+.project-part-group span small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+}
+
+.project-candidate-evidence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.project-evidence-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.project-evidence-group ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.project-evidence-group li {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 :root[data-theme="dark"] .project-candidate-summary,
 :root[data-theme="dark"] .project-part-group span {
   color: var(--text);
+}
+
+:root[data-theme="dark"] .project-part-group {
+  background: rgba(13, 30, 43, 0.62);
 }
 
 .account-workflow {
@@ -6031,7 +6086,10 @@ nav {
 
   .inventory-layout,
   .finder-workflow,
-  .inventory-command-panel {
+  .inventory-command-panel,
+  .project-candidate-evidence,
+  .project-part-columns,
+  .project-part-columns.three {
     grid-template-columns: minmax(0, 1fr);
   }
 

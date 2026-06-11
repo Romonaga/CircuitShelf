@@ -84,11 +84,19 @@ class IncrementalDocumentProcessor:
                 ingest_token_utils,
                 progress_callback=detail_progress,
             )
+            ocr_stats = getattr(document, "ocr_stats", {}) if document is not None else {}
+            image_count = len(ingested_state.get_image_store())
+            ocr_text_count = len(ingested_state.get_image_page_text())
             elapsed = time.time() - start
             self.update_index_progress(
                 stage="processing_documents",
                 current_file=source,
-                file_details={"documentPhase": "Extracted, waiting for DB save"},
+                file_details={
+                    "documentPhase": "Extracted, waiting for DB save",
+                    "extractedImages": image_count,
+                    "ocrImageTexts": ocr_text_count,
+                    **ocr_stats,
+                },
             )
             return {
                 "source": source,
@@ -98,7 +106,7 @@ class IncrementalDocumentProcessor:
                 "extractElapsedSeconds": elapsed,
                 "activeDocumentWorkersAtStart": active_count,
                 "fileSizeBytes": start_details.get("fileSizeBytes"),
-                "ocrStats": getattr(document, "ocr_stats", {}) if document is not None else {},
+                "ocrStats": ocr_stats,
             }
         except Exception as exc:
             self.trace_logger.error(f"Error processing {source}: {exc}")

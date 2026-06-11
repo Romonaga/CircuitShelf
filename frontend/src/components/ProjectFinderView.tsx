@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { buildAssemblyPlan } from "../libs/api";
+import { rememberBenchPlanSelection } from "../libs/benchSelection";
 import { errorMessage } from "../libs/errors";
 import { formatNumber } from "../libs/format";
 import { useElapsedSeconds } from "../hooks/useElapsedSeconds";
@@ -71,7 +72,9 @@ export function ProjectFinderView({
         strategy: config.defaults.strategy
       });
       if (response.plan) {
+        rememberBenchPlanSelection(response.plan.id);
         setMessage(`Bench plan created: ${response.plan.title}`);
+        setActiveView("bench");
       } else {
         setBuildError(response.error || "No Bench plan was created.");
       }

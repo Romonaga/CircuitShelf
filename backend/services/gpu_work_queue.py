@@ -505,7 +505,9 @@ class LocalGpuWorkCoordinator:
         task_id = str(uuid.uuid4())
         priority = int(priority)
         resource_class = self._normalize_resource_class(resource_class or self._default_resource_class(task_type))
-        timeout = self.queue_timeout_seconds if timeout_seconds is None else max(1.0, float(timeout_seconds))
+        timeout = self.queue_timeout_seconds if timeout_seconds is None else float(timeout_seconds)
+        if timeout <= 0:
+            timeout = None
         self.cleanup_abandoned()
         admission_wait_seconds = self._admit_task(
             task_id=task_id,
@@ -707,10 +709,7 @@ class LocalGpuWorkCoordinator:
                         )
                 conn.execute(
                     load_query("local_gpu_work_cleanup_abandoned.sql"),
-                    (
-                        f"{self.stale_running_after_seconds} seconds",
-                        f"{self.stale_queued_after_seconds} seconds",
-                    ),
+                    (f"{self.stale_running_after_seconds} seconds",),
                 )
         except Exception as exc:
             if self.logger:
@@ -852,12 +851,12 @@ class LocalGpuWorkCoordinator:
 
             time.sleep(self.poll_seconds)
 
-    def _wait_for_slot(self, task_id: str, resource_class: str, timeout_seconds: float):
+    def _wait_for_slot(self, task_id: str, resource_class: str, timeout_seconds: float | None):
         started = time.monotonic()
         slot_count = self._slot_count_for(resource_class)
         while True:
             elapsed = time.monotonic() - started
-            if elapsed >= timeout_seconds:
+            if timeout_seconds is not None and elapsed >= timeout_seconds:
                 raise TimeoutError(f"Local GPU queue timed out after {timeout_seconds:.0f}s.")
 
             live_counts = self._live_counts_by_resource()

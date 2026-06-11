@@ -332,7 +332,6 @@ class CircuitShelfRuntime:
         width, height = image.size
         ocr_slots = max(1, int(getattr(self, "local_gpu_ocr_slots", 1) or 1))
         paddle_timeout = max(10.0, float(self.config.get("PADDLEOCR_TIMEOUT_SECONDS", 120) or 120))
-        slot_timeout = min(max(30.0, paddle_timeout), float(self.local_gpu_queue_timeout_seconds or 300))
         self._wait_for_interactive_gpu_headroom(task_type="paddleocr")
         try:
             with self.local_gpu_coordinator.lease(
@@ -340,14 +339,15 @@ class CircuitShelfRuntime:
                 resource_class="ocr_cuda",
                 priority=max(60, int(self.local_gpu_priority or 50)),
                 owner=self.local_gpu_owner,
-                timeout_seconds=slot_timeout,
+                timeout_seconds=0,
                 details={
                     "engine": "paddleocr",
                     "device": "gpu",
                     "width": width,
                     "height": height,
                     "ocrSlots": ocr_slots,
-                    "timeoutSeconds": paddle_timeout,
+                    "queueWaitTimeoutSeconds": 0,
+                    "ocrTimeoutSeconds": paddle_timeout,
                 },
             ):
                 return run_selected_ocr(image, ocr_config)

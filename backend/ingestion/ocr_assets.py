@@ -105,7 +105,14 @@ class OcrAssetProcessor:
             return []
         workers = self.worker_count(len(jobs))
         if workers <= 1:
-            return [self._run_job(job) for job in jobs]
+            results = []
+            for job in jobs:
+                try:
+                    results.append(self._run_job(job))
+                except Exception as exc:
+                    self.trace_logger.warning(f"OCR worker failed for {job[3]}: {exc}")
+                    results.append(self._failed_job_result(job, exc))
+            return results
 
         self.trace_logger.debug(
             f"OCR processing {len(jobs)} images with {workers} workers "
@@ -120,6 +127,7 @@ class OcrAssetProcessor:
                     results.append(future.result())
                 except Exception as exc:
                     self.trace_logger.warning(f"OCR worker failed for {job[3]}: {exc}")
+                    results.append(self._failed_job_result(job, exc))
         results.sort(key=lambda item: item["order"])
         return results
 
@@ -134,4 +142,32 @@ class OcrAssetProcessor:
             "source_kind": source_kind,
             "image_bytes": web_image_bytes,
             "ocr_result": ocr_result,
+        }
+
+    def _failed_job_result(self, job: tuple, exc: Exception) -> dict:
+        order, page_number, image_bytes, image_key, source_kind = job
+        try:
+            web_image_bytes = self.image_bytes_to_png_bytes(image_bytes, image_key)
+        except Exception:
+            web_image_bytes = image_bytes
+        message = str(exc)
+        return {
+            "order": order,
+            "page_number": page_number,
+            "image_key": image_key,
+            "source_kind": source_kind,
+            "image_bytes": web_image_bytes,
+            "ocr_result": {
+                "accepted": False,
+                "text": "",
+                "score": 0.0,
+                "reason": "OCR worker failed",
+                "confidence": None,
+                "skipped": False,
+                "failed": True,
+                "timedOut": "timed out" in message.lower(),
+                "engine": "unknown",
+                "fallbackFrom": "",
+                "error": message,
+            },
         }

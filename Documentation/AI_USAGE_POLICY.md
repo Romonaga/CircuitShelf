@@ -56,6 +56,5 @@ Required for:
 ## Incident learning
 
 If an AI-assisted change causes a regression:
-- capture the incident in `Documentation/guides/AI_INCIDENT_TEMPLATE.md`
-- attach it to the relevant change or handoff trail
+- record the incident on the relevant Verlyn change, work item, or review trail
 - add at least one durable improvement: rule, test, check, or tooling change
