@@ -1,4 +1,5 @@
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
+import os
 import time
 
 import numpy as np
@@ -110,7 +111,21 @@ class IncrementalIngestService:
                 "Use Admin Remove to delete documents from CircuitShelf."
             )
         delete_rel_paths = changes.modified
-        changed_rel_paths = changes.changed_or_added
+        changed_rel_paths = list(changes.changed_or_added)
+        disappeared_rel_paths = []
+        existing_changed_rel_paths = []
+        for source in changed_rel_paths:
+            path = source if os.path.isabs(source) else os.path.join(self.training_dir, source)
+            if os.path.exists(path):
+                existing_changed_rel_paths.append(source)
+            else:
+                disappeared_rel_paths.append(source)
+        if disappeared_rel_paths:
+            self.trace_logger.warning(
+                f"⚠️ Skipping {len(disappeared_rel_paths)} changed files that disappeared before ingest. "
+                "This can happen after a reboot or manual training-folder cleanup."
+            )
+        changed_rel_paths = existing_changed_rel_paths
 
         self.trace_logger.info(
             f"🔁 Incremental ingest. Added: {len(changes.added)}, modified: {len(changes.modified)}, "
@@ -148,6 +163,7 @@ class IncrementalIngestService:
                 total_files=len(changed_rel_paths),
                 details={
                     "documents": len(changed_rel_paths),
+                    "skippedDisappearedFiles": len(disappeared_rel_paths),
                     "activeWorkers": max_workers,
                     "persistWorkers": save_workers,
                     "queuedSaveDocuments": 0,
@@ -244,6 +260,20 @@ class IncrementalIngestService:
                         while len(pending_persists) >= max(1, save_workers * 2):
                             drain_persist_queue(block=True)
                         drain_persist_queue(block=False)
+                    except FileNotFoundError as exc:
+                        disappeared_rel_paths.append(source)
+                        self.trace_logger.warning(f"⚠️ Skipping disappeared training file {source}: {exc}")
+                        self.update_index_progress(
+                            stage="processing_documents",
+                            finished_file=source,
+                            details={
+                                "documents": len(changed_rel_paths),
+                                "persistWorkers": save_workers,
+                                "queuedSaveDocuments": len(pending_persists),
+                                "skippedDisappearedFiles": len(disappeared_rel_paths),
+                                "skippedDisappearedSamples": disappeared_rel_paths[:10],
+                            },
+                        )
                     except Exception as exc:
                         failed_files.append(source)
                         self.trace_logger.error(f"❌ Incremental document extract failed for {source}: {exc}")
@@ -254,6 +284,7 @@ class IncrementalIngestService:
                                 "documents": len(changed_rel_paths),
                                 "persistWorkers": save_workers,
                                 "queuedSaveDocuments": len(pending_persists),
+                                "skippedDisappearedFiles": len(disappeared_rel_paths),
                                 "failedDocuments": len(failed_files),
                                 "failedFiles": failed_files[:10],
                             },
@@ -268,11 +299,19 @@ class IncrementalIngestService:
                 "completedDocuments": completed_documents,
                 "persistWorkers": save_workers,
                 "queuedSaveDocuments": 0,
+                "skippedDisappearedFiles": len(disappeared_rel_paths),
                 **aggregate_details,
                 "failedDocuments": len(failed_files),
             }
         elif delete_rel_paths:
             self.vector_store.delete_sources(delete_rel_paths)
+        elif disappeared_rel_paths:
+            final_details = {
+                "documents": 0,
+                "skippedDisappearedFiles": len(disappeared_rel_paths),
+                "skippedDisappearedSamples": disappeared_rel_paths[:10],
+                **selected_ocr_mode(self.config),
+            }
 
         build_result = None
         if total_chunks:

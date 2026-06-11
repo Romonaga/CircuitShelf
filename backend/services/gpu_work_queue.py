@@ -263,6 +263,74 @@ def resolve_cuda_batch_slots(
     }
 
 
+def resolve_local_llm_slots(
+    max_slots: int,
+    pressure: dict[str, Any],
+    *,
+    running_slots: int = 0,
+    background_running_slots: int = 0,
+) -> dict[str, Any]:
+    """Choose local LLM admission from live GPU pressure.
+
+    The local model is the least elastic GPU workload we run. OCR and embedding
+    batches can wait or retry; a local LLM launch into a near-full allocator can
+    OOM the box. When background GPU work is already running, require real VRAM
+    headroom before admitting the LLM instead of relying only on queue priority.
+    """
+    max_slots = max(1, int(max_slots or 1))
+    running_slots = max(0, min(max_slots, int(running_slots or 0)))
+    background_running_slots = max(0, int(background_running_slots or 0))
+    if not pressure.get("available"):
+        return {
+            "enabled": False,
+            "activeSlots": max_slots,
+            "targetSlots": max_slots,
+            "maxSlots": max_slots,
+            "runningSlots": running_slots,
+            "backgroundRunningSlots": background_running_slots,
+            "reason": "gpu telemetry unavailable",
+            "pressure": pressure,
+        }
+
+    vram_percent = _optional_float(pressure.get("memoryUsedPercent")) or 0.0
+    vram_used_mib = _optional_float(pressure.get("memoryUsedMiB")) or 0.0
+    vram_total_mib = _optional_float(pressure.get("memoryTotalMiB")) or 0.0
+    free_mib = max(0.0, vram_total_mib - vram_used_mib)
+    temperature_c = _optional_float(pressure.get("temperatureC")) or 0.0
+
+    # Keep roughly one third of a 24 GiB card free for the local model launch.
+    # On smaller cards this scales down but still leaves a meaningful allocator
+    # cushion. This is deterministic from hardware telemetry, not a document cap.
+    required_free_mib = max(4096.0, min(8192.0, vram_total_mib * 0.30))
+    if temperature_c >= 82 or vram_percent >= 92:
+        target_slots = 0
+        reason = "thermal or VRAM guard"
+        pressure_level = "hard"
+    elif background_running_slots and free_mib < required_free_mib:
+        target_slots = 0
+        reason = f"waiting for background GPU work to drain ({free_mib:.0f} MiB free)"
+        pressure_level = "background-drain"
+    else:
+        target_slots = max_slots
+        reason = "local LLM headroom available"
+        pressure_level = "headroom"
+
+    return {
+        "enabled": True,
+        "activeSlots": max(target_slots, running_slots),
+        "targetSlots": target_slots,
+        "rawTargetSlots": target_slots,
+        "maxSlots": max_slots,
+        "runningSlots": running_slots,
+        "backgroundRunningSlots": background_running_slots,
+        "requiredFreeMiB": round(required_free_mib, 1),
+        "freeMiB": round(free_mib, 1),
+        "reason": reason,
+        "pressureLevel": pressure_level,
+        "pressure": pressure,
+    }
+
+
 def is_cuda_out_of_memory(exc: BaseException) -> bool:
     text = f"{type(exc).__name__}: {exc}".lower()
     return "cuda out of memory" in text or ("outofmemoryerror" in text and "cuda" in text)
@@ -532,7 +600,11 @@ class LocalGpuWorkCoordinator:
                     (window, max(1, int(recent_limit))),
                 ).fetchall()
             running_by_resource = self._running_counts_by_resource(live_count_rows)
-            adaptive_slots = self._adaptive_slots_payload(running_by_resource=running_by_resource)
+            live_counts_by_resource = self._counts_by_resource(live_count_rows)
+            adaptive_slots = self._adaptive_slots_payload(
+                running_by_resource=running_by_resource,
+                live_counts=live_counts_by_resource,
+            )
         except Exception as exc:
             return {
                 "enabled": False,
@@ -788,15 +860,16 @@ class LocalGpuWorkCoordinator:
             if elapsed >= timeout_seconds:
                 raise TimeoutError(f"Local GPU queue timed out after {timeout_seconds:.0f}s.")
 
-            effective_slot_count = self._effective_slot_count_for(resource_class)
-            if effective_slot_count <= 0:
+            live_counts = self._live_counts_by_resource()
+            admission_slot_count = self._admission_slot_count_for(resource_class, live_counts=live_counts)
+            if admission_slot_count <= 0:
                 time.sleep(self.poll_seconds)
                 continue
-            if not self._task_is_eligible(task_id, effective_slot_count):
+            if not self._task_is_eligible(task_id, admission_slot_count):
                 time.sleep(self.poll_seconds)
                 continue
 
-            for slot_index in range(effective_slot_count):
+            for slot_index in range(admission_slot_count):
                 conn = self.database._connection_pool().getconn()
                 lock_key = self._lock_key(resource_class, slot_index)
                 try:
@@ -816,7 +889,7 @@ class LocalGpuWorkCoordinator:
                     ).fetchone()
                     conn.commit()
                     wait_seconds = float((running_row or {}).get("wait_seconds") or 0.0)
-                    return conn, slot_index, wait_seconds, effective_slot_count
+                    return conn, slot_index, wait_seconds, admission_slot_count
                 except Exception:
                     conn.rollback()
                     try:
@@ -873,16 +946,65 @@ class LocalGpuWorkCoordinator:
     def _effective_slot_count_for(self, resource_class: str, *, running_slots: int = 0) -> int:
         if resource_class == "cuda_batch":
             return self._adaptive_cuda_batch_slot_count(running_slots=running_slots)["activeSlots"]
+        if resource_class == "local_llm":
+            return self._adaptive_local_llm_slot_count(running_slots=running_slots)["activeSlots"]
         if resource_class != "ocr_cuda":
             return self._slot_count_for(resource_class)
         return self._adaptive_ocr_slot_count(running_slots=running_slots)["activeSlots"]
 
-    def _adaptive_slots_payload(self, *, running_by_resource: dict[str, int] | None = None) -> dict[str, Any]:
+    def _admission_slot_count_for(self, resource_class: str, *, live_counts: dict[str, dict[str, int]] | None = None) -> int:
+        live_counts = live_counts or {}
+        running_slots = int((live_counts.get(resource_class) or {}).get("running") or 0)
+        if resource_class == "local_llm":
+            return int(
+                self._adaptive_local_llm_slot_count(
+                    running_slots=running_slots,
+                    live_counts=live_counts,
+                )["targetSlots"]
+            )
+
+        local_llm_live = live_counts.get("local_llm") or {}
+        if int(local_llm_live.get("queued") or 0) or int(local_llm_live.get("running") or 0):
+            return 0
+        if resource_class == "cuda_batch":
+            return int(self._adaptive_cuda_batch_slot_count(running_slots=running_slots)["targetSlots"])
+        if resource_class == "ocr_cuda":
+            return int(self._adaptive_ocr_slot_count(running_slots=running_slots)["targetSlots"])
+        return self._slot_count_for(resource_class)
+
+    def _adaptive_slots_payload(
+        self,
+        *,
+        running_by_resource: dict[str, int] | None = None,
+        live_counts: dict[str, dict[str, int]] | None = None,
+    ) -> dict[str, Any]:
         running_by_resource = running_by_resource or {}
+        live_counts = live_counts or {}
         return {
+            "local_llm": self._adaptive_local_llm_slot_count(
+                running_slots=running_by_resource.get("local_llm", 0),
+                live_counts=live_counts,
+            ),
             "cuda_batch": self._adaptive_cuda_batch_slot_count(running_slots=running_by_resource.get("cuda_batch", 0)),
             "ocr_cuda": self._adaptive_ocr_slot_count(running_slots=running_by_resource.get("ocr_cuda", 0)),
         }
+
+    def _adaptive_local_llm_slot_count(
+        self,
+        *,
+        running_slots: int = 0,
+        live_counts: dict[str, dict[str, int]] | None = None,
+    ) -> dict[str, Any]:
+        live_counts = live_counts or {}
+        background_running = 0
+        for resource in ("cuda_batch", "ocr_cuda"):
+            background_running += int((live_counts.get(resource) or {}).get("running") or 0)
+        return resolve_local_llm_slots(
+            self._slot_count_for("local_llm"),
+            self._cached_gpu_pressure(),
+            running_slots=running_slots,
+            background_running_slots=background_running,
+        )
 
     def _adaptive_cuda_batch_slot_count(self, *, running_slots: int = 0) -> dict[str, Any]:
         return resolve_cuda_batch_slots(
@@ -959,6 +1081,20 @@ class LocalGpuWorkCoordinator:
             resource = str(row.get("resource_class") or "unknown")
             running[resource] = running.get(resource, 0) + int(row.get("count") or 0)
         return running
+
+    def _live_counts_by_resource(self) -> dict[str, dict[str, int]]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("local_gpu_work_live_by_resource_counts.sql")).fetchall()
+        return self._counts_by_resource(rows)
+
+    @staticmethod
+    def _counts_by_resource(rows: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+        counts: dict[str, dict[str, int]] = {}
+        for row in rows:
+            resource = str(row.get("resource_class") or "unknown")
+            status = str(row.get("status") or "unknown")
+            counts.setdefault(resource, {})[status] = int(row.get("count") or 0)
+        return counts
 
     def _cached_gpu_pressure(self, *, max_age_seconds: float = 1.0) -> dict[str, Any]:
         now = time.monotonic()

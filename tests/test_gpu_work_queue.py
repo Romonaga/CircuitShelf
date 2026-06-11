@@ -6,6 +6,7 @@ from backend.services.gpu_work_queue import (
     is_cuda_out_of_memory,
     resolve_adaptive_ocr_slots,
     resolve_cuda_batch_slots,
+    resolve_local_llm_slots,
 )
 
 
@@ -211,6 +212,45 @@ def test_cuda_batch_slots_use_full_capacity_with_memory_headroom():
     assert payload["reason"] == "GPU memory headroom available"
 
 
+def test_local_llm_slots_wait_for_background_work_to_drain():
+    payload = resolve_local_llm_slots(
+        1,
+        {
+            "available": True,
+            "gpuPercent": 55,
+            "memoryUsedPercent": 78,
+            "memoryUsedMiB": 19000,
+            "memoryTotalMiB": 24576,
+            "temperatureC": 62,
+        },
+        background_running_slots=4,
+    )
+
+    assert payload["targetSlots"] == 0
+    assert payload["activeSlots"] == 0
+    assert payload["pressureLevel"] == "background-drain"
+    assert payload["requiredFreeMiB"] == 7372.8
+
+
+def test_local_llm_slots_start_when_background_work_has_headroom():
+    payload = resolve_local_llm_slots(
+        1,
+        {
+            "available": True,
+            "gpuPercent": 55,
+            "memoryUsedPercent": 35,
+            "memoryUsedMiB": 8000,
+            "memoryTotalMiB": 24576,
+            "temperatureC": 62,
+        },
+        background_running_slots=4,
+    )
+
+    assert payload["targetSlots"] == 1
+    assert payload["activeSlots"] == 1
+    assert payload["reason"] == "local LLM headroom available"
+
+
 def test_cuda_oom_detection_matches_torch_error_text():
     assert is_cuda_out_of_memory(RuntimeError("CUDA out of memory. Tried to allocate 34 MiB"))
     assert not is_cuda_out_of_memory(RuntimeError("some other cuda warning"))
@@ -301,3 +341,47 @@ def test_coordinator_reports_running_ocr_lanes_even_when_target_is_lower(monkeyp
     assert guarded["targetSlots"] == 2
     assert guarded["activeSlots"] == 6
     assert guarded["runningSlots"] == 6
+
+
+def test_coordinator_pauses_ocr_admission_when_local_llm_is_queued(monkeypatch):
+    coordinator = LocalGpuWorkCoordinator(database=FakeDatabase(), ocr_slot_count=8, llm_slot_count=1)
+    monkeypatch.setattr(
+        coordinator,
+        "_cached_gpu_pressure",
+        lambda: {"available": True, "gpuPercent": 30, "memoryUsedPercent": 40, "temperatureC": 55},
+    )
+
+    slots = coordinator._admission_slot_count_for(
+        "ocr_cuda",
+        live_counts={"local_llm": {"queued": 1}, "ocr_cuda": {"running": 3}},
+    )
+
+    assert slots == 0
+
+
+def test_coordinator_admits_local_llm_only_after_vram_headroom(monkeypatch):
+    coordinator = LocalGpuWorkCoordinator(database=FakeDatabase(), ocr_slot_count=8, llm_slot_count=1)
+    monkeypatch.setattr(
+        coordinator,
+        "_cached_gpu_pressure",
+        lambda: {
+            "available": True,
+            "gpuPercent": 50,
+            "memoryUsedPercent": 80,
+            "memoryUsedMiB": 20000,
+            "memoryTotalMiB": 24576,
+            "temperatureC": 62,
+        },
+    )
+
+    blocked = coordinator._admission_slot_count_for(
+        "local_llm",
+        live_counts={"local_llm": {"queued": 1}, "ocr_cuda": {"running": 3}},
+    )
+    allowed_without_background = coordinator._admission_slot_count_for(
+        "local_llm",
+        live_counts={"local_llm": {"queued": 1}, "ocr_cuda": {"running": 0}},
+    )
+
+    assert blocked == 0
+    assert allowed_without_background == 1

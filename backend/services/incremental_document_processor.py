@@ -57,6 +57,8 @@ class IncrementalDocumentProcessor:
     def extract_document(self, source):
         ingested_state, ingest_token_utils, ingest_chunker = self.build_ingest_context()
         fpath = source if os.path.isabs(source) else os.path.join(self.training_dir, source)
+        if not os.path.exists(fpath):
+            raise FileNotFoundError(f"Training file disappeared before processing: {source}")
         start_details = {"documentPhase": "Starting"}
         try:
             start_details["fileSizeBytes"] = os.path.getsize(fpath)
