@@ -132,6 +132,10 @@ if ! command -v tesseract >/dev/null 2>&1; then
   warn "Tesseract was not found. OCR will not work until tesseract-ocr is installed."
 fi
 
+if ! command -v 7z >/dev/null 2>&1; then
+  warn "7z was not found. .7z code bundle uploads will be skipped until p7zip-full is installed."
+fi
+
 if ! command -v ollama >/dev/null 2>&1; then
   warn "Ollama was not found in PATH. The app can install, but queries need an Ollama server."
 fi

@@ -34,8 +34,10 @@ Install system prerequisites first. On Ubuntu/Debian:
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv nodejs npm postgresql postgresql-client postgresql-16-pgvector tesseract-ocr
+sudo apt install python3 python3-venv nodejs npm postgresql postgresql-client postgresql-16-pgvector tesseract-ocr p7zip-full
 ```
+
+`p7zip-full` provides the `7z` command used to expand `.7z` electronics code bundles during upload.
 
 Install Ollama from `https://ollama.com`, then run the guided installer:
 

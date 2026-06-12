@@ -149,6 +149,30 @@ def test_document_extractor_routes_code_companion_as_code_sample(tmp_path):
     assert "AT+CSQ" in document.extra_metadata["code_at_commands"]
 
 
+def test_document_extractor_uses_training_relative_code_pack_path(tmp_path):
+    training = tmp_path / "training"
+    source = training / "SIM7080G_Cat_M_NB_IoT_HAT_Code" / "Arduino" / "SIM7080G_PING_Demo" / "demo.ino"
+    source.parent.mkdir(parents=True)
+    source.write_text("void setup(){ Serial.begin(115200); }\nvoid loop(){}", encoding="utf-8")
+    extractor = DocumentExtractor(
+        config={"TRAINING_DIR": str(training)},
+        trace_logger=logging.getLogger("test"),
+        run_ocr=None,
+        ocr_worker_count=1,
+        current_document_workers=lambda: 0,
+        local_gpu_ocr_slots=1,
+        detected_cpu_count=lambda: 1,
+        reserved_core_count=lambda _count: 0,
+        pdf_ext=".pdf",
+    )
+
+    document = extractor.extract_by_type(str(source), chunker=None)
+
+    assert document is not None
+    assert document.extra_metadata["code_pack"] == "SIM7080G_Cat_M_NB_IoT_HAT_Code"
+    assert document.extra_metadata["code_file"] == "SIM7080G_Cat_M_NB_IoT_HAT_Code/Arduino/SIM7080G_PING_Demo/demo.ino"
+
+
 def test_document_state_writer_carries_code_metadata_to_chunks():
     text = "const int ledPin = 13;\nvoid setup(){ pinMode(ledPin, OUTPUT); }"
     meta = code_sample_metadata("blink/Blink.ino", text)

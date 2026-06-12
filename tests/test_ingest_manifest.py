@@ -58,6 +58,8 @@ class IngestManifestTests(unittest.TestCase):
                 f.write(b"use embedded_hal::digital::OutputPin;")
             with open(os.path.join(tmp, "blink", "App.tsx"), "wb") as f:
                 f.write(b"import React from 'react';")
+            with open(os.path.join(tmp, "blink", "setup.sh"), "wb") as f:
+                f.write(b"#!/bin/sh\necho setup")
             with open(os.path.join(tmp, "blink", "library.json"), "wb") as f:
                 f.write(b'{"frameworks": "arduino"}')
             with open(os.path.join(tmp, "blink", "go.mod"), "wb") as f:
@@ -68,12 +70,49 @@ class IngestManifestTests(unittest.TestCase):
             manifest = IngestManifest(
                 manifest_path=os.path.join(tmp, "manifest.json"),
                 training_dir=tmp,
-                supported_extensions=[".go", ".ino", ".json", ".mod", ".rs", ".tsx"],
+                supported_extensions=[".go", ".ino", ".json", ".mod", ".rs", ".sh", ".tsx"],
             )
 
             self.assertEqual(
                 list(manifest.scan()),
-                ["blink/App.tsx", "blink/Blink.ino", "blink/go.mod", "blink/lib.rs", "blink/library.json", "blink/main.go"],
+                [
+                    "blink/App.tsx",
+                    "blink/Blink.ino",
+                    "blink/go.mod",
+                    "blink/lib.rs",
+                    "blink/library.json",
+                    "blink/main.go",
+                    "blink/setup.sh",
+                ],
+            )
+
+    def test_scan_skips_generated_vendor_dependency_trees(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = {
+                "sample/STM32/Demo/Src/main.c": b"int main(void) { return 0; }",
+                "sample/STM32/Demo/Inc/main.h": b"#pragma once",
+                "sample/STM32/Demo/Drivers/CMSIS/Include/core_cm3.h": b"#define CMSIS_VENDOR 1",
+                "sample/STM32/Demo/Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_gpio.h": b"#define HAL_VENDOR 1",
+                "sample/STM32/Demo/MDK-ARM/RTE/RTE_Components.h": b"#define IDE_GENERATED 1",
+            }
+            for rel_path, content in paths.items():
+                full_path = os.path.join(tmp, *rel_path.split("/"))
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, "wb") as f:
+                    f.write(content)
+
+            manifest = IngestManifest(
+                manifest_path=os.path.join(tmp, "manifest.json"),
+                training_dir=tmp,
+                supported_extensions=[".c", ".h"],
+            )
+
+            self.assertEqual(
+                list(manifest.scan()),
+                [
+                    "sample/STM32/Demo/Inc/main.h",
+                    "sample/STM32/Demo/Src/main.c",
+                ],
             )
 
 

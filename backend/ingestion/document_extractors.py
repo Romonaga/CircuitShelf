@@ -89,13 +89,28 @@ class DocumentExtractor:
     def extract_code_sample(self, fpath: str, text: str | None = None) -> ExtractedDocument:
         if text is None:
             text = self.read_text_file(fpath)
-        metadata = code_sample_metadata(fpath, text)
-        annotated = annotated_code_text(fpath, text, metadata)
+        metadata_path = self.code_sample_metadata_path(fpath)
+        metadata = code_sample_metadata(metadata_path, text)
+        annotated = annotated_code_text(metadata_path, text, metadata)
         return ExtractedDocument(
             source_path=fpath,
             pages=[ExtractedPage(page_number=1, text=annotated)],
             extra_metadata=metadata,
         )
+
+    def code_sample_metadata_path(self, fpath: str) -> str:
+        training_dir = os.path.normpath(str(self.config.get("TRAINING_DIR", "training") or "training"))
+        normalized = os.path.normpath(str(fpath or ""))
+        if normalized.startswith(training_dir + os.sep):
+            return os.path.relpath(normalized, training_dir)
+        if os.path.isabs(normalized):
+            training_abs = os.path.abspath(training_dir)
+            try:
+                if os.path.commonpath([training_abs, normalized]) == training_abs:
+                    return os.path.relpath(normalized, training_abs)
+            except ValueError:
+                pass
+        return fpath
 
     @staticmethod
     def read_text_file(fpath: str) -> str:

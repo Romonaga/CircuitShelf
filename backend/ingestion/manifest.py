@@ -9,6 +9,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
+from backend.ingestion.code_samples import is_ignored_code_bundle_dependency_path
+
 
 MANIFEST_VERSION = 1
 
@@ -154,7 +156,10 @@ class IngestManifest:
             return
         if Path(filename).suffix.lower() not in self.supported_extensions:
             return
-        files.append(os.path.relpath(full_path, self.training_dir))
+        rel_path = os.path.relpath(full_path, self.training_dir)
+        if is_ignored_code_bundle_dependency_path(rel_path):
+            return
+        files.append(rel_path)
 
     @staticmethod
     def _sha256(path: str) -> str:

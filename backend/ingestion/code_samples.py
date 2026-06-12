@@ -21,6 +21,7 @@ CODE_SAMPLE_SOURCE_EXTENSIONS = {
     ".jsx",
     ".py",
     ".rs",
+    ".sh",
     ".ts",
     ".tsx",
 }
@@ -39,6 +40,43 @@ CODE_SAMPLE_COMPANION_EXTENSIONS = {
 
 CODE_SAMPLE_EXTENSIONS = CODE_SAMPLE_SOURCE_EXTENSIONS | CODE_SAMPLE_COMPANION_EXTENSIONS
 
+UPLOAD_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
+MAX_UPLOAD_PATH_PART_LENGTH = 180
+IGNORED_UPLOAD_PATH_PARTS = {
+    ".bzr",
+    ".cache",
+    ".git",
+    ".hg",
+    ".idea",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svn",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "target",
+    "venv",
+}
+
+IGNORED_CODE_BUNDLE_PATH_PARTS = {
+    "debug",
+    "ewarm",
+    "iar",
+    "mdk-arm",
+    "release",
+    "rte",
+}
+
+IGNORED_CODE_BUNDLE_PATH_PART_RE = re.compile(
+    r"(?:^cmsis$|(?:^|[_-])hal[_-]?driver$)",
+    re.IGNORECASE,
+)
+
 LANGUAGE_BY_EXTENSION = {
     ".ino": "Arduino",
     ".c": "C",
@@ -53,6 +91,7 @@ LANGUAGE_BY_EXTENSION = {
     ".jsx": "React JSX",
     ".py": "Python",
     ".rs": "Rust",
+    ".sh": "Shell",
     ".ts": "TypeScript",
     ".tsx": "React TSX",
     ".ini": "configuration",
@@ -141,6 +180,8 @@ def is_code_sample_companion_path(path: str, text: str) -> bool:
 
 def safe_relative_upload_path(filename: str, supported_extensions: set[str]) -> str:
     raw = str(filename or "").replace("\\", "/").strip()
+    if raw.startswith("/"):
+        raise ValueError("Upload file name is not allowed.")
     parts = [part.strip() for part in raw.split("/") if part.strip()]
     if not parts:
         raise ValueError("Upload must include a file name.")
@@ -148,7 +189,12 @@ def safe_relative_upload_path(filename: str, supported_extensions: set[str]) -> 
         raise ValueError("Upload file name is not allowed.")
     safe_parts = []
     for part in parts:
-        if re.search(r"[\x00-\x1f]", part) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ +()#-]{0,119}", part):
+        if (
+            len(part) > MAX_UPLOAD_PATH_PART_LENGTH
+            or UPLOAD_CONTROL_CHAR_RE.search(part)
+            or "/" in part
+            or "\\" in part
+        ):
             raise ValueError("Upload file name is not allowed.")
         safe_parts.append(part)
     ext = os.path.splitext(safe_parts[-1])[1].lower()
@@ -156,6 +202,30 @@ def safe_relative_upload_path(filename: str, supported_extensions: set[str]) -> 
         allowed = ", ".join(sorted(supported_extensions))
         raise ValueError(f"Unsupported file type. Allowed: {allowed}")
     return "/".join(safe_parts)
+
+
+def is_ignored_upload_path(filename: str) -> bool:
+    raw = str(filename or "").replace("\\", "/").strip()
+    parts = [part.strip() for part in raw.split("/") if part.strip()]
+    for part in parts:
+        lowered = part.lower()
+        if lowered in {".", ".."}:
+            return False
+        if lowered in IGNORED_UPLOAD_PATH_PARTS or lowered.startswith("."):
+            return True
+    return False
+
+
+def is_ignored_code_bundle_dependency_path(filename: str) -> bool:
+    raw = str(filename or "").replace("\\", "/").strip()
+    parts = [part.strip() for part in raw.split("/") if part.strip()]
+    for part in parts:
+        lowered = part.lower()
+        if lowered in IGNORED_CODE_BUNDLE_PATH_PARTS:
+            return True
+        if IGNORED_CODE_BUNDLE_PATH_PART_RE.search(part):
+            return True
+    return False
 
 
 def code_sample_metadata(path: str, text: str) -> dict[str, Any]:

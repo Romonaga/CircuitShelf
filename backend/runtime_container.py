@@ -565,7 +565,6 @@ class CircuitShelfRuntime:
                 "EMBED_BATCH_AUTO",
                 "RERANK_BATCH_SIZE",
                 "RERANK_BATCH_AUTO",
-                "TRAINING_RECURSIVE",
                 "TRAINING_EXCLUDE_DIRS",
                 "PDF_RENDER_VECTOR_PAGES",
                 "PDF_RENDER_MIN_DRAWINGS",
@@ -669,7 +668,7 @@ class CircuitShelfRuntime:
             manifest_path="",
             training_dir=self.training_dir,
             supported_extensions=self.supported_training_extensions(),
-            recursive=self.config.get("TRAINING_RECURSIVE", True),
+            recursive=True,
             excluded_dirs=self.config.get("TRAINING_EXCLUDE_DIRS", []),
             hash_files=True,
         )
