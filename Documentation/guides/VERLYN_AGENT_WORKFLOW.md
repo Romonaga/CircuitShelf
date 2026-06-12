@@ -42,16 +42,14 @@ Do not treat repo-local `workstream/specs/` as ambient context or a supported so
    `verlyn changes create --title "..."`
    For lower-level workflow mutations, use:
    `verlyn changes activate <change-id>`
-   `verlyn work-items update <change-id> --create-json '{"title":"...","owner":"<name>"}'` to create DB-allocated work items
-   `verlyn work-items update <change-id> --update-json '{"task_id":"<existing-work-item-id>","title":"...","owner":"<name>"}'` to update existing work items
+   `verlyn work-items update <change-id> --creates-json '[{"title":"...","owner":"<name>"}]'` to create DB-allocated work items
+   `verlyn work-items update <change-id> --updates-json '[{"task_id":"<existing-work-item-id>","title":"...","owner":"<name>"}]'` to update existing work items
 7. If work already exists:
-   `verlyn work-items update <change-id> --update-json '{"task_id":"<work-item-id>","status":"in_progress","owner":"<name>"}'`
+   `verlyn work-items update <change-id> --updates-json '[{"task_id":"<work-item-id>","status":"in_progress","owner":"<name>"}]'`
 8. Do the work, verification, and work-item updates.
-9. Prepare review and PR artifacts:
-   `verlyn changes prepare-pr <change-id>`
-10. When the change is actually ready to land, prefer the hosted workflow wrapper over raw git or gh:
-   `verlyn changes deliver <change-id>`
-   Use `deliver-change` for the normal "close out this one approved change" path. Reach for the batch commands only when you are intentionally working the repo-level queue or testing automation behavior across multiple changes.
+9. When the change is actually ready to land, prefer the hosted workflow wrapper over raw git or gh:
+   `verlyn changes publish <change-id> --merge-method squash`
+   Use `changes publish` for the normal "close out this one approved change" path. It opens or updates the PR, merges it, records closeout, and cleans up branches according to the selected flags. Use `changes publish-pr` only when you intentionally want a PR without merge or closeout.
 
 ## Preparing Multiple Changes
 

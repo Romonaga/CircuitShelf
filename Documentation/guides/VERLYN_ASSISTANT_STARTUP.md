@@ -73,13 +73,17 @@ verlyn changes show <change-id>
 verlyn changes activate <change-id>
 verlyn changes refresh-branch <change-id>
 verlyn work-items list <change-id>
-verlyn work-items update <change-id> --create-json '{"title":"Add validation"}'
-verlyn work-items update <change-id> --update-json '{"task_id":"<work-item-id>","status":"done"}'
-verlyn changes prepare-pr <change-id>
-verlyn changes publish-pr <change-id>
-verlyn changes deliver <change-id>
+verlyn work-items update <change-id> --creates-json '[{"title":"Add validation"}]'
+verlyn work-items update <change-id> --updates-json '[{"task_id":"<work-item-id>","status":"done"}]'
+verlyn changes publish <change-id> --merge-method squash
 verlyn changes close-change <change-id> --status merged --summary "Delivered."
 ```
+
+`verlyn changes publish` is the normal hosted closeout command. It commits
+local dirty work when `--commit-message` is supplied, pushes with Verlyn-managed
+provider credentials, opens or updates the PR, merges it, and records closeout.
+Use `verlyn changes publish-pr` only when you intentionally want to stop at an
+open PR without merging or closing the Verlyn change.
 
 Creation and activation are separate. A new change starts as draft. Activate it
 before implementation so Verlyn can bind the work branch and enforce the normal
