@@ -8,6 +8,7 @@ from typing import Any
 from docx import Document
 from lxml import etree
 
+from backend.ingestion.code_samples import annotated_code_text, code_sample_metadata, is_code_sample_companion_path, is_code_sample_path
 from backend.ingestion.models import ExtractedDocument, ExtractedPage, ImageAsset
 from backend.ingestion.ocr_assets import OcrAssetProcessor
 from backend.ingestion.pdf import PdfDocumentExtractor
@@ -47,8 +48,19 @@ class DocumentExtractor:
             return self.extract_pdf(fpath, chunker, progress_callback)
         if ext == ".docx":
             return self.extract_docx(fpath, chunker)
+        if is_code_sample_path(fpath):
+            return self.extract_code_sample(fpath)
         if ext in {".md", ".txt"}:
-            return self.extract_text(fpath)
+            text = self.read_text_file(fpath)
+            if is_code_sample_companion_path(fpath, text):
+                return self.extract_code_sample(fpath, text=text)
+            return self.extract_text(fpath, text=text)
+        if ext in {".ini", ".json", ".mod", ".properties", ".toml", ".yaml", ".yml"}:
+            text = self.read_text_file(fpath)
+            if is_code_sample_companion_path(fpath, text):
+                return self.extract_code_sample(fpath, text=text)
+            self.trace_logger.warning(f"Unsupported file type: {ext} for file: {fpath}")
+            return None
         if ext in {".png", ".jpg", ".jpeg"}:
             return self.extract_image(fpath, chunker)
 
@@ -69,10 +81,26 @@ class DocumentExtractor:
         document.assets.extend(self.extract_docx_textbox_images(fpath, chunker))
         return document
 
-    def extract_text(self, fpath: str) -> ExtractedDocument:
-        with open(fpath, "r", encoding="utf-8") as file:
-            text = file.read()
+    def extract_text(self, fpath: str, text: str | None = None) -> ExtractedDocument:
+        if text is None:
+            text = self.read_text_file(fpath)
         return ExtractedDocument(source_path=fpath, pages=[ExtractedPage(page_number=1, text=text)])
+
+    def extract_code_sample(self, fpath: str, text: str | None = None) -> ExtractedDocument:
+        if text is None:
+            text = self.read_text_file(fpath)
+        metadata = code_sample_metadata(fpath, text)
+        annotated = annotated_code_text(fpath, text, metadata)
+        return ExtractedDocument(
+            source_path=fpath,
+            pages=[ExtractedPage(page_number=1, text=annotated)],
+            extra_metadata=metadata,
+        )
+
+    @staticmethod
+    def read_text_file(fpath: str) -> str:
+        with open(fpath, "r", encoding="utf-8", errors="replace") as file:
+            return file.read()
 
     def extract_image(self, fpath: str, chunker) -> ExtractedDocument:
         with open(fpath, "rb") as image_file:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -203,9 +204,12 @@ class VectorStore:
         document_ids: dict[str, str] = {}
         page_ids: dict[tuple[str, int], str] = {}
         next_chunk_index: dict[str, int] = {}
+        code_sample_meta_by_document: dict[str, dict[str, Any]] = {}
 
         for chunk, source, meta, embedding in zip(chunks, sources, metadata, embeddings):
             rel_path = self.rel_path_for_source(source, meta)
+            if meta.get("code_sample") and rel_path not in code_sample_meta_by_document:
+                code_sample_meta_by_document[rel_path] = dict(meta)
             record = file_records.get(rel_path) or self.record_from_source(rel_path)
             document_id = document_ids.get(rel_path)
             if not document_id:
@@ -236,6 +240,8 @@ class VectorStore:
                     ),
                 ).fetchone()["id"]
                 document_ids[rel_path] = document_id
+                if rel_path in code_sample_meta_by_document:
+                    self._upsert_code_sample_file(conn, document_id, rel_path, code_sample_meta_by_document[rel_path])
 
             page_number = self.page_number(meta)
             page_id = None
@@ -274,6 +280,42 @@ class VectorStore:
 
             for flag in meta.get("quality_flags") or []:
                 conn.execute(load_query("vector_quality_flag_insert.sql"), (chunk_id, clean_db_text(flag)))
+
+    def _upsert_code_sample_file(self, conn, document_id: str, rel_path: str, meta: dict[str, Any]) -> None:
+        pack_key = clean_db_text(meta.get("code_pack") or Path(rel_path).stem)
+        pack_display = clean_db_text(meta.get("code_pack_display") or pack_key)
+        root_path = pack_key if rel_path.startswith(f"{pack_key}/") else str(Path(rel_path).parent if Path(rel_path).parent != Path(".") else "")
+        libraries = text_list(meta.get("code_libraries"))
+        components = text_list(meta.get("code_components"))
+        interfaces = text_list(meta.get("code_interfaces"))
+        language = clean_db_text(meta.get("code_language") or "")
+        board = clean_db_text(meta.get("code_board") or "")
+        framework = clean_db_text(meta.get("code_framework") or "")
+        conn.execute(
+            load_query("code_sample_file_upsert.sql"),
+            (
+                pack_key,
+                pack_display,
+                clean_db_text(root_path),
+                clean_db_text(meta.get("code_summary") or ""),
+                board,
+                framework,
+                [language] if language else [],
+                libraries,
+                components,
+                interfaces,
+                document_id,
+                clean_db_text(rel_path),
+                language,
+                clean_db_text(meta.get("code_role") or ""),
+                board,
+                framework,
+                libraries,
+                components,
+                interfaces,
+                json.dumps(meta.get("code_pins") or []),
+            ),
+        )
 
     def load_state_payload(self) -> tuple[list[str], list[str], list[dict], list[np.ndarray]]:
         with self.database.connection() as conn:
@@ -422,6 +464,14 @@ class VectorStore:
             row = conn.execute(load_query("review_document_delete.sql"), (source_path,)).fetchone()
         return dict(row) if row else None
 
+    def code_sample_for_source(self, source_path: str) -> dict | None:
+        try:
+            with self.database.connection() as conn:
+                row = conn.execute(load_query("code_sample_file_get_by_source.sql"), (source_path,)).fetchone()
+        except (UndefinedTable, UndefinedColumn):
+            return None
+        return dict(row) if row else None
+
     def rel_path_for_source(self, source: str, meta: dict | None = None) -> str:
         meta = meta or {}
         candidate = meta.get("parent_source") or meta.get("source") or source
@@ -453,3 +503,23 @@ class VectorStore:
         except (TypeError, ValueError):
             return None
         return number if number > 0 else None
+
+
+def text_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        values = re_split_list(value)
+    else:
+        values = value or []
+    result = []
+    seen = set()
+    for item in values:
+        text = clean_db_text(item or "").strip()
+        key = text.lower()
+        if text and key not in seen:
+            seen.add(key)
+            result.append(text)
+    return result[:64]
+
+
+def re_split_list(value: str) -> list[str]:
+    return [item.strip() for item in str(value or "").replace(";", ",").split(",") if item.strip()]

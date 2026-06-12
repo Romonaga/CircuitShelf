@@ -106,6 +106,7 @@ export function ReviewView({
         chunkLimit={review.chunkLimit}
         chunkPreviewCap={review.chunkPreviewCap}
         chunks={review.chunks}
+        codeSample={review.codeSample}
         detailBusy={review.detailBusy}
         downloadSelected={() => void downloadSelectedDocument()}
         images={review.images}

@@ -125,6 +125,23 @@ export interface DatasheetIntelligence {
   updatedAt?: string | null;
 }
 
+export interface CodeSampleInfo {
+  packKey: string;
+  packDisplayName: string;
+  rootPath?: string;
+  summary?: string;
+  relativePath: string;
+  language: string;
+  role?: string;
+  board?: string;
+  framework?: string;
+  libraries: string[];
+  components: string[];
+  interfaces: string[];
+  pins: Array<{ name: string; pin: string }>;
+  updatedAt?: string | null;
+}
+
 export interface CircuitBuildCard {
   title: string;
   componentName: string;
@@ -147,6 +164,7 @@ export interface DocumentDetail {
   pages: DocumentPage[];
   pinout: DocumentPinout;
   intelligence?: DatasheetIntelligence | null;
+  codeSample?: CodeSampleInfo | null;
   ingestStats?: DocumentIngestStats | null;
 }
 

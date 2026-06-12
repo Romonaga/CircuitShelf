@@ -20,13 +20,14 @@ class ChunkQualityMixin:
         if dot_ratio > 0.25:
             score -= 0.55
             flags.append("dot_leader")
-        if alpha_ratio < 0.18 and chunk_type not in {"table", "formula", "wiring"}:
+        structured_types = {"table", "formula", "wiring", "code"}
+        if alpha_ratio < 0.18 and chunk_type not in structured_types:
             score -= 0.35
             flags.append("low_alpha")
-        if symbol_ratio > 0.45 and chunk_type not in {"table", "formula", "wiring"}:
+        if symbol_ratio > 0.45 and chunk_type not in structured_types:
             score -= 0.35
             flags.append("symbol_heavy")
-        if digit_ratio > 0.45 and alpha_ratio < 0.25 and chunk_type not in {"table", "formula"}:
+        if digit_ratio > 0.45 and alpha_ratio < 0.25 and chunk_type not in {"table", "formula", "code"}:
             score -= 0.55
             flags.append("numeric_heavy")
         if token_count < self.config.get("MIN_TOKENS_PER_CHUNK", 5):
@@ -59,6 +60,8 @@ class ChunkQualityMixin:
         stripped = text.strip()
         if not stripped:
             return True
+        if chunk_type == "code":
+            return not re.search(r"[A-Za-z_][A-Za-z0-9_]*", stripped)
 
         lower = stripped.lower()
         section_lower = str(section or "").lower()

@@ -6,6 +6,7 @@ from backend.services.app_runtime_helpers import conversation_title_from_questio
 from backend.services.document_intelligence_service import DocumentIntelligenceService
 from backend.services.document_management_service import DocumentManagementService
 from backend.ingestion import IngestionPipeline
+from backend.ingestion.code_samples import CODE_SAMPLE_EXTENSIONS
 from backend.services.image_retrieval_service import ImageRetrievalService
 from backend.services.image_state_service import ImageStateService
 from backend.services.incremental_ingest_service import IncrementalIngestService
@@ -660,6 +661,7 @@ class CircuitShelfRuntime:
             ".png",
             ".jpg",
             ".jpeg",
+            *CODE_SAMPLE_EXTENSIONS,
         }
 
     def build_ingest_manifest(self):

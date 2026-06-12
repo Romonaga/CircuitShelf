@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getReviewDocument, getReviewDocumentImages } from "../../libs/api";
 import { errorMessage } from "../../libs/errors";
-import type { DatasheetIntelligence, ReviewChunk, ReviewImage, ReviewScopeAudit } from "../../types";
+import type { CodeSampleInfo, DatasheetIntelligence, ReviewChunk, ReviewImage, ReviewScopeAudit } from "../../types";
 
 export function useReviewDocumentDetail({
   selected,
@@ -15,6 +15,7 @@ export function useReviewDocumentDetail({
   const [chunks, setChunks] = useState<ReviewChunk[]>([]);
   const [images, setImages] = useState<ReviewImage[]>([]);
   const [intelligence, setIntelligence] = useState<DatasheetIntelligence | null>(null);
+  const [codeSample, setCodeSample] = useState<CodeSampleInfo | null>(null);
   const [scopeAudit, setScopeAudit] = useState<ReviewScopeAudit[]>([]);
   const [detailBusy, setDetailBusy] = useState(false);
 
@@ -22,6 +23,7 @@ export function useReviewDocumentDetail({
     setChunks([]);
     setImages([]);
     setIntelligence(null);
+    setCodeSample(null);
     setScopeAudit([]);
   };
 
@@ -40,6 +42,7 @@ export function useReviewDocumentDetail({
         if (active) {
           setChunks(documentResponse.chunks);
           setIntelligence(documentResponse.intelligence ?? null);
+          setCodeSample(documentResponse.codeSample ?? null);
           setScopeAudit(documentResponse.scopeAudit || []);
           setImages(imageResponse.images);
         }
@@ -65,6 +68,7 @@ export function useReviewDocumentDetail({
     detailBusy,
     images,
     intelligence,
+    codeSample,
     scopeAudit,
     setScopeAudit
   };

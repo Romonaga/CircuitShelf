@@ -64,6 +64,7 @@ export function useReviewQueue({
     chunkLimit,
     chunkPreviewCap,
     chunks: detail.chunks,
+    codeSample: detail.codeSample,
     detailBusy: detail.detailBusy,
     documents: documents.documents,
     downloadDocument: actions.downloadDocument,

@@ -28,6 +28,7 @@ CIRCUIT_CONTEXT_RE = re.compile(
     r"\b(?:circuit|schematic|diagram|parts?\s+list|component|pin|resistor|capacitor|transistor|timer|led|arduino|raspberry\s*pi|gpio)\b",
     re.IGNORECASE,
 )
+CODE_SAMPLE_TITLE_RE = re.compile(r"\bcode\s+sample\b", re.IGNORECASE)
 MIN_PROJECT_TEXT_CHARS = 90
 
 GENERIC_PART_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
@@ -539,6 +540,9 @@ class ProjectFinderStore:
         action = bool(BUILD_ACTION_RE.search(cleaned))
         context = bool(CIRCUIT_CONTEXT_RE.search(cleaned))
         enough_parts = len(required) >= 2 or (len(required) >= 1 and len(matched) >= 2)
+        code_sample = bool(CODE_SAMPLE_TITLE_RE.search(title) or re.search(r"\b(setup|loop|pinmode|digitalwrite|analogread|#include|import\s+board)\b", cleaned, re.IGNORECASE))
+        if code_sample and context and (required or matched):
+            action = True
         project_like = action and context and (enough_parts or len(matched) > 0)
         if not project_like and not reasons:
             reasons.append("No clear build action, circuit context, and parts evidence were found together.")

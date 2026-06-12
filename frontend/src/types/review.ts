@@ -1,4 +1,4 @@
-import type { DatasheetIntelligence } from "./documents";
+import type { CodeSampleInfo, DatasheetIntelligence } from "./documents";
 
 export interface ReviewDocument {
   source: string;
@@ -72,6 +72,7 @@ export type ReviewDocumentPayload = {
   chunks: ReviewChunk[];
   scopeAudit?: ReviewScopeAudit[];
   intelligence?: DatasheetIntelligence | null;
+  codeSample?: CodeSampleInfo | null;
 };
 
 export interface ReviewBatchActionResult {

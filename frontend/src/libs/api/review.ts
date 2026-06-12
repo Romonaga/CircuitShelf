@@ -1,4 +1,4 @@
-import type { DatasheetIntelligence, ReviewBatchActionResponse, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../../types";
+import type { ReviewBatchActionResponse, ReviewDocument, ReviewDocumentPayload, ReviewImage, ReviewScopeAudit } from "../../types";
 import { readSessionToken, requestJson } from "./core";
 
 export function getReviewDocuments(): Promise<{ documents: ReviewDocument[] }> {
@@ -8,8 +8,8 @@ export function getReviewDocuments(): Promise<{ documents: ReviewDocument[] }> {
 export function getReviewDocument(
   source: string,
   limit = 50
-): Promise<{ document: string; displayName?: string; status?: string; chunks: ReviewChunk[]; scopeAudit?: ReviewScopeAudit[]; intelligence?: DatasheetIntelligence | null }> {
-  return requestJson<{ document: string; displayName?: string; status?: string; chunks: ReviewChunk[]; scopeAudit?: ReviewScopeAudit[]; intelligence?: DatasheetIntelligence | null }>(
+): Promise<ReviewDocumentPayload> {
+  return requestJson<ReviewDocumentPayload>(
     `/api/review/document?source=${encodeURIComponent(source)}&limit=${encodeURIComponent(String(limit))}`
   );
 }

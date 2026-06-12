@@ -47,6 +47,35 @@ class IngestManifestTests(unittest.TestCase):
 
             self.assertEqual(list(manifest.scan()), ["book.pdf"])
 
+    def test_scan_accepts_code_sample_files_in_folders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "blink"), exist_ok=True)
+            with open(os.path.join(tmp, "blink", "Blink.ino"), "wb") as f:
+                f.write(b"void setup() {}")
+            with open(os.path.join(tmp, "blink", "main.go"), "wb") as f:
+                f.write(b'package main\nimport "machine"')
+            with open(os.path.join(tmp, "blink", "lib.rs"), "wb") as f:
+                f.write(b"use embedded_hal::digital::OutputPin;")
+            with open(os.path.join(tmp, "blink", "App.tsx"), "wb") as f:
+                f.write(b"import React from 'react';")
+            with open(os.path.join(tmp, "blink", "library.json"), "wb") as f:
+                f.write(b'{"frameworks": "arduino"}')
+            with open(os.path.join(tmp, "blink", "go.mod"), "wb") as f:
+                f.write(b"module blink")
+            with open(os.path.join(tmp, "blink", "notes.tmp"), "wb") as f:
+                f.write(b"tmp")
+
+            manifest = IngestManifest(
+                manifest_path=os.path.join(tmp, "manifest.json"),
+                training_dir=tmp,
+                supported_extensions=[".go", ".ino", ".json", ".mod", ".rs", ".tsx"],
+            )
+
+            self.assertEqual(
+                list(manifest.scan()),
+                ["blink/App.tsx", "blink/Blink.ino", "blink/go.mod", "blink/lib.rs", "blink/library.json", "blink/main.go"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Iterable
 
+from backend.ingestion.code_samples import code_sample_metadata, is_code_sample_path
 from backend.ingestion.models import DocumentProfile, ExtractedPage
 
 
@@ -76,6 +77,21 @@ def classify_document(path: str, pages: Iterable[ExtractedPage] | Iterable[str])
     filename = os.path.splitext(os.path.basename(path))[0]
     haystack = f"{filename}\n{sample}"
     lower = haystack.lower()
+
+    if is_code_sample_path(path) or sample.startswith("Code sample pack:"):
+        code_meta = code_sample_metadata(path, sample)
+        reasons = ["code extension" if is_code_sample_path(path) else "code sample metadata"]
+        if code_meta.get("code_framework"):
+            reasons.append(f"framework:{code_meta['code_framework']}")
+        if code_meta.get("code_components"):
+            reasons.append("components:" + ",".join(code_meta["code_components"][:3]))
+        return DocumentProfile(
+            document_type="code_sample",
+            confidence=0.92,
+            component_name=code_meta.get("code_pack_display") or code_meta.get("code_pack") or filename,
+            component_type="code sample",
+            reasons=tuple(reasons[:8]),
+        )
 
     candidates = detect_component_candidates(filename, sample)
     candidate = candidates[0] if candidates else None

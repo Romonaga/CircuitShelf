@@ -3009,7 +3009,8 @@ nav {
 }
 
 .build-card,
-.intelligence-panel {
+.intelligence-panel,
+.code-sample-panel {
   display: grid;
   gap: 14px;
   margin-bottom: 16px;
@@ -3020,7 +3021,8 @@ nav {
 }
 
 .build-card-heading,
-.intelligence-heading {
+.intelligence-heading,
+.code-sample-heading {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -3028,22 +3030,95 @@ nav {
 
 .build-card-heading p,
 .intelligence-heading p,
-.intelligence-summary {
+.intelligence-summary,
+.code-sample-heading p,
+.code-sample-summary,
+.code-sample-empty {
   color: var(--muted);
   line-height: 1.45;
 }
 
 .build-card-grid,
-.intelligence-facts {
+.intelligence-facts,
+.code-sample-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
 .build-card h4,
-.intelligence-panel h4 {
+.intelligence-panel h4,
+.code-sample-panel h4 {
   margin: 0 0 8px;
   font-size: 0.86rem;
+}
+
+.code-sample-heading {
+  align-items: start;
+}
+
+.code-sample-heading > span {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--panel-raised);
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.code-sample-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.code-sample-tags span {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--panel-raised);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.code-sample-details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.code-sample-details summary {
+  cursor: pointer;
+  padding: 10px;
+  color: var(--text);
+  font-weight: 750;
+}
+
+.code-sample-pins {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.code-sample-pin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.code-sample-pin-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
 }
 
 .build-card ul {
