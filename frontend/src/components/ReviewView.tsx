@@ -83,16 +83,22 @@ export function ReviewView({
       <ReviewDocumentList
         actionBusy={review.actionBusy}
         busy={review.busy}
+        allCount={review.documents.length}
         documents={review.filteredDocuments}
         error={review.error}
-        filter={review.filter}
+        filters={review.filters}
+        folderOptions={review.folderOptions}
         message={review.message}
         onContextMenu={openDocumentContextMenu}
         onClearSelection={review.clearSelection}
-        onFilterChange={review.setFilter}
+        onFolderFilterChange={review.setFolderFilter}
+        onHealthFilterChange={review.setHealthFilter}
+        onKindFilterChange={review.setKindFilter}
         onRefresh={review.loadDocuments}
+        onResetFilters={review.resetFilters}
         onSelect={selectReviewDocument}
         onSelectAll={review.selectAllFiltered}
+        onSearchFilterChange={review.setSearchFilter}
         onToggleSelection={review.toggleSelection}
         selected={review.selected}
         selectedSources={review.selectedSources}

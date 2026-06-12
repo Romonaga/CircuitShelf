@@ -214,6 +214,62 @@ def test_general_book_skips_ai_review():
     assert openai.calls == []
 
 
+def test_code_sample_path_skips_ai_review_even_when_component_candidate():
+    service, store, openai = make_service(
+        local_response=(
+            '{"quality":"weak","useful":false,"confidence":0.31,'
+            '"warnings":["pinout missing"],"suggestedReviewFocus":"pinout",'
+            '"escalateToOpenAI":true,"reason":"looks like a component datasheet"}'
+        )
+    )
+
+    result = service.review(
+        source_path="SIM7080G_Cat_M_NB_IoT_HAT_Code/STM32/Src/sim7080g.c",
+        is_global=True,
+        entity_id=None,
+        user_id=1,
+        stats={
+            "rawChunkCount": 76,
+            "chunkCount": 37,
+            "droppedChunkCount": 39,
+            "extractedImageCount": 0,
+            "indexedImageTextCount": 0,
+            "ocrImageTextCount": 0,
+        },
+        sample_text="SIM7080G module helper with pin configuration and electrical characteristics comments",
+        openai_enabled=True,
+    )
+
+    assert result is None
+    assert store.reviews == []
+    assert openai.calls == []
+
+
+def test_code_sample_intelligence_skips_ai_review_even_when_text_mentions_datasheet():
+    service, store, openai = make_service(
+        local_response=(
+            '{"quality":"weak","useful":false,"confidence":0.31,'
+            '"warnings":["pinout missing"],"suggestedReviewFocus":"pinout",'
+            '"escalateToOpenAI":true,"reason":"looks like a component datasheet"}'
+        )
+    )
+
+    result = service.review(
+        source_path="README.md",
+        is_global=True,
+        entity_id=None,
+        user_id=1,
+        stats=component_stats(),
+        sample_text="MCP23017 example code references the datasheet pin configuration table.",
+        intelligence={"documentType": "code_sample"},
+        openai_enabled=True,
+    )
+
+    assert result is None
+    assert store.reviews == []
+    assert openai.calls == []
+
+
 def test_component_datasheet_without_pinout_triggers_ai_review_from_intelligence():
     service, store, openai = make_service(
         local_response=(

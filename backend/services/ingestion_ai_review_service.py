@@ -4,6 +4,7 @@ import re
 import time
 from typing import Any, Callable
 
+from backend.ingestion.code_samples import is_code_sample_path
 from backend.ingestion.document_classifier import detect_component_candidates, is_plausible_component
 from backend.services.datasheet_repair_service import pinout_has_gaps
 from backend.services.openai_assist_prompts import (
@@ -149,6 +150,13 @@ class IngestionAiReviewService:
     ) -> dict[str, Any]:
         reasons: list[str] = []
         text = sample_text or ""
+        document_type = str((intelligence or {}).get("documentType") or "").strip()
+        if document_type == "code_sample" or is_code_sample_path(source_path):
+            return {
+                "shouldReview": False,
+                "reasons": reasons,
+                "reason": "code sample ingestion does not need datasheet assist review",
+            }
         lowered = text.lower()
         basename = source_path.rsplit("/", 1)[-1]
         component_candidates = detect_component_candidates(basename, text[:4000])
