@@ -1,5 +1,6 @@
-import type { DatasheetIntelligence, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../types";
+import type { CodeSampleInfo, DatasheetIntelligence, ReviewChunk, ReviewDocument, ReviewImage, ReviewScopeAudit } from "../types";
 import { formatInteger } from "../libs/format";
+import { CodeSamplePanel } from "./CodeSamplePanel";
 import { DatasheetIntelligencePanel } from "./DatasheetIntelligencePanel";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { ReviewActions } from "./review/ReviewActions";
@@ -18,6 +19,7 @@ export function ReviewDocumentDetail({
   chunkLimit,
   chunkPreviewCap,
   chunks,
+  codeSample,
   detailBusy,
   downloadSelected,
   images,
@@ -38,6 +40,7 @@ export function ReviewDocumentDetail({
   chunkLimit: number;
   chunkPreviewCap: number;
   chunks: ReviewChunk[];
+  codeSample: CodeSampleInfo | null;
   detailBusy: boolean;
   downloadSelected: () => void;
   images: ReviewImage[];
@@ -92,6 +95,7 @@ export function ReviewDocumentDetail({
         <>
           <ReviewQaSummary document={selectedDocument} chunks={chunks} images={images} intelligence={intelligence} />
           <DatasheetIntelligencePanel intelligence={intelligence} />
+          <CodeSamplePanel codeSample={codeSample} />
           <ReviewEvidenceSamples chunks={chunks} images={images} />
           <ReviewDeepInspectPanel
             canLoadMoreChunks={canLoadMoreChunks}

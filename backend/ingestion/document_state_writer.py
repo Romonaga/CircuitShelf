@@ -22,8 +22,21 @@ class DocumentStateWriter:
 
         chunks, metadata = chunker.smart_chunk_pages(page_texts, document.source_path)
         profile_meta = document.profile.metadata() if document.profile else {}
+        extra_meta = dict(document.extra_metadata or {})
         for meta in metadata:
             meta.update(profile_meta)
+            meta.update(extra_meta)
+            if extra_meta.get("code_sample"):
+                meta["document_type"] = "code_sample"
+                meta["section"] = f"Code sample: {extra_meta.get('code_pack_display') or extra_meta.get('code_pack') or 'source'}"
+                meta["category"] = "CODE_SAMPLE"
+                meta["chunk_type"] = "code"
+                meta["quality_score"] = max(float(meta.get("quality_score") or 0.0), 0.75)
+                meta["quality_flags"] = [
+                    flag
+                    for flag in meta.get("quality_flags") or []
+                    if flag not in {"symbol_heavy", "too_short"}
+                ]
             meta["parent_source"] = document.source_path
 
         self._link_page_visuals(document, chunks, metadata)

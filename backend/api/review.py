@@ -89,6 +89,33 @@ def review_image_payload(row: Any) -> dict:
     }
 
 
+def code_sample_payload(row: Any | None) -> dict | None:
+    if not row:
+        return None
+    return {
+        "packKey": row.get("pack_key") or "",
+        "packDisplayName": row.get("pack_display_name") or row.get("pack_key") or "",
+        "rootPath": row.get("root_path") or "",
+        "summary": row.get("pack_summary") or "",
+        "packBoard": row.get("pack_board") or "",
+        "packFramework": row.get("pack_framework") or "",
+        "packLanguages": list(row.get("pack_languages") or []),
+        "packLibraries": list(row.get("pack_libraries") or []),
+        "packComponents": list(row.get("pack_components") or []),
+        "packInterfaces": list(row.get("pack_interfaces") or []),
+        "relativePath": row.get("relative_path") or "",
+        "language": row.get("language") or "",
+        "role": row.get("role") or "",
+        "board": row.get("board") or row.get("pack_board") or "",
+        "framework": row.get("framework") or row.get("pack_framework") or "",
+        "libraries": list(row.get("libraries") or row.get("pack_libraries") or []),
+        "components": list(row.get("components") or row.get("pack_components") or []),
+        "interfaces": list(row.get("interfaces") or row.get("pack_interfaces") or []),
+        "pins": list(row.get("pins") or []),
+        "updatedAt": row["updated_at"].isoformat() if row.get("updated_at") else None,
+    }
+
+
 def review_intelligence_payload(rows: list[dict], source: str, get_or_build_datasheet_intelligence: Callable[..., dict]) -> dict | None:
     chunks = []
     metadata = []
@@ -228,8 +255,15 @@ def create_router(
         intelligence_rows = vector_store.review_document_all_chunks(source)
         audit = vector_store.document_scope_audit(source, limit=25)
         intelligence = review_intelligence_payload(intelligence_rows, source, get_or_build_datasheet_intelligence)
+        code_sample = code_sample_payload(vector_store.code_sample_for_source(source))
         if not rows:
-            return {"document": source, "chunks": [], "scopeAudit": [scope_audit_payload(row) for row in audit], "intelligence": intelligence}
+            return {
+                "document": source,
+                "chunks": [],
+                "scopeAudit": [scope_audit_payload(row) for row in audit],
+                "intelligence": intelligence,
+                "codeSample": code_sample,
+            }
         return {
             "document": source,
             "displayName": rows[0]["display_name"],
@@ -237,6 +271,7 @@ def create_router(
             "chunks": [review_chunk_payload(row) for row in rows],
             "scopeAudit": [scope_audit_payload(row) for row in audit],
             "intelligence": intelligence,
+            "codeSample": code_sample,
         }
 
     @router.get("/api/review/document/images")

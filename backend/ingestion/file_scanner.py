@@ -4,6 +4,8 @@ import os
 import re
 from typing import Any
 
+from backend.ingestion.code_samples import CODE_SAMPLE_EXTENSIONS
+
 
 def scan_ingest_folder(folder: str, *, config: Any, pdf_ext: str, trace_logger) -> list[str]:
     if not os.path.exists(folder):
@@ -12,7 +14,7 @@ def scan_ingest_folder(folder: str, *, config: Any, pdf_ext: str, trace_logger) 
 
     recursive = config.get("TRAINING_RECURSIVE", True)
     excluded_dirs = set(config.get("TRAINING_EXCLUDE_DIRS", []))
-    supported = {pdf_ext, ".docx", ".md", ".txt", ".png", ".jpg", ".jpeg"}
+    supported = {pdf_ext, ".docx", ".md", ".txt", ".png", ".jpg", ".jpeg", *CODE_SAMPLE_EXTENSIONS}
 
     if recursive:
         return _scan_recursive(folder, supported=supported, excluded_dirs=excluded_dirs)

@@ -21,7 +21,8 @@ matched AS (
     WHERE d.status_id = 3
       AND (
           lower(dc.chunk_text) ~ '(project|experiment|circuit|build|breadboard|schematic|parts|components|wire|wiring)'
-          OR dc.category IN ('MED_LEVEL_DETAIL', 'TECH_LEVEL_DETAIL')
+          OR dc.category IN ('MED_LEVEL_DETAIL', 'TECH_LEVEL_DETAIL', 'CODE_SAMPLE')
+          OR lower(dc.section_title) LIKE 'code sample%%'
       )
     GROUP BY d.source_path,
              d.display_name,

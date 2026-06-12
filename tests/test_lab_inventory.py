@@ -105,6 +105,19 @@ class LabInventoryTests(unittest.TestCase):
         self.assertFalse(project_like)
         self.assertTrue(reasons)
 
+    def test_accepts_code_sample_evidence_as_project_candidate(self):
+        store = ProjectFinderStore(None, None)
+
+        project_like, reasons = store._project_qualification(
+            "Code sample pack: blink\nComponents: LED\nvoid setup(){ pinMode(13, OUTPUT); }\nvoid loop(){ digitalWrite(13, HIGH); }",
+            "Code sample: blink",
+            [{"name": "LED", "type": "indicator"}],
+            [{"id": "1", "displayName": "LED", "partType": "indicator", "quantity": 10}],
+        )
+
+        self.assertTrue(project_like)
+        self.assertEqual(reasons, [])
+
     def test_candidate_title_skips_low_value_ocr_headings(self):
         store = ProjectFinderStore(None, None)
 

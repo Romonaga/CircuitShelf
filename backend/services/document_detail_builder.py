@@ -103,6 +103,7 @@ class DocumentDetailBuilder:
             "ingestStats": self._ingest_stats(doc_name),
             "pinout": intelligence.get("pinout") if intelligence.get("pinout", {}).get("pins") else pinout,
             "intelligence": intelligence,
+            "codeSample": self._code_sample(doc_name),
         }
 
     def _document_source(self, source: str, meta: dict) -> str:
@@ -127,3 +128,27 @@ class DocumentDetailBuilder:
             ),
             None,
         )
+
+    def _code_sample(self, doc_name: str) -> dict | None:
+        if not hasattr(self.vector_store, "code_sample_for_source"):
+            return None
+        requested_doc = self.vector_store.rel_path_for_source(doc_name, {"source": doc_name})
+        row = self.vector_store.code_sample_for_source(requested_doc)
+        if not row:
+            return None
+        return {
+            "packKey": row.get("pack_key") or "",
+            "packDisplayName": row.get("pack_display_name") or row.get("pack_key") or "",
+            "rootPath": row.get("root_path") or "",
+            "summary": row.get("pack_summary") or "",
+            "relativePath": row.get("relative_path") or "",
+            "language": row.get("language") or "",
+            "role": row.get("role") or "",
+            "board": row.get("board") or row.get("pack_board") or "",
+            "framework": row.get("framework") or row.get("pack_framework") or "",
+            "libraries": list(row.get("libraries") or row.get("pack_libraries") or []),
+            "components": list(row.get("components") or row.get("pack_components") or []),
+            "interfaces": list(row.get("interfaces") or row.get("pack_interfaces") or []),
+            "pins": list(row.get("pins") or []),
+            "updatedAt": row["updated_at"].isoformat() if row.get("updated_at") else None,
+        }

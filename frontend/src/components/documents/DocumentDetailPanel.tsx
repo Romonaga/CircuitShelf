@@ -4,6 +4,7 @@ import { formatInteger } from "../../libs/format";
 import { downloadDocumentSource } from "../../libs/api";
 import { downloadBlob } from "../../libs/download";
 import { errorMessage } from "../../libs/errors";
+import { CodeSamplePanel } from "../CodeSamplePanel";
 import { DatasheetIntelligencePanel } from "../DatasheetIntelligencePanel";
 import { ErrorMessage } from "../ErrorMessage";
 import { DocumentPageInspector } from "../DocumentPageInspector";
@@ -98,6 +99,7 @@ export function DocumentDetailPanel({
           ) : null}
           {!detailBusy ? <DocumentStatsPanel detail={detail} summary={selectedDocument} /> : null}
           {!detailBusy ? <DatasheetIntelligencePanel intelligence={detail?.intelligence} /> : null}
+          {!detailBusy ? <CodeSamplePanel codeSample={detail?.codeSample} /> : null}
           {!detailBusy && detail?.pages.length ? (
             <div className="document-explorer">
               <div className="page-strip">

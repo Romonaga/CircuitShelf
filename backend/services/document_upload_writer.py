@@ -5,18 +5,11 @@ import uuid
 
 from fastapi import UploadFile
 
+from backend.ingestion.code_samples import safe_relative_upload_path
+
 
 def safe_upload_filename(filename: str, supported_extensions: set[str]) -> str:
-    name = os.path.basename(str(filename or "")).strip()
-    if not name or name in {".", ".."}:
-        raise ValueError("Upload must include a file name.")
-    if name.startswith(".") or any(char in name for char in ("/", "\\")):
-        raise ValueError("Upload file name is not allowed.")
-    ext = os.path.splitext(name)[1].lower()
-    if ext not in supported_extensions:
-        allowed = ", ".join(sorted(supported_extensions))
-        raise ValueError(f"Unsupported file type. Allowed: {allowed}")
-    return name
+    return safe_relative_upload_path(filename, supported_extensions)
 
 
 def upload_display_name(filename: str | None) -> str:
@@ -50,7 +43,7 @@ async def write_uploaded_documents(
                 continue
 
             if filename in seen_names:
-                skipped.append({"filename": display_name, "reason": f"duplicate file name: {filename}"})
+                skipped.append({"filename": display_name, "reason": f"duplicate file path: {filename}"})
                 continue
             seen_names.add(filename)
 
@@ -61,7 +54,8 @@ async def write_uploaded_documents(
                 skipped.append({"filename": filename, "reason": "already exists"})
                 continue
 
-            tmp_path = os.path.join(training_dir, f".{filename}.{uuid.uuid4().hex}.upload")
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            tmp_path = os.path.join(os.path.dirname(destination), f".{os.path.basename(filename)}.{uuid.uuid4().hex}.upload")
             prepared.append((file, filename, destination, tmp_path))
             tmp_paths.append(tmp_path)
 
