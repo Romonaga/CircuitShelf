@@ -81,7 +81,9 @@ verlyn changes close-change <change-id> --status merged --summary "Delivered."
 
 `verlyn changes publish` is the normal hosted closeout command. It commits
 local dirty work when `--commit-message` is supplied, pushes with Verlyn-managed
-provider credentials, opens or updates the PR, merges it, and records closeout.
+provider credentials, opens or updates the PR, merges it, switches the local
+checkout back to the delivery base branch when local checkout context exists,
+and records closeout.
 Use `verlyn changes publish-pr` only when you intentionally want to stop at an
 open PR without merging or closing the Verlyn change.
 
