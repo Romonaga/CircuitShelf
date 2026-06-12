@@ -83,9 +83,15 @@ verlyn changes close-change <change-id> --status merged --summary "Delivered."
 local dirty work when `--commit-message` is supplied, pushes with Verlyn-managed
 provider credentials, opens or updates the PR, merges it, switches the local
 checkout back to the delivery base branch when local checkout context exists,
-and records closeout. If local checkout cleanup is blocked, the hosted merge
-remains complete and the CLI reports the blocker plus deterministic repair
-options.
+and records closeout. Credential issuance is gated by Verlyn repo write access,
+the release operations entitlement, exact client-remote matching, and redacted
+audit recording; the CLI must not print provider tokens in JSON output. Verlyn
+performs deterministic checkout cleanup when it is safe: fetch the base branch,
+switch to it, and fast-forward to `origin/<base>`.
+If local checkout cleanup is blocked or unsafe, the hosted merge remains
+complete and the CLI reports the blocker, `repair_status`, `unsafe`,
+`next_step`, and deterministic repair options instead of rewriting local
+history.
 Use `verlyn changes publish-pr` only when you intentionally want to stop at an
 open PR without merging or closing the Verlyn change.
 
