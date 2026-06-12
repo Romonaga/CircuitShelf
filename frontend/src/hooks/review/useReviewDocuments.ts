@@ -1,21 +1,33 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getReviewDocuments } from "../../libs/api";
 import { errorMessage } from "../../libs/errors";
 import type { ReviewDocument } from "../../types";
-import { filterReviewDocuments, selectNextReviewSource } from "../../libs/review/reviewQueue";
+import {
+  defaultReviewTriageFilters,
+  filterReviewDocuments,
+  reviewFolderOptions,
+  selectNextReviewSource,
+  type ReviewDocumentKindFilter,
+  type ReviewHealthFilter
+} from "../../libs/review/reviewQueue";
 
 export function useReviewDocuments() {
   const [documents, setDocuments] = useState<ReviewDocument[]>([]);
   const [selected, setSelected] = useState("");
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState("");
+  const [filters, setFilters] = useState(defaultReviewTriageFilters);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const selectedRef = useRef("");
 
   const filteredDocuments = useMemo(
-    () => filterReviewDocuments(documents, filter),
-    [documents, filter]
+    () => filterReviewDocuments(documents, filters),
+    [documents, filters]
+  );
+
+  const folderOptions = useMemo(
+    () => reviewFolderOptions(documents),
+    [documents]
   );
 
   const selectedDocument = useMemo(
@@ -32,6 +44,15 @@ export function useReviewDocuments() {
     () => filteredDocuments.length > 0 && filteredDocuments.every((doc) => selectedSources.has(doc.source)),
     [filteredDocuments, selectedSources]
   );
+
+  useEffect(() => {
+    if (!filteredDocuments.length || filteredDocuments.some((doc) => doc.source === selected)) {
+      return;
+    }
+    const nextSelected = filteredDocuments[0].source;
+    selectedRef.current = nextSelected;
+    setSelected(nextSelected);
+  }, [filteredDocuments, selected]);
 
   const loadDocuments = useCallback(async () => {
     setBusy(true);
@@ -80,21 +101,46 @@ export function useReviewDocuments() {
     setSelectedSources(new Set());
   }, []);
 
+  const setSearchFilter = useCallback((search: string) => {
+    setFilters((current) => ({ ...current, search }));
+  }, []);
+
+  const setKindFilter = useCallback((kind: ReviewDocumentKindFilter) => {
+    setFilters((current) => ({ ...current, kind }));
+  }, []);
+
+  const setHealthFilter = useCallback((health: ReviewHealthFilter) => {
+    setFilters((current) => ({ ...current, health }));
+  }, []);
+
+  const setFolderFilter = useCallback((folder: string) => {
+    setFilters((current) => ({ ...current, folder }));
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setFilters(defaultReviewTriageFilters);
+  }, []);
+
   return {
     allFilteredSelected,
     busy,
     clearSelection,
     documents,
     error,
-    filter,
+    filters,
     filteredDocuments,
+    folderOptions,
     loadDocuments,
+    resetFilters,
     selected,
     selectedDocument,
     selectedDocuments,
     selectedSources: [...selectedSources],
     setError,
-    setFilter,
+    setFolderFilter,
+    setHealthFilter,
+    setKindFilter,
+    setSearchFilter,
     setSelected: selectDocument,
     selectAllFiltered,
     toggleSelection

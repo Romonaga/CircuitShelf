@@ -1203,6 +1203,42 @@ nav {
   display: none;
 }
 
+.review-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(92px, 0.42fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.review-filter-grid label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.review-filter-grid label:first-child {
+  grid-column: 1 / -1;
+}
+
+.review-filter-grid label span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.review-filter-grid input,
+.review-filter-grid select {
+  min-width: 0;
+  width: 100%;
+  min-height: 36px;
+  font-size: 0.86rem;
+}
+
+.review-filter-reset {
+  min-height: 36px;
+}
+
 .review-selection-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
