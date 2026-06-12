@@ -24,7 +24,6 @@ DEFAULT_APP_SETTINGS = [
     ("MAX_CHAT_HISTORY_TURNS", 10, "Number of previous user/assistant turns kept in model context."),
     ("MAX_CHAT_HISTORY_CHARS", 10000, "Maximum chat-history characters sent to the model."),
     ("TRAINING_DIR", "training", "Folder watched for source documents."),
-    ("TRAINING_RECURSIVE", True, "When enabled, ingestion includes supported documents in subfolders."),
     ("INGEST_WATCH_ENABLED", True, "Automatically checks for new, changed, and removed documents."),
     ("STATUS_POLL_INTERVAL_SECONDS", 15, "Browser status refresh interval while indexing is idle."),
     ("STATUS_POLL_ACTIVE_INTERVAL_SECONDS", 3, "Browser status refresh interval while indexing is running."),

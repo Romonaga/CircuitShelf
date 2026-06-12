@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections import Counter
 from typing import Any
 
 from collections.abc import Callable
@@ -43,6 +44,42 @@ def create_router(
         get_or_build_datasheet_intelligence=get_or_build_datasheet_intelligence,
         display_source_name=display_source_name,
     )
+
+    def compact_skip_reason(reason: str) -> str:
+        normalized = " ".join(str(reason or "").split())
+        if normalized.lower().startswith("unsupported file type"):
+            return "Unsupported file type"
+        if "already exists" in normalized.lower():
+            return "Already exists"
+        if "duplicate" in normalized.lower():
+            return "Duplicate"
+        return normalized[:117] + "..." if len(normalized) > 120 else normalized
+
+    def log_upload_result(route_name: str, uploaded_files: list[dict], skipped_files: list[dict], upload_session: str | None):
+        accepted_count = len(uploaded_files)
+        skipped_count = len(skipped_files)
+        if accepted_count <= 0 and skipped_count <= 0:
+            return
+        reason_counts = Counter(compact_skip_reason(item.get("reason", "")) for item in skipped_files)
+        reasons = ", ".join(
+            f"{reason}={count}" for reason, count in reason_counts.most_common(4) if reason
+        )
+        samples = ", ".join(
+            f"{item.get('filename', '(unnamed file)')} ({compact_skip_reason(item.get('reason', ''))})"
+            for item in skipped_files[:5]
+        )
+        message = (
+            f"Upload {route_name} session={upload_session or '-'} accepted={accepted_count} "
+            f"skipped={skipped_count}"
+        )
+        if reasons:
+            message += f" reasons=[{reasons}]"
+        if samples:
+            message += f" samples=[{samples}]"
+        if accepted_count <= 0 and skipped_count > 0:
+            trace_logger.warning(message)
+        else:
+            trace_logger.info(message)
 
     def visible_document_sources(req: Request, scope: str):
         entity_id = None
@@ -137,6 +174,7 @@ def create_router(
 
         uploaded_files = upload_result["uploaded"]
         skipped_files = upload_result["skipped"]
+        log_upload_result("single", uploaded_files, skipped_files, upload_session)
         for item in uploaded_files:
             vector_store.set_ingest_scope(
                 item["filename"],
@@ -196,6 +234,7 @@ def create_router(
 
         uploaded_files = upload_result["uploaded"]
         skipped_files = upload_result["skipped"]
+        log_upload_result("batch", uploaded_files, skipped_files, upload_session)
         for item in uploaded_files:
             vector_store.set_ingest_scope(
                 item["filename"],

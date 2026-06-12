@@ -162,6 +162,10 @@ class IndexLifecycleService:
                 result = f"review_ready {build_result.chunks} changed chunks"
                 work_label = "Document ingest"
                 work_details = final_details
+            elif final_details.get("removedIgnoredDependencyDocuments"):
+                result = f"removed {int(final_details['removedIgnoredDependencyDocuments'])} ignored dependency sources"
+                work_label = "Index check: removed ignored dependency sources"
+                work_details = final_details
             elif changes.removed and not changes.changed_or_added:
                 result = f"ignored {len(changes.removed)} missing source files"
                 work_label = "Index check: ignored missing sources"

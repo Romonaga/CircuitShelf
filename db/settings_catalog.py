@@ -74,7 +74,6 @@ SETTING_UI = {
     "MAX_CHAT_HISTORY_TURNS": ("conversation", "History turns", "Number of previous user/assistant turns kept in model context.", False),
     "MAX_CHAT_HISTORY_CHARS": ("conversation", "History character limit", "Maximum chat-history characters sent to the model.", False),
     "TRAINING_DIR": ("ingestion", "Document folder", "Folder watched for source documents.", False),
-    "TRAINING_RECURSIVE": ("ingestion", "Scan subfolders", "When enabled, ingestion includes supported documents in subfolders.", False),
     "INGEST_WATCH_ENABLED": ("ingestion", "Background watcher", "Automatically checks for new, changed, and removed documents.", False),
     "INGEST_WATCH_INTERVAL_SECONDS": ("ingestion", "Watcher interval", "Seconds between automatic document-change checks.", False),
     "STATUS_POLL_INTERVAL_SECONDS": ("ingestion", "Idle status refresh", "Seconds between browser status refreshes while indexing is idle.", False),

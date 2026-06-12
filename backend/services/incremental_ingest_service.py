@@ -5,6 +5,7 @@ import time
 import numpy as np
 
 from backend.domain.statuses import DocumentStatusId
+from backend.ingestion.code_samples import is_ignored_code_bundle_dependency_path
 from backend.ingestion.ocr_engines import selected_ocr_mode
 from backend.ingestion.index_builder import IndexBuildResult, IndexBuilder
 from backend.services.incremental_document_processor import IncrementalDocumentProcessor
@@ -105,12 +106,27 @@ class IncrementalIngestService:
         return self.document_processor.mark_source_ready_for_review(source)
 
     def run_incremental_ingest(self, changes, current_manifest):
-        if changes.removed:
+        ignored_dependency_removed = [
+            source for source in changes.removed
+            if is_ignored_code_bundle_dependency_path(source)
+        ]
+        ignored_dependency_removed_set = set(ignored_dependency_removed)
+        missing_removed = [
+            source for source in changes.removed
+            if source not in ignored_dependency_removed_set
+        ]
+        if ignored_dependency_removed:
             self.trace_logger.info(
-                f"📚 Ignoring {len(changes.removed)} missing training files because the DB catalog is authoritative. "
+                f"📚 Removing {len(ignored_dependency_removed)} generated/vendor dependency document(s) "
+                "from the DB catalog."
+            )
+            self.vector_store.delete_sources(ignored_dependency_removed)
+        if missing_removed:
+            self.trace_logger.info(
+                f"📚 Ignoring {len(missing_removed)} missing training files because the DB catalog is authoritative. "
                 "Use Admin Remove to delete documents from CircuitShelf."
             )
-        delete_rel_paths = changes.modified
+        delete_rel_paths = list(changes.modified)
         changed_rel_paths = list(changes.changed_or_added)
         disappeared_rel_paths = []
         existing_changed_rel_paths = []
@@ -305,6 +321,13 @@ class IncrementalIngestService:
             }
         elif delete_rel_paths:
             self.vector_store.delete_sources(delete_rel_paths)
+        elif ignored_dependency_removed:
+            final_details = {
+                "documents": 0,
+                "removedIgnoredDependencyDocuments": len(ignored_dependency_removed),
+                "removedIgnoredDependencySamples": ignored_dependency_removed[:10],
+                **selected_ocr_mode(self.config),
+            }
         elif disappeared_rel_paths:
             final_details = {
                 "documents": 0,
