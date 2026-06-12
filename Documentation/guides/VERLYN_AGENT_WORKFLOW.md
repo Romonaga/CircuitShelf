@@ -48,8 +48,8 @@ Do not treat repo-local `workstream/specs/` as ambient context or a supported so
    `verlyn work-items update <change-id> --updates-json '[{"task_id":"<work-item-id>","status":"in_progress","owner":"<name>"}]'`
 8. Do the work, verification, and work-item updates.
 9. When the change is actually ready to land, prefer the hosted workflow wrapper over raw git or gh:
-   `verlyn changes publish <change-id> --merge-method squash`
-   Use `changes publish` for the normal "close out this one approved change" path. It opens or updates the PR, merges it, switches the local checkout back to the delivery base branch when local checkout context exists, records closeout, and cleans up branches according to the selected flags. Use `changes publish-pr` only when you intentionally want a PR without merge or closeout.
+   `verlyn changes deliver <change-id> --merge-method squash`
+   Use `changes deliver` for the normal "close out this one approved change" path. It opens or updates the PR, merges it, switches the local checkout back to the delivery base branch when local checkout context exists, records closeout, and cleans up branches according to the selected flags. Use `changes publish-pr` only when you intentionally want a PR without merge or closeout.
 
 ## Preparing Multiple Changes
 

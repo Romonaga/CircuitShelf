@@ -75,11 +75,11 @@ verlyn changes refresh-branch <change-id>
 verlyn work-items list <change-id>
 verlyn work-items update <change-id> --creates-json '[{"title":"Add validation"}]'
 verlyn work-items update <change-id> --updates-json '[{"task_id":"<work-item-id>","status":"done"}]'
-verlyn changes publish <change-id> --merge-method squash
+verlyn changes deliver <change-id> --merge-method squash
 verlyn changes close-change <change-id> --status merged --summary "Delivered."
 ```
 
-`verlyn changes publish` is the normal hosted closeout command. It commits
+`verlyn changes deliver` is the normal hosted closeout command. It commits
 local dirty work when `--commit-message` is supplied, pushes with Verlyn-managed
 provider credentials, opens or updates the PR, merges it, switches the local
 checkout back to the delivery base branch when local checkout context exists,
