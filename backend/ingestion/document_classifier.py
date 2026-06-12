@@ -21,6 +21,7 @@ PART_PATTERNS = [
     re.compile(r"\b(?:ATMEGA328P|RP2040|WS2812B)\b", re.IGNORECASE),
 ]
 
+FILENAME_PART_PATTERN = re.compile(r"\b[A-Z]{1,8}\d[A-Z0-9]{2,18}\b", re.IGNORECASE)
 GENERIC_555_PATTERN = re.compile(r"\b55[56]\s*(?:timer|timers|ic|chip|circuit)?\b", re.IGNORECASE)
 
 DATASHEET_MARKERS = {
@@ -28,8 +29,12 @@ DATASHEET_MARKERS = {
     "data sheet": 18,
     "pin configuration": 18,
     "pin configurations": 18,
+    "pinout": 18,
+    "pinouts": 18,
+    "pin number": 16,
     "pin functions": 18,
     "pin descriptions": 18,
+    "signal descriptions": 12,
     "terminal functions": 16,
     "absolute maximum ratings": 14,
     "electrical characteristics": 14,
@@ -136,12 +141,18 @@ def detect_component_candidates(filename: str, text: str) -> list[ComponentCandi
     filename_text = filename.replace("_", " ").replace("-", " ")
     search_text = f"{filename_text}\n{text[:16000]}"
     filename_candidates = {_normalize_part(match.group(0)) for pattern in PART_PATTERNS for match in pattern.finditer(filename_text)}
+    for match in FILENAME_PART_PATTERN.finditer(filename_text):
+        candidate = _normalize_part(match.group(0))
+        if is_plausible_component(candidate):
+            filename_candidates.add(candidate)
     counts: Counter[str] = Counter()
     for pattern in PART_PATTERNS:
         for match in pattern.finditer(search_text):
             candidate = _normalize_part(match.group(0))
             if is_plausible_component(candidate):
                 counts[candidate] += 1
+    for candidate in filename_candidates:
+        counts[candidate] += 2
     if GENERIC_555_PATTERN.search(filename_text) or re.search(r"\b555\s+timer\b", text[:6000], re.IGNORECASE):
         counts["NE555"] += 2
         if GENERIC_555_PATTERN.search(filename_text):
@@ -194,9 +205,9 @@ def detect_component_type(component_name: str, text: str) -> str:
         ("optocoupler", ("optocoupler", "opto-coupler", "phototransistor", "isolation")),
         ("timer", ("555", "556", "monostable", "astable", "timer")),
         ("analog-to-digital converter", ("analog-to-digital", "adc", "a/d converter", "conversion register")),
-        ("microcontroller", ("microcontroller", "gpio", "pwm", "uart", "spi", "i2c")),
         ("display controller", ("oled", "display controller", "segment driver")),
         ("sensor", ("pressure sensor", "temperature sensor", "humidity sensor", "sensor")),
+        ("microcontroller", ("microcontroller", "gpio", "pwm", "uart", "spi", "i2c")),
         ("voltage regulator", ("voltage regulator", "linear regulator", "ldo")),
         ("op amp", ("operational amplifier", "op amp", "op-amp")),
         ("mosfet", ("mosfet", "gate", "drain", "source")),
@@ -222,6 +233,8 @@ def is_plausible_component(candidate: str) -> bool:
     if not candidate or len(candidate) < 3:
         return False
     if candidate in {"NEEDS", "INPUT", "OUTPUT", "COMMON", "ABSOLUTE", "MAXIMUM", "EDITOR", "CHAPTER"}:
+        return False
+    if candidate.startswith(("DOCID", "REV", "DATE", "TABLE", "FIGURE", "PAGE")):
         return False
     if re.fullmatch(r"DS0\d{3,}", candidate):
         return False

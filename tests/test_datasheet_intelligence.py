@@ -427,6 +427,82 @@ VCC Positive Supply
         voltage_facts = [fact for fact in intelligence["facts"] if fact["type"] == "voltage"]
         self.assertEqual([(fact["label"], fact["value"]) for fact in voltage_facts], [("OPERATING VOLTAGE", "2 to 6")])
 
+    def test_logic_datasheet_extracts_pinout_from_top_view_rows(self):
+        chunks = [
+            """SN74HC04N hex inverter datasheet
+Operating voltage is 2 V to 6 V.
+Output current 25 mA.
+14-Pin PDIP Package Top View
+1A 1 14 VCC
+1Y 2 13 6A
+2A 3 12 6Y
+2Y 4 11 5A
+3A 5 10 5Y
+3Y 6 9 4A
+GND 7 8 4Y"""
+        ]
+        metadata = [{"source": "sn74hc04n.pdf", "parent_source": "sn74hc04n.pdf", "page": 3}]
+
+        intelligence = build_datasheet_intelligence(chunks, metadata, "sn74hc04n.pdf", "sn74hc04n.pdf")
+
+        self.assertEqual(intelligence["componentName"], "SN74HC04N")
+        self.assertEqual(len(intelligence["pinout"]["pins"]), 14)
+        self.assertEqual(
+            [(pin["pin"], pin["function"]) for pin in intelligence["pinout"]["pins"][:3]],
+            [(1, "1A"), (2, "1Y"), (3, "2A")],
+        )
+        self.assertEqual(intelligence["pinout"]["pins"][6]["function"], "Ground")
+        self.assertEqual(intelligence["pinout"]["pins"][13]["function"], "VCC")
+
+    def test_sensor_datasheet_extracts_pinout_from_flat_signal_table(self):
+        chunks = [
+            """VL6180X datasheet
+Table 2. VL6180X pin numbers and signal descriptions
+Pin number Signal name Signal type Signal description
+1 GPIO1 Digital I/O Interrupt output open drain.
+2 NC No connect or ground
+3 NC No connect or ground
+4 GPIO0/CE Digital I/O Power-up default chip enable.
+5 SCL Digital input I2C serial clock
+6 SDA Digital I/O I2C serial data
+8 AVDD_VCSEL Supply VCSEL supply"""
+        ]
+        metadata = [{"source": "VL6180X_datasheet.pdf", "parent_source": "VL6180X_datasheet.pdf", "page": 10}]
+
+        intelligence = build_datasheet_intelligence(chunks, metadata, "VL6180X_datasheet.pdf", "VL6180X_datasheet.pdf")
+
+        self.assertEqual(intelligence["componentName"], "VL6180X")
+        self.assertEqual(len(intelligence["pinout"]["pins"]), 7)
+        self.assertEqual(intelligence["pinout"]["pins"][0]["function"], "GPIO1")
+        self.assertEqual(intelligence["pinout"]["pins"][4]["function"], "SCL")
+
+    def test_module_manual_with_pinouts_is_component_document(self):
+        chunks = [
+            """VL53L0X Distance Sensor User Manual examples for Raspberry Pi and Arduino
+PINOUTS
+VCC: 3.3V/5V power input
+GND: ground
+SDA: I2C data pin
+SCL: I2C clock pin
+SHUT: shutdown control, connects to IO pin
+INT: interrupt output, connects to IO pin"""
+        ]
+        metadata = [{"source": "VL53L0X-Distance-Sensor-User-Manual-en.pdf", "parent_source": "VL53L0X-Distance-Sensor-User-Manual-en.pdf", "page": 2}]
+
+        intelligence = build_datasheet_intelligence(
+            chunks,
+            metadata,
+            "VL53L0X-Distance-Sensor-User-Manual-en.pdf",
+            "VL53L0X-Distance-Sensor-User-Manual-en.pdf",
+        )
+
+        self.assertEqual(intelligence["componentName"], "VL53L0X")
+        self.assertNotEqual(intelligence["documentType"], "project_or_reference")
+        self.assertEqual(
+            [(pin["pin"], pin["function"]) for pin in intelligence["pinout"]["pins"]],
+            [(1, "VCC"), (2, "Ground"), (3, "SDA"), (4, "SCL"), (5, "SHUT"), (6, "INT")],
+        )
+
     def test_warning_facts_skip_legal_and_ordering_notes(self):
         chunks = [
             """LM555 timer datasheet Pin Functions Electrical Characteristics

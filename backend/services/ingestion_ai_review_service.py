@@ -169,19 +169,22 @@ class IngestionAiReviewService:
             reasons.append(f"component candidate {plausible_components[0]}")
         if any(marker in lowered or marker in basename.lower() for marker in datasheet_markers):
             reasons.append("datasheet/pinout language detected")
+        component_or_datasheet = bool(plausible_components) or any(
+            marker in lowered or marker in basename.lower() for marker in datasheet_markers
+        )
 
         chunk_count = int(stats.get("chunkCount") or 0)
         raw_chunks = int(stats.get("rawChunkCount") or 0)
+        dropped_chunks = int(stats.get("droppedChunkCount") or max(raw_chunks - chunk_count, 0))
         images = int(stats.get("extractedImageCount") or 0)
         image_texts = int(stats.get("indexedImageTextCount") or 0)
         ocr_texts = int(stats.get("ocrImageTextCount") or 0)
         if raw_chunks and chunk_count == 0:
             reasons.append("all extracted text chunks were dropped")
+        elif raw_chunks and dropped_chunks > max(10, raw_chunks * 0.25) and component_or_datasheet:
+            reasons.append(f"component/datasheet extraction dropped {dropped_chunks} of {raw_chunks} raw chunks")
         if images >= 3 and image_texts == 0 and ocr_texts == 0:
             reasons.append("images were extracted but no OCR/image text was indexed")
-        component_or_datasheet = bool(plausible_components) or any(
-            marker in lowered or marker in basename.lower() for marker in datasheet_markers
-        )
         if len(text.strip()) < 800 and (images or raw_chunks) and component_or_datasheet:
             reasons.append("sample text is very short for extracted content")
         reasons.extend(self.intelligence_risk_reasons(intelligence))

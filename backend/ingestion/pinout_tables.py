@@ -113,6 +113,196 @@ def extract_pipe_table_pinout(
     return pins
 
 
+def extract_whitespace_table_pinout(
+    text: str,
+    *,
+    source: str,
+    page: int | None,
+    chunk_index: int | None,
+) -> list[PinoutPin]:
+    """Extract simple datasheet pin tables flattened as whitespace rows.
+
+    PDF text extraction frequently loses table borders but keeps rows such as
+    ``1 VCC Power supply`` or ``1 1A Input``. This parser is intentionally
+    gated by pin-table page/header markers so electrical-characteristics tables
+    do not get mistaken for pin maps.
+    """
+
+    lines = [re.sub(r"\s+", " ", line).strip() for line in str(text or "").splitlines()]
+    lines = [line for line in lines if line]
+    if not _looks_like_whitespace_pin_table(lines):
+        return []
+
+    pins: list[PinoutPin] = []
+    for line in lines:
+        match = re.match(r"^(?:pin\s*)?(?P<pin>\d{1,3})\s+(?P<label>[A-Za-z0-9][A-Za-z0-9/+_#-]{0,24})(?:\s+|$)", line, re.IGNORECASE)
+        if not match:
+            continue
+        pin_number = int(match.group("pin"))
+        if not 1 <= pin_number <= 256:
+            continue
+        label = clean_signal_label(match.group("label"))
+        if not is_signal_label(label):
+            continue
+        pins.append(
+            PinoutPin(
+                pin=pin_number,
+                label=label,
+                function=expand_pin_label(label),
+                source=source,
+                page=page,
+                chunk_index=chunk_index,
+            )
+        )
+    return pins if len(pins) >= 3 else []
+
+
+def extract_flat_numbered_signal_table_pinout(
+    text: str,
+    *,
+    source: str,
+    page: int | None,
+    chunk_index: int | None,
+) -> list[PinoutPin]:
+    """Extract flattened numbered pin/signal tables.
+
+    OCR often turns ``Pin number | Signal name | Signal type | ...`` into one
+    long text run. The parser looks for numeric pin positions followed by a
+    plausible signal label and a generic signal-type/description cue.
+    """
+
+    raw = str(text or "")
+    if not re.search(r"\bpin\s+number\b|\bsignal\s+name\b|\bsignal\s+description", raw, re.IGNORECASE):
+        return []
+    normalized = re.sub(r"[|]+", " ", raw)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    row_pattern = re.compile(
+        r"\b(?P<pin>\d{1,3})\s+"
+        r"(?P<label>[A-Za-z0-9][A-Za-z0-9/+_#-]{0,24})\s+"
+        r"(?=(?:Digital|Analog|Supply|Ground|Power|No\s+connect|Input|Output|I/O|Interrupt|VCSEL|I2C)\b)",
+        re.IGNORECASE,
+    )
+    pins_by_number: dict[int, PinoutPin] = {}
+    for match in row_pattern.finditer(normalized):
+        pin_number = int(match.group("pin"))
+        label = clean_signal_label(match.group("label"))
+        if not 1 <= pin_number <= 256 or not is_signal_label(label):
+            continue
+        pins_by_number.setdefault(
+            pin_number,
+            PinoutPin(
+                pin=pin_number,
+                label=label,
+                function=expand_pin_label(label),
+                source=source,
+                page=page,
+                chunk_index=chunk_index,
+            ),
+        )
+    pins = sorted(pins_by_number.values(), key=lambda item: item.pin)
+    return pins if len(pins) >= 3 else []
+
+
+def extract_signal_only_pinout(
+    text: str,
+    *,
+    source: str,
+    page: int | None,
+    chunk_index: int | None,
+) -> list[PinoutPin]:
+    """Extract module connector pinouts that list signal labels without numbers."""
+
+    raw = str(text or "")
+    marker = re.search(r"\bPINOUTS?\b|\bPIN\s+ASSIGNMENTS?\b|\bCONNECTOR\b", raw, re.IGNORECASE)
+    if not marker:
+        return []
+    raw = raw[marker.end() :]
+    labels: list[str] = []
+    for match in re.finditer(r"\b(?P<label>[A-Za-z0-9][A-Za-z0-9/+_#-]{0,24})\s*:", raw):
+        label = clean_signal_label(match.group("label"))
+        if label in {"VERSION", "DATE", "PAGE"} and len(labels) >= 3:
+            break
+        if is_signal_label(label) and label not in labels:
+            labels.append(label)
+    if not labels:
+        normalized = re.sub(r"[^A-Za-z0-9/+_#-]+", " ", raw)
+        for token in normalized.split():
+            label = clean_signal_label(token)
+            if label in {"VERSION", "DATE", "PAGE"} and len(labels) >= 3:
+                break
+            if is_signal_label(label) and label not in labels:
+                labels.append(label)
+    if len(labels) < 3:
+        return []
+    if not any(label in {"GND", "VCC", "VDD", "SDA", "SCL"} for label in labels):
+        return []
+    return [
+        PinoutPin(
+            pin=index,
+            label=label,
+            function=expand_pin_label(label),
+            source=source,
+            page=page,
+            chunk_index=chunk_index,
+        )
+        for index, label in enumerate(labels[:32], start=1)
+    ]
+
+
+def extract_side_by_side_package_pinout(
+    text: str,
+    *,
+    source: str,
+    page: int | None,
+    chunk_index: int | None,
+) -> list[PinoutPin]:
+    """Extract generic top-view DIP/SOIC style rows.
+
+    Common datasheets and OCR output render package diagrams as rows like
+    ``1A 1 14 VCC``. The labels are not chip-specific; they are accepted only
+    when both side labels look like signal names and the surrounding text has
+    pin/package context.
+    """
+
+    if not _has_package_pin_context(text):
+        return []
+
+    row_pattern = re.compile(
+        r"\b(?P<left>[A-Za-z0-9][A-Za-z0-9/+_#-]{0,24})\s+"
+        r"(?P<left_pin>\d{1,3})\s+"
+        r"(?P<right_pin>\d{1,3})\s+"
+        r"(?P<right>[A-Za-z0-9][A-Za-z0-9/+_#-]{0,24})\b",
+        re.IGNORECASE,
+    )
+    pins_by_number: dict[int, PinoutPin] = {}
+    for raw_line in str(text or "").splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        match = row_pattern.search(line)
+        if not match:
+            continue
+        pairs = (
+            (int(match.group("left_pin")), clean_signal_label(match.group("left"))),
+            (int(match.group("right_pin")), clean_signal_label(match.group("right"))),
+        )
+        for pin_number, label in pairs:
+            if not 1 <= pin_number <= 256 or not is_signal_label(label):
+                continue
+            pins_by_number.setdefault(
+                pin_number,
+                PinoutPin(
+                    pin=pin_number,
+                    label=label,
+                    function=expand_pin_label(label),
+                    source=source,
+                    page=page,
+                    chunk_index=chunk_index,
+                ),
+            )
+
+    pins = sorted(pins_by_number.values(), key=lambda item: item.pin)
+    return pins if len(pins) >= 4 else []
+
+
 def extract_compact_optocoupler_pinout(
     text: str,
     *,
@@ -219,6 +409,28 @@ def _looks_like_pin_description_table(lines: list[str]) -> bool:
     has_marker = any(marker in joined for marker in PIN_TABLE_PAGE_MARKERS)
     has_pin_header = any(line in {"PIN #", "PIN", "PIN NUMBER", "NO.", "NO"} for line in upper_lines)
     return has_marker and has_pin_header
+
+
+def _looks_like_whitespace_pin_table(lines: list[str]) -> bool:
+    joined = "\n".join(line.upper() for line in lines)
+    has_marker = any(marker in joined for marker in PIN_TABLE_PAGE_MARKERS)
+    if not has_marker:
+        return False
+    compact_lines = [compact_header(line) for line in lines]
+    header_hits = sum(
+        1
+        for line in compact_lines
+        if any(marker in line for marker in ("PIN", "PINNO", "PINNUMBER", "TERMINAL", "NAME", "SYMBOL", "SIGNAL", "DESCRIPTION", "FUNCTION"))
+    )
+    row_hits = sum(1 for line in lines if re.match(r"^(?:pin\s*)?\d{1,3}\s+[A-Za-z0-9][A-Za-z0-9/+_#-]{0,24}(?:\s+|$)", line, re.IGNORECASE))
+    return header_hits >= 2 and row_hits >= 3
+
+
+def _has_package_pin_context(text: str) -> bool:
+    upper = str(text or "").upper()
+    if any(marker in upper for marker in PIN_TABLE_PAGE_MARKERS):
+        return True
+    return bool(re.search(r"\b(?:TOP VIEW|PINOUT|PIN OUT|DIP|PDIP|SOIC|SOP|TSSOP|VSSOP|PACKAGE)\b", upper))
 
 
 def _pin_table_rows(lines: list[str]) -> list[list[str]]:

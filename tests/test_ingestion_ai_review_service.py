@@ -251,3 +251,49 @@ def test_component_datasheet_without_pinout_triggers_ai_review_from_intelligence
     assert len(store.reviews) == 1
     assert len(openai.calls) == 1
     assert "has no detected pinout" in openai.calls[0]["decision_reason"]
+
+
+def test_low_quality_component_datasheet_with_facts_and_missing_pinout_triggers_review():
+    service, store, openai = make_service(
+        local_response=(
+            '{"quality":"weak","useful":true,"confidence":0.58,'
+            '"warnings":["low text quality and missing pinout"],'
+            '"suggestedReviewFocus":"identity, pinout, electrical ratings",'
+            '"escalateToOpenAI":true,"reason":"component facts exist but pinout is missing"}'
+        )
+    )
+
+    result = service.review(
+        source_path="SN74HC04N.pdf",
+        is_global=True,
+        entity_id=None,
+        user_id=1,
+        stats={
+            "rawChunkCount": 338,
+            "chunkCount": 158,
+            "droppedChunkCount": 180,
+            "extractedImageCount": 2,
+            "indexedImageTextCount": 2,
+            "ocrImageTextCount": 2,
+        },
+        sample_text="SN74HC04N logic IC datasheet operating voltage 2 to 6 V output current package PDIP SOIC",
+        intelligence={
+            "documentType": "component_datasheet",
+            "componentName": "SN74HC04N",
+            "componentType": "logic IC",
+            "confidence": 0.98,
+            "facts": [
+                {"type": "voltage", "label": "operating voltage", "value": "2 to 6", "unit": "V"},
+                {"type": "current", "label": "output current", "value": "25", "unit": "mA"},
+            ],
+            "pinout": {"pins": []},
+        },
+        openai_enabled=True,
+    )
+
+    assert result["provider"] == "ollama+openai"
+    assert len(store.reviews) == 1
+    assert len(openai.calls) == 1
+    decision_reason = openai.calls[0]["decision_reason"]
+    assert "has no detected pinout" in decision_reason
+    assert "dropped 180 of 338 raw chunks" in decision_reason

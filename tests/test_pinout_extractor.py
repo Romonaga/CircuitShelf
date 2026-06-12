@@ -155,6 +155,121 @@ Serial clock input"""
             ],
         )
 
+    def test_extracts_generic_whitespace_pin_table(self):
+        chunks = [
+            """Terminal Functions
+Pin No. Symbol Description
+1 VCC Positive supply voltage
+2 GND Ground reference
+3 SDA Serial data
+4 SCL Serial clock"""
+        ]
+        metadata = [{"source": "sensor.pdf", "page": 5}]
+
+        pinout = extract_pinout_map(chunks, metadata, "sensor.pdf")
+
+        self.assertEqual(
+            [(pin["pin"], pin["function"], pin["page"]) for pin in pinout["pins"]],
+            [
+                (1, "VCC", 5),
+                (2, "Ground", 5),
+                (3, "SDA", 5),
+                (4, "SCL", 5),
+            ],
+        )
+
+    def test_extracts_signal_only_module_pinouts(self):
+        chunks = [
+            """PINOUTS
+VCC: 3.3V/5V power input
+GND: ground
+SDA: I2C data pin
+SCL: I2C clock pin
+SHUT: shutdown control, connects to IO pin
+INT: interrupt output, connects to IO pin"""
+        ]
+        metadata = [{"source": "module-manual.pdf", "page": 2}]
+
+        pinout = extract_pinout_map(chunks, metadata, "module-manual.pdf")
+
+        self.assertEqual(
+            [(pin["pin"], pin["function"], pin["page"]) for pin in pinout["pins"]],
+            [
+                (1, "VCC", 2),
+                (2, "Ground", 2),
+                (3, "SDA", 2),
+                (4, "SCL", 2),
+                (5, "SHUT", 2),
+                (6, "INT", 2),
+            ],
+        )
+
+    def test_extracts_flattened_numbered_signal_table(self):
+        chunks = [
+            """Table 2. pin numbers and signal descriptions
+Pin number Signal name Signal type Signal description
+1 GPIO1 Digital I/O Interrupt output open drain.
+2 NC No connect or ground
+3 NC No connect or ground
+4 GPIO0/CE Digital I/O Power-up default chip enable.
+5 SCL Digital input I2C serial clock
+6 SDA Digital I/O I2C serial data
+8 AVDD_VCSEL Supply VCSEL supply
+9 AVSSVCSEL Ground VCSEL ground"""
+        ]
+        metadata = [{"source": "sensor-datasheet.pdf", "page": 10}]
+
+        pinout = extract_pinout_map(chunks, metadata, "sensor-datasheet.pdf")
+
+        self.assertEqual(
+            [(pin["pin"], pin["function"], pin["page"]) for pin in pinout["pins"]],
+            [
+                (1, "GPIO1", 10),
+                (2, "No connection", 10),
+                (3, "No connection", 10),
+                (4, "GPIO0/CE", 10),
+                (5, "SCL", 10),
+                (6, "SDA", 10),
+                (8, "AVDD_VCSEL", 10),
+                (9, "AVSSVCSEL", 10),
+            ],
+        )
+
+    def test_extracts_generic_side_by_side_top_view_rows(self):
+        chunks = [
+            """14-Pin PDIP Package Top View
+1A 1 14 VCC
+1Y 2 13 6A
+2A 3 12 6Y
+2Y 4 11 5A
+3A 5 10 5Y
+3Y 6 9 4A
+GND 7 8 4Y"""
+        ]
+        metadata = [{"source": "logic.pdf", "page": 3}]
+
+        pinout = extract_pinout_map(chunks, metadata, "logic.pdf")
+
+        self.assertEqual(
+            [(pin["pin"], pin["function"], pin["page"]) for pin in pinout["pins"]],
+            [
+                (1, "1A", 3),
+                (2, "1Y", 3),
+                (3, "2A", 3),
+                (4, "2Y", 3),
+                (5, "3A", 3),
+                (6, "3Y", 3),
+                (7, "Ground", 3),
+                (8, "4Y", 3),
+                (9, "4A", 3),
+                (10, "5Y", 3),
+                (11, "5A", 3),
+                (12, "6Y", 3),
+                (13, "6A", 3),
+                (14, "VCC", 3),
+            ],
+        )
+
     def test_extracts_ordered_pin_function_sequence_when_numbers_are_split_out(self):
         chunks = [
             """GND

@@ -400,6 +400,11 @@ class VectorStore:
             rows = conn.execute(load_query("review_document_chunks.sql"), (source_path, int(limit))).fetchall()
         return [dict(row) for row in rows]
 
+    def review_document_all_chunks(self, source_path: str) -> list[dict]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("review_document_chunks_all.sql"), (source_path,)).fetchall()
+        return [dict(row) for row in rows]
+
     def set_document_status(self, source_path: str, status: DocumentStatusId, reviewed_by: str | None) -> dict | None:
         with self.database.connection() as conn:
             row = conn.execute(load_query("review_document_status_update.sql"), (int(status), reviewed_by, source_path)).fetchone()
