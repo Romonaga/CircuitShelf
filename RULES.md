@@ -23,7 +23,7 @@ If a rule in this file conflicts with `AGENTS.md` or `CONTRIBUTING.md`, the high
 - Prefer installed Verlyn CLI/API commands over retyping workflow steps from memory.
 - For hosted GitHub closeout, use Verlyn's hosted delivery routes first. If a session cannot see the repo, fix the scope or switch to a repo-visible owner session instead of falling back to shell tools like `gh`.
 - Once a Verlyn change is active, do not use raw `git` commands for branch repair, PR delivery, merge, or workflow state changes. Use the installed Verlyn CLI/API path first. If the Verlyn path fails or is missing needed behavior, stop and report the blocker so a Verlyn change can be created to fix Verlyn instead of bypassing it.
-- Verlyn-delivered work must create a PR even in solo mode. Solo mode can streamline review and merge decisions, but it must not skip PR creation or the hosted delivery trail.
+- Use `verlyn changes publish <change-id>` for full hosted closeout. `verlyn changes publish-pr` is PR-only and must not be treated as merge or Verlyn closeout.
 - Keep change, task, review, and handoff records current while work is in progress.
 - Treat workflow friction as real product work: if the process is confusing, log it as a change or task instead of bypassing it.
 - Prefer component-first design when the same UI or workflow pattern appears in multiple places or is likely to drift: extract a reusable component early instead of duplicating code. This keeps tests narrower, reduces code bloat, and lowers drift risk.

@@ -26,10 +26,9 @@ verlyn target show --json
 verlyn changes list
 verlyn changes activate <change-id>
 verlyn work-items list <change-id>
-verlyn work-items update <change-id> --create-json '{"title":"New work item title"}'
-verlyn work-items update <change-id> --update-json '{"task_id":"<existing-work-item-id>","title":"Updated work item title"}'
-verlyn changes prepare-pr <change-id>
-verlyn changes deliver <change-id>
+verlyn work-items update <change-id> --creates-json '[{"title":"New work item title"}]'
+verlyn work-items update <change-id> --updates-json '[{"task_id":"<existing-work-item-id>","title":"Updated work item title"}]'
+verlyn changes publish <change-id> --merge-method squash
 ```
 
 Those commands resolve the current repo through the backend and keep change, work-item, review, and PR artifacts aligned with Verlyn workflow state. Durable workflow truth is DB-backed; repo-local files are source, governance docs, templates, or temporary scratch artifacts rather than the work-item/change source of truth.
@@ -44,10 +43,9 @@ When working from a terminal or agent session, prefer the installed CLI:
 - `verlyn changes activate <change-id>`
 - `verlyn changes refresh-branch <change-id>`
 - `verlyn work-items list <change-id>`
-- `verlyn work-items update <change-id> --create-json '{"title":"..."}'`
-- `verlyn work-items update <change-id> --update-json '{"task_id":"<existing-work-item-id>","title":"..."}'`
-- `verlyn changes prepare-pr <change-id>`
-- `verlyn changes deliver <change-id>`
+- `verlyn work-items update <change-id> --creates-json '[{"title":"..."}]'`
+- `verlyn work-items update <change-id> --updates-json '[{"task_id":"<existing-work-item-id>","title":"..."}]'`
+- `verlyn changes publish <change-id> --merge-method squash`
 
 The CLI keeps repo identity and backend authorization explicit. Use `--target` only when you need to make local checkout selection explicit.
 
