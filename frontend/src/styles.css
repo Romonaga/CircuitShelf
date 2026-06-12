@@ -2461,6 +2461,38 @@ nav {
   border-color: rgba(239, 68, 68, 0.45);
 }
 
+.review-decision-card {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.4fr);
+  gap: 14px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.review-decision-card strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.review-decision-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.review-inspection-list ul {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text);
+}
+
 .review-evidence-panel,
 .review-deep-inspect {
   display: grid;
@@ -5801,6 +5833,7 @@ nav {
 :root[data-theme="dark"] .document-context-menu,
 :root[data-theme="dark"] .document-stat,
 :root[data-theme="dark"] .review-health-card,
+:root[data-theme="dark"] .review-decision-card,
 :root[data-theme="dark"] .review-qa-metric,
 :root[data-theme="dark"] .review-evidence-card,
 :root[data-theme="dark"] .review-deep-inspect,
@@ -6132,6 +6165,7 @@ nav {
   .ask-settings-grid,
   .review-qa-panel,
   .review-qa-metrics,
+  .review-decision-card,
   .performance-stats,
   .system-resource-panel {
     grid-template-columns: 1fr;

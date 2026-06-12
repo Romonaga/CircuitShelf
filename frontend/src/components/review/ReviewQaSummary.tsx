@@ -35,6 +35,19 @@ export function ReviewQaSummary({
           {health.warnings.map((warning) => <span key={warning} className="review-note attention">{warning}</span>)}
         </div>
       ) : null}
+      <div className="review-decision-card">
+        <div>
+          <span className="section-kicker">Recommended action</span>
+          <strong>{health.recommendation.action}</strong>
+          <p>{health.recommendation.detail}</p>
+        </div>
+        <div className="review-inspection-list">
+          <span className="section-kicker">Inspect first</span>
+          <ul>
+            {health.recommendation.inspect.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }

@@ -225,8 +225,9 @@ def create_router(
         if error:
             return error
         rows = vector_store.review_document_chunks(source, limit=max(1, min(int(limit), 500)))
+        intelligence_rows = vector_store.review_document_all_chunks(source)
         audit = vector_store.document_scope_audit(source, limit=25)
-        intelligence = review_intelligence_payload(rows, source, get_or_build_datasheet_intelligence)
+        intelligence = review_intelligence_payload(intelligence_rows, source, get_or_build_datasheet_intelligence)
         if not rows:
             return {"document": source, "chunks": [], "scopeAudit": [scope_audit_payload(row) for row in audit], "intelligence": intelligence}
         return {

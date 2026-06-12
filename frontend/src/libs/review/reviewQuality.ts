@@ -6,9 +6,16 @@ export interface ReviewHealth {
   level: ReviewHealthLevel;
   label: string;
   summary: string;
+  recommendation: ReviewRecommendation;
   autoApproveCandidate: boolean;
   reasons: string[];
   warnings: string[];
+}
+
+export interface ReviewRecommendation {
+  action: string;
+  detail: string;
+  inspect: string[];
 }
 
 export interface ReviewEvidenceSamples {
@@ -40,6 +47,12 @@ export function computeReviewHealth({
   const droppedChunks = document.droppedChunkCount ?? 0;
   const avgQuality = document.avgQuality ?? 0;
   const pinCount = intelligence?.pinout?.pins?.length ?? 0;
+  const factCount = intelligence?.facts?.length ?? 0;
+  const componentText = `${intelligence?.componentType ?? ""} ${intelligence?.summary ?? ""}`;
+  const componentLike = Boolean(intelligence?.componentName)
+    && /chip|timer|logic|opto|ic|micro|sensor|regulator|driver/i.test(componentText);
+  const missingComponentPinout = componentLike && !pinCount;
+  const hasUsefulComponentEvidence = Boolean(intelligence?.componentName) && (factCount > 0 || pinCount > 0);
 
   if (document.lastError) {
     reasons.push(`Last ingest error: ${document.lastError}`);
@@ -59,7 +72,7 @@ export function computeReviewHealth({
   if (storedImages > 0 && ocrImages <= 0) {
     warnings.push("Stored images have no indexed OCR text.");
   }
-  if (intelligence?.componentName && !pinCount && /chip|timer|logic|opto|ic|micro|sensor|regulator|driver/i.test(intelligence.componentType || intelligence.summary || "")) {
+  if (missingComponentPinout) {
     warnings.push("Component-like document has no detected pinout.");
   }
 
@@ -74,6 +87,15 @@ export function computeReviewHealth({
       level: "blocked",
       label: "Needs repair",
       summary: "Do not approve until the ingestion issue is fixed or re-indexed.",
+      recommendation: buildReviewRecommendation({
+        droppedChunks,
+        hasUsefulComponentEvidence,
+        imageCount,
+        indexedChunks,
+        missingComponentPinout,
+        pinCount,
+        reasonBlocked: true
+      }),
       autoApproveCandidate: false,
       reasons,
       warnings
@@ -84,7 +106,18 @@ export function computeReviewHealth({
     return {
       level: "attention",
       label: "Review needed",
-      summary: "The document indexed, but the extracted evidence deserves a quick spot check.",
+      summary: missingComponentPinout && hasUsefulComponentEvidence
+        ? "Useful component facts were found, but critical pinout evidence is incomplete."
+        : "The document indexed, but the extracted evidence needs an explicit approval decision.",
+      recommendation: buildReviewRecommendation({
+        droppedChunks,
+        hasUsefulComponentEvidence,
+        imageCount,
+        indexedChunks,
+        missingComponentPinout,
+        pinCount,
+        reasonBlocked: false
+      }),
       autoApproveCandidate: false,
       reasons,
       warnings
@@ -97,9 +130,81 @@ export function computeReviewHealth({
     summary: autoApproveCandidate
       ? "Clean quality, no low-quality chunks, and no extraction warnings."
       : "No blocking ingestion issues were detected.",
+    recommendation: buildReviewRecommendation({
+      droppedChunks,
+      hasUsefulComponentEvidence,
+      imageCount,
+      indexedChunks,
+      missingComponentPinout,
+      pinCount,
+      reasonBlocked: false
+    }),
     autoApproveCandidate,
     reasons,
     warnings
+  };
+}
+
+function buildReviewRecommendation({
+  droppedChunks,
+  hasUsefulComponentEvidence,
+  imageCount,
+  indexedChunks,
+  missingComponentPinout,
+  pinCount,
+  reasonBlocked
+}: {
+  droppedChunks: number;
+  hasUsefulComponentEvidence: boolean;
+  imageCount: number;
+  indexedChunks: number;
+  missingComponentPinout: boolean;
+  pinCount: number;
+  reasonBlocked: boolean;
+}): ReviewRecommendation {
+  if (reasonBlocked) {
+    return {
+      action: "Reprocess before approving",
+      detail: "The document did not produce enough usable indexed evidence for retrieval.",
+      inspect: ["source file opens correctly", "text extraction/OCR settings", "ingest error details"]
+    };
+  }
+
+  if (missingComponentPinout && hasUsefulComponentEvidence) {
+    return {
+      action: "Keep in review",
+      detail: "Do not delete solely because quality is low. Verify the part identity and pinout evidence before approval.",
+      inspect: [
+        "part number and manufacturer match",
+        "pinout, logic diagram, or connection diagram",
+        "electrical ratings and absolute maximums",
+        "package facts match the physical part",
+        imageCount > 0 ? "OCR image pages" : "source pages around pin tables",
+        droppedChunks > 0 ? "dropped-chunk summary" : "lowest-quality chunks"
+      ]
+    };
+  }
+
+  if (missingComponentPinout) {
+    return {
+      action: "Inspect pinout evidence",
+      detail: "The document looks component-like, but no normalized pins were found.",
+      inspect: ["pinout or terminal-function table", "OCR image pages", "package-specific pin diagrams"]
+    };
+  }
+
+  if (indexedChunks > 0) {
+    return {
+      action: pinCount > 0 ? "Approve after spot check" : "Spot check then approve",
+      detail: "The document has indexed evidence; confirm the warning items before making it retrievable.",
+      inspect: ["strongest text sample", "lowest-quality text sample", "image OCR coverage"]
+    };
+  }
+
+  return {
+    action: "Reject or reprocess",
+    detail: "No useful indexed evidence is available.",
+    inspect: ["source file quality", "OCR settings", "upload format"]
   };
 }
 
