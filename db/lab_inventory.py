@@ -246,12 +246,21 @@ class LabInventoryStore:
 
 
 class ProjectFinderStore:
-    def __init__(self, database: Database, inventory_store: LabInventoryStore, logger=None):
+    def __init__(self, database: Database, inventory_store: LabInventoryStore, logger=None, ai_triage_service=None):
         self.database = database
         self.inventory_store = inventory_store
         self.logger = logger
+        self.ai_triage_service = ai_triage_service
 
-    def find(self, user_id: int, *, limit: int = 24, offset: int = 0, candidate_filter: str = "all") -> dict[str, Any]:
+    def find(
+        self,
+        user_id: int,
+        *,
+        limit: int = 24,
+        offset: int = 0,
+        candidate_filter: str = "all",
+        entity_id: int | None = None,
+    ) -> dict[str, Any]:
         limit = max(1, int(limit))
         offset = max(0, int(offset))
         inventory = self.inventory_store.list_parts(user_id)
@@ -266,6 +275,7 @@ class ProjectFinderStore:
                 offset=offset,
                 candidate_filter=candidate_filter,
             )
+            return self._maybe_triage_response(response, entity_id=entity_id, user_id=user_id)
 
         with self.database.connection() as conn:
             chunk_rows = conn.execute(
@@ -289,7 +299,7 @@ class ProjectFinderStore:
             key=lambda item: (item["buildable"], item["score"], item["matchedPartCount"]),
             reverse=True,
         )
-        return self._finder_response(
+        response = self._finder_response(
             inventory_count=len(inventory),
             term_count=len(terms),
             ranked=ranked,
@@ -297,6 +307,18 @@ class ProjectFinderStore:
             offset=offset,
             candidate_filter=candidate_filter,
         )
+        return self._maybe_triage_response(response, entity_id=entity_id, user_id=user_id)
+
+    def _maybe_triage_response(
+        self,
+        response: dict[str, Any],
+        *,
+        entity_id: int | None,
+        user_id: int | None,
+    ) -> dict[str, Any]:
+        if not self.ai_triage_service:
+            return response
+        return self.ai_triage_service.triage_response(response, entity_id=entity_id, user_id=user_id)
 
     def _finder_response(
         self,

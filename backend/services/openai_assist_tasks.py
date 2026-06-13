@@ -10,10 +10,12 @@ from backend.services.openai_assist_prompts import (
     FALLBACK_ANSWER_INSTRUCTIONS,
     INGESTION_REVIEW_INSTRUCTIONS,
     INVENTORY_PHOTO_INSTRUCTIONS,
+    PROJECT_FINDER_TRIAGE_INSTRUCTIONS,
     build_datasheet_repair_prompt,
     build_fallback_answer_prompt,
     build_ingestion_review_prompt,
     build_inventory_photo_prompt,
+    build_project_finder_triage_prompt,
 )
 from backend.services.openai_assist_utils import parse_json_object
 from backend.services.openai_response_client import (
@@ -389,6 +391,59 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             if self.logger:
                 self.logger.warning(f"OpenAI inventory photo import failed: {message}")
             raise ValueError(f"Inventory photo analysis failed: {message}") from exc
+
+    def triage_project_finder(
+        self,
+        *,
+        candidates: list[dict[str, Any]],
+        entity_id: int | None,
+        user_id: int | None,
+        enabled: bool,
+        decision_reason: str,
+    ) -> dict[str, Any] | None:
+        if not enabled or not candidates:
+            return None
+        settings = self.ai_provider_store.resolve_openai_assist(entity_id=entity_id, user_id=user_id)
+        if not settings or not settings.get("apiKey") or settings.get("assistMode") == "off":
+            return None
+        event_base = self._assist_event_base(
+            settings=settings,
+            entity_id=entity_id,
+            user_id=user_id,
+            task_type="project_finder",
+            context_type="project_finder",
+            decision_reason=decision_reason,
+        )
+        if self._record_budget_block_if_needed(event_base, settings):
+            return None
+        started_at = time.time()
+        try:
+            data = self._create_response(
+                api_key=settings["apiKey"],
+                model=settings["modelName"],
+                instructions=PROJECT_FINDER_TRIAGE_INSTRUCTIONS,
+                input_text=build_project_finder_triage_prompt(
+                    candidates=candidates,
+                    deterministic_reason=decision_reason,
+                ),
+                max_output_tokens=1200,
+            )
+            usage = extract_usage(data)
+            estimated_cost = self._estimate_openai_cost(settings, usage)
+            text = extract_response_text(data)
+            parsed = parse_json_object(text)
+            self._record_ai_success(event_base, usage, estimated_cost, latency_ms=int((time.time() - started_at) * 1000))
+            parsed["provider"] = "openai"
+            parsed["model"] = settings["modelName"]
+            parsed["paidBy"] = settings["paidBy"]
+            parsed["estimatedCost"] = estimated_cost
+            return parsed
+        except Exception as exc:
+            message = safe_error_message(exc)
+            self._record_ai_failure(event_base, message, latency_ms=int((time.time() - started_at) * 1000))
+            if self.logger:
+                self.logger.warning(f"OpenAI Project Finder triage failed: {message}")
+            return None
 
     def _create_response(
         self,

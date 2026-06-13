@@ -82,6 +82,22 @@ class IngestionAssistStore:
             "stopPercent": 100,
         }
 
+    def resolve_openai_assist(self, *, entity_id, user_id):
+        self.resolved = {"is_global": False, "entity_id": entity_id, "user_id": user_id}
+        return {
+            "apiKey": "sk-test",
+            "assistMode": "auto",
+            "modelName": "gpt-5-chat-latest",
+            "paidBy": "entity",
+            "providerKeyOwnerUserId": None,
+            "pricingScope": "entity",
+            "pricingEntityId": entity_id,
+            "pricingUserId": None,
+            "monthlyBudget": 0,
+            "warnPercent": 80,
+            "stopPercent": 100,
+        }
+
     def budget_status_for_settings(self, _settings):
         return {"blocked": False}
 
@@ -164,3 +180,35 @@ def test_datasheet_repair_records_usage_and_structured_review(monkeypatch):
     assert store.events[0]["context_type"] == "datasheet_intelligence"
     assert store.events[0]["estimated_cost"] == 0.0123
     assert store.reviews[0]["review_json"]["kind"] == "datasheet_intelligence_repair"
+
+
+def test_project_finder_triage_records_project_finder_usage(monkeypatch):
+    store = IngestionAssistStore()
+    service = OpenAIAssistService(store)
+
+    monkeypatch.setattr(
+        service.tasks,
+        "_create_response",
+        lambda **_kwargs: {
+            "output_text": (
+                '{"candidates":[{"id":"candidate-1","useful":true,"confidence":0.82,'
+                '"recommendedAction":"keep","notes":[],"escalateToOpenAI":false,'
+                '"reason":"candidate is grounded"}]}'
+            ),
+            "usage": {"input_tokens": 120, "output_tokens": 30, "input_tokens_details": {"cached_tokens": 4}},
+        },
+    )
+
+    result = service.triage_project_finder(
+        candidates=[{"id": "candidate-1", "summary": "555 timer project", "score": 42}],
+        entity_id=4,
+        user_id=7,
+        enabled=True,
+        decision_reason="local Project Finder triage requested OpenAI escalation",
+    )
+
+    assert result["candidates"][0]["id"] == "candidate-1"
+    assert result["estimatedCost"] == 0.0123
+    assert store.events[0]["task_type"] == "project_finder"
+    assert store.events[0]["context_type"] == "project_finder"
+    assert store.events[0]["estimated_cost"] == 0.0123

@@ -9,6 +9,7 @@ from backend.bootstrap_environment import configure_tesseract
 from backend.bootstrap_settings import bootstrap_database_settings
 from backend.runtime_container import CircuitShelfRuntime
 from backend.services.app_runtime_helpers import TraceLogHelper
+from backend.services.project_finder_ai_triage import ProjectFinderAiTriageService
 from backend.store_container import StoreContainer, create_store_container
 from db.connection import Database, database_url_from_config
 from backend.services.settings_runtime import RuntimeSettingsManager
@@ -68,6 +69,14 @@ def bootstrap_runtime(*, ingest_status_callback=None, ingest_status_provider=Non
         ingest_status_callback=ingest_status_callback,
         ingest_status_provider=ingest_status_provider,
         lazy_gpu_models=lazy_gpu_models,
+    )
+    stores.project_finder_store.ai_triage_service = ProjectFinderAiTriageService(
+        config=config,
+        trace_logger=trace_logger,
+        ai_provider_store=stores.ai_provider_store,
+        openai_assist_service=stores.openai_assist_service,
+        query_local_llm=runtime.query_ollama_chat_with_retry,
+        local_model_name=runtime.llm_model_name,
     )
 
     auth_dependencies = AuthDependencyService(
