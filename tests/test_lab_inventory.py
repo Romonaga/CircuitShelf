@@ -162,6 +162,26 @@ class LabInventoryTests(unittest.TestCase):
         self.assertIn("NE555 timer -> LM555", candidate["objective"])
         self.assertIn("Breadboard", {part["name"] for part in candidate["missingParts"]})
 
+    def test_chunk_match_annotation_uses_prepared_terms(self):
+        store = ProjectFinderStore(None, None)
+        terms = store._prepared_search_terms(["NE555 timer", "10 segment LED", "missing part"])
+        rows = [
+            {
+                "chunk_text": "Build an NE-555 timer with a 10-segment LED display.",
+                "source_path": "book.pdf",
+            },
+            {
+                "chunk_text": "Copyright and preface text.",
+                "source_path": "preface.pdf",
+            },
+        ]
+
+        annotated = store._annotate_chunk_matches(rows, terms)
+
+        self.assertEqual(len(annotated), 1)
+        self.assertEqual(annotated[0]["matched_terms"], ["ne555 timer", "10 segment led"])
+        self.assertEqual(annotated[0]["matched_count"], 2)
+
     def test_missing_part_summary_ranks_repeated_gaps(self):
         store = ProjectFinderStore(None, None)
         summary = store._missing_part_summary(

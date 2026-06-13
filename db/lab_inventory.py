@@ -30,7 +30,7 @@ CIRCUIT_CONTEXT_RE = re.compile(
 )
 CODE_SAMPLE_TITLE_RE = re.compile(r"\bcode\s+sample\b", re.IGNORECASE)
 MIN_PROJECT_TEXT_CHARS = 90
-PROJECT_FINDER_CHUNK_SOURCE_LIMIT = 1200
+PROJECT_FINDER_CHUNK_SOURCE_LIMIT = 5000
 PROJECT_FINDER_INTELLIGENCE_SOURCE_LIMIT = 400
 
 GENERIC_PART_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
@@ -270,7 +270,7 @@ class ProjectFinderStore:
         with self.database.connection() as conn:
             chunk_rows = conn.execute(
                 load_query("project_finder_chunk_candidates.sql"),
-                (terms, PROJECT_FINDER_CHUNK_SOURCE_LIMIT),
+                (self._term_regex(terms), PROJECT_FINDER_CHUNK_SOURCE_LIMIT),
             ).fetchall()
             intelligence_rows = conn.execute(
                 load_query("project_finder_intelligence_candidates.sql"),
@@ -278,6 +278,7 @@ class ProjectFinderStore:
             ).fetchall()
 
         inventory_index = self._inventory_index(inventory, term_rows)
+        chunk_rows = self._annotate_chunk_matches(chunk_rows, self._prepared_search_terms(terms))
         candidates = [
             self._chunk_candidate(row, inventory_index)
             for row in chunk_rows
@@ -347,6 +348,50 @@ class ProjectFinderStore:
             if len(term) >= 2:
                 terms.setdefault(term, term)
         return list(terms.values())[:300]
+
+    def _term_regex(self, terms: list[str]) -> str:
+        patterns = []
+        for term in terms:
+            words = re.findall(r"[a-z0-9]+", normalize_part_name(term))
+            if not words:
+                continue
+            pattern = r"[^[:alnum:]]+".join(re.escape(word) for word in words)
+            if len(pattern) >= 2:
+                patterns.append(pattern)
+        if not patterns:
+            return r"a^"
+        deduped = sorted(set(patterns), key=lambda value: (-len(value), value))
+        return r"(^|[^[:alnum:]])(" + "|".join(deduped) + r")([^[:alnum:]]|$)"
+
+    def _prepared_search_terms(self, terms: list[str]) -> list[tuple[str, str]]:
+        prepared = OrderedDict()
+        for term in terms:
+            normalized = normalize_part_name(term)
+            if not normalized:
+                continue
+            prepared.setdefault(normalized, (normalized, compact_part_key(normalized)))
+        return list(prepared.values())
+
+    def _annotate_chunk_matches(self, rows: list[dict[str, Any]], terms: list[tuple[str, str]]) -> list[dict[str, Any]]:
+        annotated = []
+        for row in rows:
+            payload = dict(row)
+            matched_terms = self._matched_terms_for_text(payload.get("chunk_text") or "", terms)
+            if not matched_terms:
+                continue
+            payload["matched_terms"] = matched_terms
+            payload["matched_count"] = len(matched_terms)
+            annotated.append(payload)
+        return annotated
+
+    def _matched_terms_for_text(self, text: str, terms: list[tuple[str, str]]) -> list[str]:
+        normalized_text = normalize_part_name(text)
+        compact_text = compact_part_key(text)
+        matched = []
+        for normalized_term, compact_term in terms:
+            if normalized_term in normalized_text or (compact_term and compact_term in compact_text):
+                matched.append(normalized_term)
+        return matched
 
     def _inventory_index(self, inventory: list[dict[str, Any]], term_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         index: dict[str, dict[str, Any]] = {}
