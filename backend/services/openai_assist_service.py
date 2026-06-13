@@ -24,5 +24,8 @@ class OpenAIAssistService:
     def identify_inventory_photo(self, **kwargs):
         return self.tasks.identify_inventory_photo(**kwargs)
 
+    def verify_bench_photo(self, **kwargs):
+        return self.tasks.verify_bench_photo(**kwargs)
+
     def triage_project_finder(self, **kwargs):
         return self.tasks.triage_project_finder(**kwargs)

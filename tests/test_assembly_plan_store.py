@@ -30,6 +30,36 @@ class AssemblyPlanStoreHelperTests(unittest.TestCase):
         self.assertEqual(sources[0]["pages"], [1, 2])
         self.assertEqual(sources[0]["chunk_count"], 3)
 
+    def test_photo_check_maps_step_verification_fields(self):
+        store = AssemblyPlanStore(None, "training")
+
+        row = {
+            "id": "check-1",
+            "plan_id": "plan-1",
+            "step_id": "step-1",
+            "user_id": 7,
+            "image_mime_type": "image/png",
+            "note": "step photo",
+            "checklist": "manual checks",
+            "diagnostics": {"width": 800},
+            "verification_status": "needs_attention",
+            "verification_confidence": 0.42,
+            "verification_summary": "Photo is blurry.",
+            "verification_findings": ["Retake photo"],
+            "requested_evidence": ["Close-up"],
+            "verification_provider": "ollama",
+            "verification_model": "electronics-helper",
+            "ai_result": {"status": "needs_attention"},
+            "created_at": None,
+        }
+
+        check = store._photo_check(row)
+
+        self.assertEqual(check["stepId"], "step-1")
+        self.assertEqual(check["verification"]["status"], "needs_attention")
+        self.assertEqual(check["verification"]["confidence"], 0.42)
+        self.assertEqual(check["verification"]["requestedEvidence"], ["Close-up"])
+
 
 if __name__ == "__main__":
     unittest.main()

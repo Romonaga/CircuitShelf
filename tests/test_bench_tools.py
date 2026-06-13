@@ -3,7 +3,7 @@ from io import BytesIO
 
 from PIL import Image
 
-from backend.services.bench_tools import analyze_bench_photo, build_assembly_export
+from backend.services.bench_tools import analyze_bench_photo, build_assembly_export, deterministic_step_photo_verification
 
 
 class BenchToolsTests(unittest.TestCase):
@@ -18,6 +18,25 @@ class BenchToolsTests(unittest.TestCase):
         self.assertEqual(diagnostics["height"], 600)
         self.assertIn("brightness", diagnostics)
         self.assertIn("dominantColors", diagnostics)
+
+    def test_deterministic_step_photo_verification_does_not_claim_correctness(self):
+        verification = deterministic_step_photo_verification(
+            step={"ordinal": 1, "title": "Wire LED", "instruction": "Connect LED through resistor"},
+            diagnostics={
+                "width": 1600,
+                "height": 1200,
+                "brightness": 140,
+                "contrast": 45,
+                "edgeDensity": 0.08,
+                "blurScore": 180,
+                "warnings": [],
+            },
+            note="wired this step",
+        )
+
+        self.assertEqual(verification["status"], "cannot_verify")
+        self.assertLessEqual(verification["confidence"], 0.72)
+        self.assertIn("cannot prove wire placement", " ".join(verification["findings"]))
 
     def test_555_plan_exports_real_spice_starter(self):
         plan = {

@@ -192,24 +192,46 @@ class AssemblyPlanStore:
         plan_id: str,
         user_id: int,
         *,
+        step_id: str | None = None,
         image_mime_type: str,
         image_base64: str,
         note: str,
         checklist: str,
         diagnostics: dict | None = None,
+        verification: dict | None = None,
     ) -> dict | None:
+        verification = verification or {}
         with self.database.connection() as conn:
             row = conn.execute(
                 load_query("assembly_photo_check_insert.sql"),
-                (user_id, image_mime_type, image_base64, note, checklist, json.dumps(diagnostics or {}), plan_id, user_id),
+                (
+                    user_id,
+                    image_mime_type,
+                    image_base64,
+                    note,
+                    checklist,
+                    json.dumps(diagnostics or {}),
+                    verification.get("status") or "cannot_verify",
+                    self._optional_float(verification.get("confidence")),
+                    verification.get("summary") or "",
+                    json.dumps(verification.get("findings") or []),
+                    json.dumps(verification.get("requestedEvidence") or verification.get("requested_evidence") or []),
+                    verification.get("provider") or "diagnostics",
+                    verification.get("model"),
+                    json.dumps(verification.get("raw") or verification.get("aiResult") or {}),
+                    step_id,
+                    plan_id,
+                    user_id,
+                    step_id,
+                ),
             ).fetchone()
             if row:
                 conn.execute(load_query("assembly_plan_touch.sql"), (plan_id,))
         return self._photo_check(row) if row else None
 
-    def photo_checks(self, plan_id: str, user_id: int, *, limit: int = 10) -> list[dict]:
+    def photo_checks(self, plan_id: str, user_id: int, *, step_id: str | None = None, limit: int = 10) -> list[dict]:
         with self.database.connection() as conn:
-            rows = conn.execute(load_query("assembly_photo_checks_list.sql"), (plan_id, user_id, int(limit))).fetchall()
+            rows = conn.execute(load_query("assembly_photo_checks_list.sql"), (plan_id, user_id, step_id, step_id, int(limit))).fetchall()
         return [self._photo_check(row) for row in rows]
 
     def _source_notes(self, raw_sources: list[dict]) -> list[dict]:
@@ -364,13 +386,27 @@ class AssemblyPlanStore:
         }
 
     def _photo_check(self, row) -> dict:
+        findings = row.get("verification_findings") or []
+        requested_evidence = row.get("requested_evidence") or []
+        ai_result = row.get("ai_result") or {}
         return {
             "id": row["id"],
             "planId": row["plan_id"],
+            "stepId": row.get("step_id"),
             "userId": int(row["user_id"]),
             "imageMimeType": row["image_mime_type"],
             "note": row["note"] or "",
             "checklist": row["checklist"] or "",
             "diagnostics": dict(row["diagnostics"] or {}),
+            "verification": {
+                "status": row.get("verification_status") or "cannot_verify",
+                "confidence": self._optional_float(row.get("verification_confidence")),
+                "summary": row.get("verification_summary") or "",
+                "findings": list(findings) if isinstance(findings, list) else [],
+                "requestedEvidence": list(requested_evidence) if isinstance(requested_evidence, list) else [],
+                "provider": row.get("verification_provider") or "diagnostics",
+                "model": row.get("verification_model"),
+                "raw": dict(ai_result) if isinstance(ai_result, dict) else {},
+            },
             "createdAt": self._timestamp(row["created_at"]),
         }

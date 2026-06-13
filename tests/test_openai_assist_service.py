@@ -212,3 +212,40 @@ def test_project_finder_triage_records_project_finder_usage(monkeypatch):
     assert store.events[0]["task_type"] == "project_finder"
     assert store.events[0]["context_type"] == "project_finder"
     assert store.events[0]["estimated_cost"] == 0.0123
+
+
+def test_bench_photo_verification_records_photo_check_usage(monkeypatch):
+    store = IngestionAssistStore()
+    service = OpenAIAssistService(store)
+
+    monkeypatch.setattr(
+        service.tasks,
+        "_create_multimodal_response",
+        lambda **_kwargs: {
+            "output_text": (
+                '{"status":"needs_attention","confidence":0.64,"summary":"jumper is unclear",'
+                '"findings":["jumper end is hidden"],"requestedEvidence":["close-up of row 12"]}'
+            ),
+            "usage": {"input_tokens": 150, "output_tokens": 35, "input_tokens_details": {"cached_tokens": 5}},
+        },
+    )
+
+    result = service.verify_bench_photo(
+        image_bytes=b"fake-image",
+        mime_type="image/png",
+        plan={"title": "LED plan", "objective": "blink LED"},
+        step={"ordinal": 1, "title": "LED", "instruction": "connect LED"},
+        note="check step",
+        diagnostics={"width": 1200, "height": 900},
+        local_review={"status": "cannot_verify"},
+        entity_id=4,
+        user_id=7,
+        enabled=True,
+        decision_reason="local requested vision escalation",
+    )
+
+    assert result["status"] == "needs_attention"
+    assert result["estimatedCost"] == 0.0123
+    assert store.events[0]["task_type"] == "photo_check"
+    assert store.events[0]["context_type"] == "bench_photo_verification"
+    assert store.events[0]["estimated_cost"] == 0.0123

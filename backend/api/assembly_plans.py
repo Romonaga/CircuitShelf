@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import base64
+import time
 from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from backend.api.dependencies import ApiDependencies
 from backend.services.assembly_assistant_service import answer_assembly_assistant
 from backend.services.assembly_learning_service import build_learning_payload, update_learning_session
 from backend.services.assembly_plan_build_service import AssemblyPlanBuildService
+from backend.services.ingestion_ai_review_service import estimate_local_tokens
+from backend.services.openai_assist_utils import parse_json_object
 
 
 class AssemblyBuildRequest(BaseModel):
@@ -42,6 +46,7 @@ def create_router(
     *,
     assembly_plan_store: Any,
     bench_tools: Any,
+    openai_assist_service: Any | None,
     get_rag_response: Callable[..., Any],
     query_ollama_chat_with_retry: Callable[..., Any],
     normalize_sources_for_api: Callable[[Any], Any],
@@ -211,7 +216,13 @@ def create_router(
         return {"learning": update_learning_session(assembly_plan_store, plan_id, user_id, plan, payload)}
 
     @router.post("/api/assembly-plans/{plan_id}/photo-check")
-    async def assembly_photo_check(plan_id: str, req: Request, file: UploadFile = File(...), note: str = Form("")):
+    async def assembly_photo_check(
+        plan_id: str,
+        req: Request,
+        file: UploadFile = File(...),
+        note: str = Form(""),
+        stepId: str = Form(""),
+    ):
         user, error = deps.require_authenticated_user(req)
         if error:
             return error
@@ -219,6 +230,10 @@ def create_router(
         plan = assembly_plan_store.get(plan_id, user_id)
         if not plan:
             return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+        step_id = stepId.strip() or None
+        step = bench_tools.step_for_id(plan, step_id)
+        if step_id and not step:
+            return JSONResponse({"error": "Assembly step not found."}, status_code=404)
         mime_type = file.content_type or "application/octet-stream"
         if not mime_type.startswith("image/"):
             return JSONResponse({"error": "Upload must be an image."}, status_code=400)
@@ -229,26 +244,230 @@ def create_router(
         if len(image_bytes) > 8 * 1024 * 1024:
             return JSONResponse({"error": "Photo is too large. Use an image under 8 MB."}, status_code=400)
         diagnostics = bench_tools.analyze_bench_photo(image_bytes)
-        checklist = bench_tools.build_photo_checklist(plan, note, diagnostics)
+        verification = None
+        local_review = None
+        if step:
+            local_review = await run_in_threadpool(
+                run_local_step_photo_review,
+                bench_tools=bench_tools,
+                query_ollama_chat_with_retry=query_ollama_chat_with_retry,
+                model_name=default_model,
+                plan=plan,
+                step=step,
+                note=note,
+                diagnostics=diagnostics,
+            )
+            record_local_photo_review_event(
+                deps.ai_provider_store,
+                local_review,
+                entity_id=current_entity_id(deps, user_id),
+                user_id=user_id,
+                model_name=default_model,
+            )
+            verification = bench_tools.deterministic_step_photo_verification(
+                step=step,
+                diagnostics=diagnostics,
+                note=note,
+                local_review=local_review,
+            )
+            if should_escalate_step_photo_to_openai(verification, local_review, diagnostics):
+                openai_review = await run_in_threadpool(
+                    verify_bench_photo_with_openai,
+                    openai_assist_service=openai_assist_service,
+                    image_bytes=image_bytes,
+                    mime_type=mime_type,
+                    plan=plan,
+                    step=step,
+                    note=note,
+                    diagnostics=diagnostics,
+                    local_review=local_review,
+                    entity_id=current_entity_id(deps, user_id),
+                    user_id=user_id,
+                )
+                if openai_review:
+                    verification = bench_tools.deterministic_step_photo_verification(
+                        step=step,
+                        diagnostics=diagnostics,
+                        note=note,
+                        openai_review=openai_review,
+                    )
+            checklist = bench_tools.build_step_photo_checklist(
+                plan=plan,
+                step=step,
+                note=note,
+                diagnostics=diagnostics,
+                verification=verification,
+            )
+        else:
+            verification = bench_tools.deterministic_step_photo_verification(
+                step=None,
+                diagnostics=diagnostics,
+                note=note,
+            )
+            checklist = bench_tools.build_photo_checklist(plan, note, diagnostics)
         check = assembly_plan_store.add_photo_check(
             plan_id,
             user_id,
+            step_id=step_id,
             image_mime_type=mime_type,
             image_base64=base64.b64encode(image_bytes).decode("ascii"),
             note=note,
             checklist=checklist,
             diagnostics=diagnostics,
+            verification=verification,
         )
-        return {"check": check, "checks": assembly_plan_store.photo_checks(plan_id, user_id)}
+        return {"check": check, "checks": assembly_plan_store.photo_checks(plan_id, user_id, step_id=step_id)}
 
     @router.get("/api/assembly-plans/{plan_id}/photo-checks")
-    async def assembly_photo_checks(plan_id: str, req: Request):
+    async def assembly_photo_checks(plan_id: str, req: Request, stepId: str = Query("")):
         user, error = deps.require_authenticated_user(req)
         if error:
             return error
         user_id = deps.user_id_for_user(user)
-        if not assembly_plan_store.get(plan_id, user_id):
+        plan = assembly_plan_store.get(plan_id, user_id)
+        if not plan:
             return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
-        return {"checks": assembly_plan_store.photo_checks(plan_id, user_id)}
+        step_id = stepId.strip() or None
+        if step_id and not bench_tools.step_for_id(plan, step_id):
+            return JSONResponse({"error": "Assembly step not found."}, status_code=404)
+        return {"checks": assembly_plan_store.photo_checks(plan_id, user_id, step_id=step_id)}
 
     return router
+
+
+def run_local_step_photo_review(
+    *,
+    bench_tools: Any,
+    query_ollama_chat_with_retry: Callable[..., Any],
+    model_name: str,
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    note: str,
+    diagnostics: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not query_ollama_chat_with_retry or not model_name:
+        return None
+    system_prompt = bench_tools.LOCAL_STEP_PHOTO_REVIEW_SYSTEM_PROMPT
+    prompt = bench_tools.build_step_photo_local_prompt(
+        plan=plan,
+        step=step,
+        note=note,
+        diagnostics=diagnostics,
+    )
+    started_at = time.time()
+    try:
+        raw = query_ollama_chat_with_retry(
+            prompt,
+            model_name,
+            chat_history=[],
+            system_prompt=system_prompt,
+            gpu_priority=85,
+            gpu_owner="bench-photo-verification",
+            gpu_resource_class="local_llm",
+            keep_alive=0,
+        )
+        parsed = parse_json_object(raw)
+        parsed["raw"] = str(raw or "")[:4000]
+        parsed["_inputTokenEstimate"] = estimate_local_tokens(system_prompt) + estimate_local_tokens(prompt)
+        parsed["_outputTokenEstimate"] = estimate_local_tokens(raw)
+        parsed["_latencyMs"] = int((time.time() - started_at) * 1000)
+        parsed["_success"] = True
+        return parsed
+    except Exception as exc:
+        return {
+            "status": "cannot_verify",
+            "confidence": 0.0,
+            "summary": "Local bench photo review failed.",
+            "findings": ["Local AI could not review the step photo diagnostics."],
+            "requestedEvidence": ["Use manual inspection or retry with a clearer photo."],
+            "escalateToOpenAI": False,
+            "reason": "local bench photo review failed",
+            "raw": "",
+            "_inputTokenEstimate": 0,
+            "_outputTokenEstimate": 0,
+            "_latencyMs": int((time.time() - started_at) * 1000),
+            "_success": False,
+            "_errorMessage": str(exc)[:240],
+        }
+
+
+def record_local_photo_review_event(
+    ai_provider_store: Any,
+    result: dict[str, Any] | None,
+    *,
+    entity_id: int | None,
+    user_id: int | None,
+    model_name: str,
+) -> None:
+    if not result or not ai_provider_store or not hasattr(ai_provider_store, "record_ai_assist_event"):
+        return
+    ai_provider_store.record_ai_assist_event(
+        entity_id=entity_id,
+        user_id=user_id,
+        provider="ollama",
+        task_type="photo_check",
+        model_name=model_name or "local",
+        context_type="bench_photo_verification",
+        input_tokens=int(result.get("_inputTokenEstimate") or 0),
+        output_tokens=int(result.get("_outputTokenEstimate") or 0),
+        estimated_cost=0.0,
+        paid_by="entity" if entity_id is not None else "user",
+        success=bool(result.get("_success", True)),
+        error_message=result.get("_errorMessage"),
+        decision_reason="Local bench photo verification triaged image diagnostics before any OpenAI vision escalation.",
+        latency_ms=int(result.get("_latencyMs") or 0),
+    )
+
+
+def should_escalate_step_photo_to_openai(
+    verification: dict[str, Any],
+    local_review: dict[str, Any] | None,
+    diagnostics: dict[str, Any],
+) -> bool:
+    if local_review and bool(local_review.get("escalateToOpenAI")):
+        return True
+    if diagnostics.get("warnings"):
+        return False
+    confidence = verification.get("confidence")
+    try:
+        confidence_value = float(confidence)
+    except (TypeError, ValueError):
+        confidence_value = 0.0
+    return verification.get("status") == "cannot_verify" and confidence_value < 0.55
+
+
+def verify_bench_photo_with_openai(
+    *,
+    openai_assist_service: Any | None,
+    image_bytes: bytes,
+    mime_type: str,
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    note: str,
+    diagnostics: dict[str, Any],
+    local_review: dict[str, Any] | None,
+    entity_id: int | None,
+    user_id: int | None,
+) -> dict[str, Any] | None:
+    if not openai_assist_service or not hasattr(openai_assist_service, "verify_bench_photo"):
+        return None
+    return openai_assist_service.verify_bench_photo(
+        image_bytes=image_bytes,
+        mime_type=mime_type,
+        plan=plan,
+        step=step,
+        note=note,
+        diagnostics=diagnostics,
+        local_review=local_review,
+        entity_id=entity_id,
+        user_id=user_id,
+        enabled=True,
+        decision_reason="Local bench photo verification requested OpenAI vision escalation.",
+    )
+
+
+def current_entity_id(deps: ApiDependencies, user_id: int | None) -> int | None:
+    if user_id is None or not getattr(deps, "entity_store", None):
+        return None
+    entity = deps.entity_store.current_for_user(user_id)
+    return getattr(entity, "entity_id", None)

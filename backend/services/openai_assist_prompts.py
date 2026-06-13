@@ -39,6 +39,15 @@ INVENTORY_PHOTO_INSTRUCTIONS = (
     "Return JSON only and keep uncertain observations marked with warnings."
 )
 
+BENCH_PHOTO_VERIFICATION_INSTRUCTIONS = (
+    "You are CircuitShelf's bench photo inspection assistant. Return JSON only. "
+    "Compare the uploaded electronics bench photo to the specific build step and diagnostics. "
+    "Be conservative: do not claim the full circuit is correct, electrically safe, or ready to power. "
+    "Use status looks_consistent only when the visible photo evidence appears consistent with the step. "
+    "Use needs_attention when visible issues or quality problems should be addressed. "
+    "Use cannot_verify when the photo does not show enough evidence."
+)
+
 PROJECT_FINDER_TRIAGE_INSTRUCTIONS = (
     "You are CircuitShelf's Project Finder triage assistant. Return compact JSON only. "
     "Do not invent components or claim a project is buildable without evidence."
@@ -131,6 +140,29 @@ def build_inventory_photo_prompt(note: str) -> str:
         "Prefer useful inventory names such as 'Red LED', 'NE555 timer IC', '10 kOhm resistor assortment'. "
         "Do not invent exact part numbers unless markings are visible.\n\n"
         f"User note: {note[:1000]}"
+    )
+
+
+def build_bench_photo_verification_prompt(
+    *,
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    note: str,
+    diagnostics: dict[str, Any],
+    local_review: dict[str, Any] | None = None,
+) -> str:
+    return (
+        "Inspect this bench photo for one CircuitShelf build step. Return compact JSON with keys: "
+        "status, confidence, summary, findings, requestedEvidence. "
+        "status must be one of looks_consistent, needs_attention, cannot_verify. "
+        "confidence must be 0.0-1.0. findings and requestedEvidence must be arrays of short strings. "
+        "Do not infer hidden connections. Do not say the circuit is safe or fully correct.\n\n"
+        f"Plan: {plan.get('title') or 'Assembly plan'}\n"
+        f"Objective: {plan.get('objective') or ''}\n"
+        f"Step: {step.get('ordinal')}. {step.get('title')} -> {step.get('instruction')} {step.get('note') or ''}\n"
+        f"User note: {note[:1000]}\n"
+        f"Image diagnostics: {json.dumps(diagnostics, sort_keys=True)[:3000]}\n"
+        f"Local review: {json.dumps(local_review or {}, sort_keys=True)[:2000]}"
     )
 
 
