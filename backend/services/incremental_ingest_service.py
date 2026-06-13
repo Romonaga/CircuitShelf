@@ -6,8 +6,10 @@ import numpy as np
 
 from backend.domain.statuses import DocumentStatusId
 from backend.ingestion.code_samples import is_ignored_code_bundle_dependency_path
+from backend.ingestion.worker_sizing import cpu_thermal_worker_pressure
 from backend.ingestion.ocr_engines import selected_ocr_mode
 from backend.ingestion.index_builder import IndexBuildResult, IndexBuilder
+from backend.services.resource_sensors import read_cpu_temperature_status
 from backend.services.incremental_document_processor import IncrementalDocumentProcessor
 
 
@@ -167,13 +169,21 @@ class IncrementalIngestService:
         final_details = {}
         if changed_rel_paths:
             cpu_count = self.detected_cpu_count()
-            max_workers = self.document_worker_count(len(changed_rel_paths), cpu_count=cpu_count)
+            cpu_temperature = read_cpu_temperature_status().get("temperatureC")
+            configured_workers = self.document_worker_count(len(changed_rel_paths), cpu_count=cpu_count)
+            thermal_pressure = cpu_thermal_worker_pressure(configured_workers, cpu_temperature)
+            max_workers = int(thermal_pressure["targetWorkers"])
             save_workers = self.persist_worker_count(len(changed_rel_paths), cpu_count=cpu_count)
             self.trace_logger.info(
                 f"⚙️ Ingest worker budget: {cpu_count} cores detected, reserving {self.reserved_core_count(cpu_count)}, "
                 f"{self.usable_core_count(cpu_count)} usable, {max_workers} document workers and "
                 f"{save_workers} save workers for {len(changed_rel_paths)} files."
             )
+            if thermal_pressure.get("level") not in {"headroom", "unavailable", "not_applicable"}:
+                self.trace_logger.warning(
+                    f"⚠️ CPU thermal guard reduced document workers from {configured_workers} to {max_workers}: "
+                    f"{thermal_pressure.get('temperatureC')}C, {thermal_pressure.get('reason')}."
+                )
             self.update_index_progress(
                 stage="processing_documents",
                 total_files=len(changed_rel_paths),
@@ -181,6 +191,8 @@ class IncrementalIngestService:
                     "documents": len(changed_rel_paths),
                     "skippedDisappearedFiles": len(disappeared_rel_paths),
                     "activeWorkers": max_workers,
+                    "configuredDocumentWorkers": configured_workers,
+                    "cpuThermalWorkerPressure": thermal_pressure,
                     "persistWorkers": save_workers,
                     "queuedSaveDocuments": 0,
                     **selected_ocr_mode(self.config),

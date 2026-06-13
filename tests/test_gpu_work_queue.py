@@ -3,7 +3,10 @@ from contextlib import contextmanager
 from backend.services import gpu_work_queue
 from backend.services.gpu_work_queue import (
     LocalGpuWorkCoordinator,
+    clear_gpu_oom_cooldown,
+    current_gpu_oom_cooldown,
     is_cuda_out_of_memory,
+    record_cuda_oom,
     resolve_adaptive_ocr_slots,
     resolve_cuda_batch_slots,
     resolve_local_llm_slots,
@@ -34,6 +37,10 @@ class FakeDatabase:
     @contextmanager
     def connection(self):
         yield self.conn
+
+
+def setup_function():
+    clear_gpu_oom_cooldown()
 
 
 def test_abandoned_gpu_work_cleanup_runs_periodically(monkeypatch):
@@ -154,12 +161,34 @@ def test_adaptive_ocr_slots_step_down_under_pressure():
 def test_adaptive_ocr_slots_keep_capacity_with_low_gpu_and_resident_vram():
     payload = resolve_adaptive_ocr_slots(
         8,
-        {"available": True, "gpuPercent": 23, "memoryUsedPercent": 87, "temperatureC": 55},
+        {"available": True, "gpuPercent": 23, "memoryUsedPercent": 77, "temperatureC": 55},
     )
 
     assert payload["activeSlots"] == 8
     assert payload["targetSlots"] == 8
     assert payload["reason"] == "GPU headroom available"
+
+
+def test_adaptive_ocr_slots_back_off_before_vram_is_near_full():
+    moderate = resolve_adaptive_ocr_slots(
+        8,
+        {"available": True, "gpuPercent": 23, "memoryUsedPercent": 79, "temperatureC": 55},
+    )
+    high = resolve_adaptive_ocr_slots(
+        8,
+        {"available": True, "gpuPercent": 23, "memoryUsedPercent": 85, "temperatureC": 55},
+    )
+    hard = resolve_adaptive_ocr_slots(
+        8,
+        {"available": True, "gpuPercent": 23, "memoryUsedPercent": 89, "temperatureC": 55},
+    )
+
+    assert moderate["targetSlots"] == 6
+    assert moderate["reason"] == "moderate GPU pressure"
+    assert high["targetSlots"] == 4
+    assert high["reason"] == "high GPU pressure"
+    assert hard["targetSlots"] == 2
+    assert hard["reason"] == "thermal or VRAM guard"
 
 
 def test_adaptive_ocr_slots_clamp_on_vram_or_thermal_guard():
@@ -264,7 +293,31 @@ def test_local_llm_slots_start_when_background_work_has_headroom():
 
 def test_cuda_oom_detection_matches_torch_error_text():
     assert is_cuda_out_of_memory(RuntimeError("CUDA out of memory. Tried to allocate 34 MiB"))
+    assert is_cuda_out_of_memory(RuntimeError("external paddleocr exited 1: Out of memory [NV_ERR_NO_MEMORY]"))
     assert not is_cuda_out_of_memory(RuntimeError("some other cuda warning"))
+
+
+def test_cuda_oom_cooldown_blocks_cuda_batch_and_single_lanes_ocr():
+    record_cuda_oom(resource_class="ocr_cuda", error="Out of memory [NV_ERR_NO_MEMORY]", cooldown_seconds=120)
+    cooldown = current_gpu_oom_cooldown()
+    pressure = {
+        "available": True,
+        "gpuPercent": 10,
+        "memoryUsedPercent": 30,
+        "temperatureC": 50,
+        "oomCooldown": cooldown,
+    }
+
+    ocr = resolve_adaptive_ocr_slots(8, pressure)
+    cuda = resolve_cuda_batch_slots(2, pressure)
+    llm = resolve_local_llm_slots(1, {**pressure, "memoryUsedMiB": 1000, "memoryTotalMiB": 24576})
+
+    assert cooldown["active"] is True
+    assert ocr["targetSlots"] == 1
+    assert ocr["pressureLevel"] == "oom-cooldown"
+    assert cuda["targetSlots"] == 0
+    assert cuda["reason"] == "recent GPU OOM cooldown"
+    assert llm["targetSlots"] == 0
 
 
 def test_adaptive_ocr_slots_do_not_report_below_running_work():
@@ -335,6 +388,35 @@ def test_coordinator_reduces_ocr_lanes_immediately_for_hard_guard(monkeypatch):
     assert guarded["rawTargetSlots"] == 2
     assert guarded["targetSlots"] == 2
     assert guarded["activeSlots"] == 2
+
+
+def test_coordinator_reduces_ocr_lanes_immediately_for_oom_cooldown(monkeypatch):
+    coordinator = LocalGpuWorkCoordinator(database=FakeDatabase(), ocr_slot_count=8)
+    cooldown = {
+        "active": True,
+        "remainingSeconds": 120.0,
+        "lastEvent": {"resourceClass": "ocr_cuda"},
+    }
+    samples = iter(
+        [
+            {"available": True, "gpuPercent": 30, "memoryUsedPercent": 40, "temperatureC": 55},
+            {
+                "available": True,
+                "gpuPercent": 30,
+                "memoryUsedPercent": 40,
+                "temperatureC": 55,
+                "oomCooldown": cooldown,
+            },
+        ]
+    )
+    monkeypatch.setattr(coordinator, "_cached_gpu_pressure", lambda: next(samples))
+
+    assert coordinator._adaptive_ocr_slot_count()["targetSlots"] == 8
+    guarded = coordinator._adaptive_ocr_slot_count()
+    assert guarded["rawTargetSlots"] == 1
+    assert guarded["targetSlots"] == 1
+    assert guarded["activeSlots"] == 1
+    assert guarded["pressureLevel"] == "oom-cooldown"
 
 
 def test_coordinator_reports_running_ocr_lanes_even_when_target_is_lower(monkeypatch):
