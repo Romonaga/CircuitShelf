@@ -31,6 +31,7 @@ CIRCUIT_CONTEXT_RE = re.compile(
 CODE_SAMPLE_TITLE_RE = re.compile(r"\bcode\s+sample\b", re.IGNORECASE)
 MIN_PROJECT_TEXT_CHARS = 90
 PROJECT_FINDER_CHUNK_SOURCE_LIMIT = 5000
+PROJECT_FINDER_CHUNK_PREFILTER_LIMIT = 20000
 PROJECT_FINDER_INTELLIGENCE_SOURCE_LIMIT = 400
 
 GENERIC_PART_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
@@ -280,7 +281,7 @@ class ProjectFinderStore:
         with self.database.connection() as conn:
             chunk_rows = conn.execute(
                 load_query("project_finder_chunk_candidates.sql"),
-                (self._term_regex(terms), PROJECT_FINDER_CHUNK_SOURCE_LIMIT),
+                (self._term_regex(terms), PROJECT_FINDER_CHUNK_PREFILTER_LIMIT),
             ).fetchall()
             intelligence_rows = conn.execute(
                 load_query("project_finder_intelligence_candidates.sql"),
@@ -288,7 +289,9 @@ class ProjectFinderStore:
             ).fetchall()
 
         inventory_index = self._inventory_index(inventory, term_rows)
-        chunk_rows = self._annotate_chunk_matches(chunk_rows, self._prepared_search_terms(terms))
+        chunk_rows = self._rank_chunk_rows(
+            self._annotate_chunk_matches(chunk_rows, self._prepared_search_terms(terms))
+        )[:PROJECT_FINDER_CHUNK_SOURCE_LIMIT]
         candidates = [
             self._chunk_candidate(row, inventory_index)
             for row in chunk_rows
@@ -406,12 +409,33 @@ class ProjectFinderStore:
             annotated.append(payload)
         return annotated
 
+    @staticmethod
+    def _rank_chunk_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return sorted(
+            rows,
+            key=lambda row: (
+                int(row.get("matched_count") or 0),
+                float(row.get("quality_score") or 0.0),
+                str(row.get("source_path") or ""),
+                -(int(row.get("page_number") or 0)),
+                -(int(row.get("chunk_index") or 0)),
+            ),
+            reverse=True,
+        )
+
     def _matched_terms_for_text(self, text: str, terms: list[tuple[str, str]]) -> list[str]:
         normalized_text = normalize_part_name(text)
+        text_tokens = set(normalized_text.split())
         compact_text = compact_part_key(text)
         matched = []
         for normalized_term, compact_term in terms:
-            if normalized_term in normalized_text or (compact_term and compact_term in compact_text):
+            term_tokens = normalized_term.split()
+            if len(term_tokens) == 1:
+                text_match = term_tokens[0] in text_tokens
+            else:
+                text_match = normalized_term in normalized_text
+            compact_match = bool(compact_term and len(compact_term) >= 4 and any(char.isdigit() for char in compact_term) and compact_term in compact_text)
+            if text_match or compact_match:
                 matched.append(normalized_term)
         return matched
 
