@@ -1,0 +1,655 @@
+{
+  "app": {
+    "id": "circuitshelf",
+    "name": "Circuitshelf",
+    "source": {
+      "kind": "website_import",
+      "source_id": "frontend-analysis:frontend",
+      "source_name": "vite_react source analysis"
+    }
+  },
+  "schema_family": "verlyn_app_schema",
+  "schema_version": 1,
+  "screens": [
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "ask-title",
+              "name": "Ask title",
+              "style_role": "project-shell-muted-text",
+              "text": "Ask",
+              "type": "text"
+            },
+            {
+              "id": "ask-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "ask-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Ask discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "ask",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Ask",
+      "title": "Ask",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "bench-title",
+              "name": "Bench title",
+              "style_role": "project-shell-muted-text",
+              "text": "Bench",
+              "type": "text"
+            },
+            {
+              "id": "bench-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "bench-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Bench discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "bench",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Bench",
+      "title": "Bench",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "finder-title",
+              "name": "Finder title",
+              "style_role": "project-shell-muted-text",
+              "text": "Finder",
+              "type": "text"
+            },
+            {
+              "id": "finder-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "finder-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Finder discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "finder",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Finder",
+      "title": "Finder",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "inventory-title",
+              "name": "Inventory title",
+              "style_role": "project-shell-muted-text",
+              "text": "Inventory",
+              "type": "text"
+            },
+            {
+              "id": "inventory-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "inventory-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Inventory discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "inventory",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Inventory",
+      "title": "Inventory",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "entity-title",
+              "name": "Entity title",
+              "style_role": "project-shell-muted-text",
+              "text": "Entity",
+              "type": "text"
+            },
+            {
+              "id": "entity-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "entity-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Entity discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "entity",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Entity",
+      "title": "Entity",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "documents-title",
+              "name": "Documents title",
+              "style_role": "project-shell-muted-text",
+              "text": "Documents",
+              "type": "text"
+            },
+            {
+              "id": "documents-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "documents-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Documents discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "documents",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Documents",
+      "title": "Documents",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "corpus-title",
+              "name": "Corpus title",
+              "style_role": "project-shell-muted-text",
+              "text": "Corpus",
+              "type": "text"
+            },
+            {
+              "id": "corpus-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "corpus-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Corpus discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "corpus",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Corpus",
+      "title": "Corpus",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "review-title",
+              "name": "System Settings title",
+              "style_role": "project-shell-muted-text",
+              "text": "System Settings",
+              "type": "text"
+            },
+            {
+              "id": "review-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "review-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "System Settings discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "review",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "System Settings",
+      "title": "System Settings",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "trace-title",
+              "name": "Trace title",
+              "style_role": "project-shell-muted-text",
+              "text": "Trace",
+              "type": "text"
+            },
+            {
+              "id": "trace-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "trace-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Trace discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "trace",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Trace",
+      "title": "Trace",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "status-title",
+              "name": "Status title",
+              "style_role": "project-shell-muted-text",
+              "text": "Status",
+              "type": "text"
+            },
+            {
+              "id": "status-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "status-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Status discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "status",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Status",
+      "title": "Status",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "performance-title",
+              "name": "Performance title",
+              "style_role": "project-shell-muted-text",
+              "text": "Performance",
+              "type": "text"
+            },
+            {
+              "id": "performance-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "performance-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Performance discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "performance",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Performance",
+      "title": "Performance",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "work-title",
+              "name": "Work title",
+              "style_role": "project-shell-muted-text",
+              "text": "Work",
+              "type": "text"
+            },
+            {
+              "id": "work-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "work-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Work discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "work",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Work",
+      "title": "Work",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "aiusage-title",
+              "name": "AI Usage title",
+              "style_role": "project-shell-muted-text",
+              "text": "AI Usage",
+              "type": "text"
+            },
+            {
+              "id": "aiusage-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "aiusage-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "AI Usage discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "aiusage",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "AI Usage",
+      "title": "AI Usage",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "account-title",
+              "name": "Account title",
+              "style_role": "project-shell-muted-text",
+              "text": "Account",
+              "type": "text"
+            },
+            {
+              "id": "account-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "account-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Account discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "account",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Account",
+      "title": "Account",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "settings-title",
+              "name": "Settings title",
+              "style_role": "project-shell-muted-text",
+              "text": "Settings",
+              "type": "text"
+            },
+            {
+              "id": "settings-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "settings-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Settings discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "settings",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Settings",
+      "title": "Settings",
+      "type": "screen"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "id": "runtime-title",
+              "name": "Runtime Catalog title",
+              "style_role": "project-shell-muted-text",
+              "text": "Runtime Catalog",
+              "type": "text"
+            },
+            {
+              "id": "runtime-source-summary",
+              "name": "Discovery evidence",
+              "style_role": "project-shell-muted-text",
+              "text": "Generated from frontend analysis of frontend; entry evidence includes frontend/src/main.tsx, frontend/src/App.tsx, frontend/src/components/AppShell.tsx.",
+              "type": "text"
+            }
+          ],
+          "id": "runtime-discovered-source",
+          "layout": {
+            "direction": "column",
+            "gap": 8,
+            "padding": 16
+          },
+          "name": "Runtime Catalog discovered source",
+          "style_role": "project-shell-section",
+          "type": "container"
+        }
+      ],
+      "id": "runtime",
+      "layout": {
+        "direction": "column",
+        "gap": 16,
+        "padding": 24
+      },
+      "name": "Runtime Catalog",
+      "title": "Runtime Catalog",
+      "type": "screen"
+    }
+  ]
+}
