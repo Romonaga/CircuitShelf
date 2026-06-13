@@ -1275,7 +1275,7 @@ nav {
 }
 
 .finder-workflow {
-  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
 }
 
 .inventory-entry-column {
@@ -1337,6 +1337,10 @@ nav {
 .section-heading {
   display: grid;
   gap: 5px;
+}
+
+.section-heading h2 {
+  color: var(--ink);
 }
 
 .section-heading p {
@@ -1993,7 +1997,8 @@ nav {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  color: var(--text);
+  background: var(--panel-raised);
 }
 
 .project-summary-stat span,
@@ -2003,6 +2008,7 @@ nav {
 }
 
 .project-summary-stat strong {
+  color: var(--ink);
   font-size: 1.35rem;
 }
 
@@ -2024,6 +2030,10 @@ nav {
   margin: 0;
 }
 
+.project-gap-panel h3 {
+  color: var(--ink);
+}
+
 .project-gap-list {
   display: grid;
   gap: 8px;
@@ -2031,19 +2041,30 @@ nav {
 
 .project-gap-row {
   display: grid;
-  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
   align-items: start;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  color: var(--text);
+  background: var(--panel-raised);
 }
 
 .project-gap-row > div {
   display: grid;
   gap: 3px;
   min-width: 0;
+}
+
+.project-gap-row strong,
+.project-gap-row small {
+  overflow-wrap: anywhere;
+}
+
+.project-gap-row > small {
+  display: block;
+  line-height: 1.35;
 }
 
 .project-candidate-filters {
@@ -2061,12 +2082,12 @@ nav {
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--text);
-  background: #ffffff;
+  background: var(--panel-raised);
 }
 
 .project-candidate-filters button.active {
   border-color: var(--accent);
-  background: #e6f6f7;
+  background: var(--accent-soft);
 }
 
 .project-candidate-filters span {
@@ -2097,15 +2118,30 @@ nav {
   gap: 14px;
 }
 
+.project-candidate-heading > div {
+  min-width: 0;
+}
+
 .project-candidate-heading h3,
 .project-candidate-heading p,
 .project-candidate-summary {
   margin: 0;
 }
 
+.project-candidate-heading h3 {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.project-candidate-heading p {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .project-candidate-summary {
-  color: #344054;
+  color: var(--text);
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .status-pill {
@@ -2209,6 +2245,11 @@ nav {
   background: rgba(255, 255, 255, 0.42);
 }
 
+.project-part-group > strong,
+.project-evidence-group > strong {
+  color: var(--ink);
+}
+
 .project-part-group > div {
   display: flex;
   flex-wrap: wrap;
@@ -2245,7 +2286,7 @@ nav {
 
 .project-candidate-evidence {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
   gap: 10px;
 }
 
@@ -2267,8 +2308,9 @@ nav {
 }
 
 .project-evidence-group li {
-  color: var(--muted);
+  color: var(--text);
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 :root[data-theme="dark"] .project-candidate-summary,
