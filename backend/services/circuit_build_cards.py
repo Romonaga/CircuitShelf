@@ -66,6 +66,8 @@ def build_circuit_build_card(
     lower = f"{ranking_question} {component} {component_type}".lower()
     pins = intelligence.get("pinout", {}).get("pins", [])
     wiring = _pinout_wiring(pins)
+    if len(wiring) < 2:
+        return None
     facts = intelligence.get("facts", [])
 
     return {
@@ -88,15 +90,30 @@ def _first_intelligence(question: str, source_payload: list[dict], intelligence_
     if not candidates:
         return None
 
+    scoped_candidates = _source_scoped_candidates(question, source_payload, candidates)
+    if not scoped_candidates:
+        return None
+
     source_order = {
         source.get("source"): index
         for index, source in enumerate(source_payload or [])
         if source.get("source")
     }
     return max(
-        candidates,
+        scoped_candidates,
         key=lambda item: _intelligence_score(question, item, source_order),
     )
+
+
+def _source_scoped_candidates(question: str, source_payload: list[dict], candidates: list[dict]) -> list[dict]:
+    if not source_payload:
+        return candidates
+
+    source_matches = [candidate for candidate in candidates if _matches_source_payload(candidate, source_payload)]
+    explicit_matches = [candidate for candidate in candidates if _explicit_component_match(question, candidate)]
+    if source_matches:
+        return _dedupe_by_source([*source_matches, *explicit_matches])
+    return explicit_matches
 
 
 def _intelligence_score(question: str, intelligence: dict, source_order: dict[str, int]) -> tuple:
@@ -122,12 +139,44 @@ def _intelligence_score(question: str, intelligence: dict, source_order: dict[st
     )
 
 
+def _matches_source_payload(intelligence: dict, source_payload: list[dict]) -> bool:
+    source = str(intelligence.get("source") or "")
+    if not source:
+        return False
+    source_norm = _normalized_source(source)
+    source_base = _normalized_source(os.path.basename(source))
+    for item in source_payload or []:
+        item_source = str(item.get("source") or "")
+        if not item_source:
+            continue
+        item_norm = _normalized_source(item_source)
+        item_base = _normalized_source(os.path.basename(item_source))
+        if source_norm == item_norm or source_base == item_base:
+            return True
+    return False
+
+
+def _explicit_component_match(question: str, intelligence: dict) -> bool:
+    terms = [_normalized_identifier(term) for term in _question_component_terms(question)]
+    if not terms:
+        return False
+    component = _normalized_identifier(str(intelligence.get("componentName") or ""))
+    source = _normalized_identifier(str(intelligence.get("source") or ""))
+    display = _normalized_identifier(str(intelligence.get("displayName") or ""))
+    haystack = f"{component} {source} {display}"
+    return any(term and (term in component or term in source or term in display or term in haystack) for term in terms)
+
+
 def _question_component_terms(question: str) -> list[str]:
     return [match.group(0).strip("-") for match in re.finditer(r"\b[A-Za-z]*\d[A-Za-z0-9-]{1,24}\b", question or "")]
 
 
 def _normalized_identifier(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def _normalized_source(value: str) -> str:
+    return re.sub(r"[^a-z0-9./_-]+", "", os.path.normpath(value).lower())
 
 
 def _parts(lower: str, component: str, component_type: str) -> list[dict]:
@@ -235,6 +284,13 @@ def _dedupe_dicts(items: list[dict], key: str) -> list[dict]:
     result = OrderedDict()
     for item in items:
         result.setdefault(item.get(key), item)
+    return list(result.values())
+
+
+def _dedupe_by_source(items: list[dict]) -> list[dict]:
+    result = OrderedDict()
+    for item in items:
+        result.setdefault(item.get("source") or item.get("displayName") or id(item), item)
     return list(result.values())
 
 
