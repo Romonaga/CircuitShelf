@@ -1,13 +1,13 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { buildAssemblyPlan } from "../libs/api";
 import { rememberBenchPlanSelection } from "../libs/benchSelection";
 import { errorMessage } from "../libs/errors";
 import { formatNumber } from "../libs/format";
 import { useElapsedSeconds } from "../hooks/useElapsedSeconds";
 import { useInventory } from "../hooks/useInventory";
-import type { AppConfig, ProjectCandidate, View } from "../types";
+import type { AppConfig, ProjectCandidate, ProjectCandidateFilter, View } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
-import { ProjectCandidateFilter, ProjectCandidateFilters } from "./ProjectCandidateFilters";
+import { ProjectCandidateFilters } from "./ProjectCandidateFilters";
 import { ProjectCandidateList } from "./ProjectCandidateList";
 import { ProjectFinderSummary } from "./ProjectFinderSummary";
 import { SectionHeader } from "./SectionHeader";
@@ -25,6 +25,9 @@ export function ProjectFinderView({
     parts,
     candidates,
     inventoryCount,
+    candidateCount,
+    filterCount,
+    candidateHasMore,
     buildableCount,
     needsPartsCount,
     missingPartSummary,
@@ -39,24 +42,24 @@ export function ProjectFinderView({
   const [candidateFilter, setCandidateFilter] = useState<ProjectCandidateFilter>("all");
   const buildingElapsedSeconds = useElapsedSeconds(Boolean(buildingId));
 
-  const filteredCandidates = useMemo(() => {
-    if (candidateFilter === "buildable") {
-      return candidates.filter((candidate) => candidate.buildable);
-    }
-    if (candidateFilter === "needs-parts") {
-      return candidates.filter((candidate) => !candidate.buildable);
-    }
-    return candidates;
-  }, [candidateFilter, candidates]);
+  const candidateCounts: Record<ProjectCandidateFilter, number> = {
+    all: candidateCount,
+    buildable: buildableCount,
+    "needs-parts": needsPartsCount
+  };
+  const activeFilterTotal = candidateCounts[candidateFilter] || filterCount || candidates.length;
+  const hasFinderRun = candidateCount > 0 || buildableCount > 0 || needsPartsCount > 0 || candidates.length > 0;
 
-  const candidateCounts = useMemo(
-    () => ({
-      all: candidates.length,
-      buildable: candidates.filter((candidate) => candidate.buildable).length,
-      "needs-parts": candidates.filter((candidate) => !candidate.buildable).length
-    }),
-    [candidates]
-  );
+  function runFinder(filter = candidateFilter, append = false) {
+    void findProjects(filter, { append });
+  }
+
+  function changeCandidateFilter(filter: ProjectCandidateFilter) {
+    setCandidateFilter(filter);
+    if (hasFinderRun) {
+      runFinder(filter);
+    }
+  }
 
   async function createBenchPlan(candidate: ProjectCandidate) {
     setBuildingId(candidate.id);
@@ -91,11 +94,11 @@ export function ProjectFinderView({
         <SectionHeader title="Project finder" description="Scan indexed books against your lab inventory and turn matching ideas into Bench plans." />
         <div className="finder-readiness">
           <FinderMetric label="Inventory" value={parts.length} suffix="parts" />
-          <FinderMetric label="Candidates" value={candidates.length} suffix="found" />
-          <FinderMetric label="Buildable" value={buildableCount || candidateCounts.buildable} suffix="ready" />
+          <FinderMetric label="Candidates" value={candidateCount || candidates.length} suffix="found" />
+          <FinderMetric label="Buildable" value={buildableCount} suffix="ready" />
         </div>
         <div className="finder-actions">
-          <button className="primary-button" disabled={finding || loading || !parts.length} onClick={() => void findProjects()}>
+          <button className="primary-button" disabled={finding || loading || !parts.length} onClick={() => runFinder()}>
             {finding ? "Finding projects..." : "Find projects"}
           </button>
           <button className="ghost-button" type="button" onClick={() => setActiveView("inventory")}>
@@ -114,19 +117,40 @@ export function ProjectFinderView({
 
       <section className="finder-results-panel">
         <div className="inventory-results-heading">
-          <SectionHeader title="Build candidates" description={`${formatNumber(filteredCandidates.length)} visible project matches`} />
-          {candidates.length ? <ProjectCandidateFilters active={candidateFilter} counts={candidateCounts} onChange={setCandidateFilter} /> : null}
+          <SectionHeader
+            title="Build candidates"
+            description={`${formatNumber(candidates.length)} visible of ${formatNumber(activeFilterTotal)} ${filterDescription(candidateFilter)} matches`}
+          />
+          {hasFinderRun ? <ProjectCandidateFilters active={candidateFilter} counts={candidateCounts} onChange={changeCandidateFilter} /> : null}
         </div>
         <ProjectCandidateList
-          candidates={filteredCandidates}
+          candidates={candidates}
           finding={finding}
+          emptyLabel={hasFinderRun ? `No ${filterDescription(candidateFilter)} candidates found.` : "Run the finder after adding parts."}
           buildingId={buildingId}
           buildingElapsedSeconds={buildingElapsedSeconds}
           onBuild={(candidate) => void createBenchPlan(candidate)}
         />
+        {candidateHasMore ? (
+          <div className="project-candidate-pagination">
+            <button className="ghost-button" type="button" disabled={finding} onClick={() => runFinder(candidateFilter, true)}>
+              {finding ? "Loading..." : `Load more ${filterDescription(candidateFilter)} candidates`}
+            </button>
+          </div>
+        ) : null}
       </section>
     </section>
   );
+}
+
+function filterDescription(filter: ProjectCandidateFilter) {
+  if (filter === "buildable") {
+    return "buildable";
+  }
+  if (filter === "needs-parts") {
+    return "needs-parts";
+  }
+  return "project";
 }
 
 function FinderMetric({ label, value, suffix }: { label: string; value: number; suffix: string }) {

@@ -186,6 +186,52 @@ class LabInventoryTests(unittest.TestCase):
         self.assertEqual(summary[0]["count"], 2)
         self.assertEqual(summary[0]["exampleTitles"], ["LED flasher", "Timer alarm"])
 
+    def test_finder_response_pages_selected_filter_with_global_counts(self):
+        store = ProjectFinderStore(None, None)
+        ranked = [
+            {"id": "buildable-1", "buildable": True, "missingParts": []},
+            {"id": "buildable-2", "buildable": True, "missingParts": []},
+            {"id": "needs-1", "buildable": False, "missingParts": [{"name": "Breadboard", "type": "tooling"}], "title": "Needs one"},
+            {"id": "needs-2", "buildable": False, "missingParts": [{"name": "LED", "type": "indicator"}], "title": "Needs two"},
+        ]
+
+        response = store._finder_response(
+            inventory_count=3,
+            term_count=5,
+            ranked=ranked,
+            limit=1,
+            offset=0,
+            candidate_filter="needs-parts",
+        )
+
+        self.assertEqual(response["candidateCount"], 4)
+        self.assertEqual(response["buildableCount"], 2)
+        self.assertEqual(response["needsPartsCount"], 2)
+        self.assertEqual(response["filter"], "needs-parts")
+        self.assertEqual(response["filterCount"], 2)
+        self.assertEqual(response["candidates"], [ranked[2]])
+        self.assertTrue(response["hasMore"])
+
+    def test_finder_response_offsets_selected_filter(self):
+        store = ProjectFinderStore(None, None)
+        ranked = [
+            {"id": "buildable-1", "buildable": True, "missingParts": []},
+            {"id": "needs-1", "buildable": False, "missingParts": [{"name": "Breadboard", "type": "tooling"}], "title": "Needs one"},
+            {"id": "needs-2", "buildable": False, "missingParts": [{"name": "LED", "type": "indicator"}], "title": "Needs two"},
+        ]
+
+        response = store._finder_response(
+            inventory_count=3,
+            term_count=5,
+            ranked=ranked,
+            limit=1,
+            offset=1,
+            candidate_filter="needs-parts",
+        )
+
+        self.assertEqual(response["candidates"], [ranked[2]])
+        self.assertFalse(response["hasMore"])
+
 
 if __name__ == "__main__":
     unittest.main()

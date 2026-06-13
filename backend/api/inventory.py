@@ -158,10 +158,15 @@ def create_router(
         return {"ok": True}
 
     @router.get("/api/inventory/project-candidates")
-    async def inventory_project_candidates(req: Request, limit: int = 24):
+    async def inventory_project_candidates(req: Request, limit: int = 32, offset: int = 0, filter: str = "all"):
         user, error = deps.require_authenticated_user(req)
         if error:
             return error
-        return project_finder_store.find(deps.user_id_for_user(user), limit=max(1, min(int(limit), 80)))
+        return project_finder_store.find(
+            deps.user_id_for_user(user),
+            limit=max(1, min(int(limit), 50)),
+            offset=max(0, int(offset)),
+            candidate_filter=filter,
+        )
 
     return router

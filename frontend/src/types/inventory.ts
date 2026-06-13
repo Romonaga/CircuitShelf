@@ -101,11 +101,20 @@ export interface ProjectMissingPartSummary {
   exampleTitles: string[];
 }
 
+export type ProjectCandidateFilter = "all" | "buildable" | "needs-parts";
+
 export interface ProjectFinderResponse {
   inventoryCount: number;
   termCount?: number;
+  candidateCount?: number;
   buildableCount?: number;
   needsPartsCount?: number;
   missingPartSummary?: ProjectMissingPartSummary[];
+  filter?: ProjectCandidateFilter;
+  filterCount?: number;
+  offset?: number;
+  limit?: number;
+  returnedCount?: number;
+  hasMore?: boolean;
   candidates: ProjectCandidate[];
 }

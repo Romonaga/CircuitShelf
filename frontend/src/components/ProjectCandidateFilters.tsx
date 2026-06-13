@@ -1,4 +1,4 @@
-export type ProjectCandidateFilter = "all" | "buildable" | "needs-parts";
+import type { ProjectCandidateFilter } from "../types";
 
 const filters: Array<{ id: ProjectCandidateFilter; label: string }> = [
   { id: "all", label: "All" },

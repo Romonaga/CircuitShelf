@@ -2099,6 +2099,16 @@ nav {
   font-size: 0.82rem;
 }
 
+.project-candidate-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 4px;
+}
+
+.project-candidate-pagination .ghost-button {
+  min-width: 220px;
+}
+
 .project-candidate {
   display: grid;
   gap: 12px;

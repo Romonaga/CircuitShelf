@@ -4,12 +4,14 @@ import { ProjectCandidateCard } from "./projectFinder/ProjectCandidateCard";
 export function ProjectCandidateList({
   candidates,
   finding,
+  emptyLabel = "Run the finder after adding parts.",
   buildingId,
   buildingElapsedSeconds,
   onBuild
 }: {
   candidates: ProjectCandidate[];
   finding: boolean;
+  emptyLabel?: string;
   buildingId: string;
   buildingElapsedSeconds: number;
   onBuild: (candidate: ProjectCandidate) => void;
@@ -19,7 +21,7 @@ export function ProjectCandidateList({
   }
 
   if (!candidates.length) {
-    return <div className="empty-state compact">Run the finder after adding parts.</div>;
+    return <div className="empty-state compact">{emptyLabel}</div>;
   }
 
   return (

@@ -1,4 +1,4 @@
-import type { InventoryImportItem, InventoryImportPreview, InventoryLocation, InventoryPart, InventoryPartInput, ProjectFinderResponse } from "../../types";
+import type { InventoryImportItem, InventoryImportPreview, InventoryLocation, InventoryPart, InventoryPartInput, ProjectCandidateFilter, ProjectFinderResponse } from "../../types";
 import { requestJson } from "./core";
 
 export function getInventoryParts(): Promise<{ parts: InventoryPart[] }> {
@@ -53,6 +53,19 @@ export function previewInventoryPhotoImport(file: File, note = ""): Promise<Inve
   });
 }
 
-export function getProjectCandidates(limit = 24): Promise<ProjectFinderResponse> {
-  return requestJson<ProjectFinderResponse>(`/api/inventory/project-candidates?limit=${encodeURIComponent(String(limit))}`);
+export function getProjectCandidates({
+  limit = 32,
+  offset = 0,
+  filter = "all"
+}: {
+  limit?: number;
+  offset?: number;
+  filter?: ProjectCandidateFilter;
+} = {}): Promise<ProjectFinderResponse> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    filter
+  });
+  return requestJson<ProjectFinderResponse>(`/api/inventory/project-candidates?${params.toString()}`);
 }
