@@ -39,6 +39,17 @@ INVENTORY_PHOTO_INSTRUCTIONS = (
     "Return JSON only and keep uncertain observations marked with warnings."
 )
 
+PROJECT_FINDER_TRIAGE_INSTRUCTIONS = (
+    "You are CircuitShelf's Project Finder triage assistant. Return compact JSON only. "
+    "Do not invent components or claim a project is buildable without evidence."
+)
+
+LOCAL_PROJECT_FINDER_TRIAGE_SYSTEM_PROMPT = (
+    "You are CircuitShelf's local Project Finder triage reviewer. Return compact JSON only. "
+    "Review whether low-confidence electronics project candidates are useful and grounded. "
+    "Be conservative: do not invent missing parts, circuit values, pinouts, or build steps."
+)
+
 
 def build_fallback_answer_prompt(question: str) -> str:
     return (
@@ -120,4 +131,46 @@ def build_inventory_photo_prompt(note: str) -> str:
         "Prefer useful inventory names such as 'Red LED', 'NE555 timer IC', '10 kOhm resistor assortment'. "
         "Do not invent exact part numbers unless markings are visible.\n\n"
         f"User note: {note[:1000]}"
+    )
+
+
+def build_project_finder_triage_prompt(
+    *,
+    candidates: list[dict[str, Any]],
+    deterministic_reason: str,
+) -> str:
+    compact_candidates = []
+    for candidate in candidates:
+        compact_candidates.append(
+            {
+                "id": candidate.get("id"),
+                "title": candidate.get("title"),
+                "score": candidate.get("score"),
+                "buildable": candidate.get("buildable"),
+                "summary": str(candidate.get("summary") or "")[:1200],
+                "matchedParts": [
+                    part.get("displayName") or part.get("name")
+                    for part in candidate.get("matchedParts") or []
+                ][:12],
+                "requiredParts": [
+                    part.get("displayName") or part.get("name")
+                    for part in candidate.get("requiredParts") or []
+                ][:16],
+                "missingParts": [
+                    part.get("displayName") or part.get("name")
+                    for part in candidate.get("missingParts") or []
+                ][:16],
+                "caveats": (candidate.get("rejectionReasons") or [])[:6],
+            }
+        )
+    return (
+        "Review these CircuitShelf Project Finder candidates after deterministic retrieval. "
+        "Return JSON with key candidates, an array of objects with keys: id, useful, confidence, "
+        "recommendedAction, notes, escalateToOpenAI, reason. "
+        "useful and escalateToOpenAI must be booleans. confidence must be 0.0-1.0. "
+        "recommendedAction must be one of keep, demote, needs_parts, manual_review. "
+        "Escalate to OpenAI only when the candidate could be useful but the local evidence is too ambiguous "
+        "to decide confidently. Do not escalate just to polish wording.\n\n"
+        f"Deterministic reason: {deterministic_reason}\n"
+        f"Candidates: {json.dumps(compact_candidates, sort_keys=True)}"
     )

@@ -162,11 +162,14 @@ def create_router(
         user, error = deps.require_authenticated_user(req)
         if error:
             return error
+        user_id = deps.user_id_for_user(user)
+        entity = deps.entity_store.current_for_user(user_id) if deps.entity_store else None
         return project_finder_store.find(
-            deps.user_id_for_user(user),
+            user_id,
             limit=max(1, min(int(limit), 50)),
             offset=max(0, int(offset)),
             candidate_filter=filter,
+            entity_id=getattr(entity, "entity_id", None) if entity else None,
         )
 
     return router
