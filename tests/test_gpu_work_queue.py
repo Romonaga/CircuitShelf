@@ -109,6 +109,17 @@ def test_wait_summary_payload_splits_overall_and_resource_rows():
     assert payload["byResource"]["cuda_batch"]["recentAvgWaitSeconds"] == 0.5
 
 
+def test_recent_gpu_work_query_prioritizes_live_rows_with_live_timing():
+    query = (gpu_work_queue.load_query("local_gpu_work_recent.sql")).lower()
+
+    assert "when status_id = 1 then extract(epoch from (now() - created_at))" in query
+    assert "when status_id = 2 and started_at is not null then extract(epoch from (now() - started_at))" in query
+    assert "when 2 then 0" in query
+    assert "when 1 then 1" in query
+    assert "updated_at desc" in query
+    assert "created_at desc" in query
+
+
 def test_adaptive_ocr_slots_use_full_capacity_with_headroom():
     payload = resolve_adaptive_ocr_slots(
         6,
