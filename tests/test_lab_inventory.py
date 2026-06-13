@@ -182,6 +182,28 @@ class LabInventoryTests(unittest.TestCase):
         self.assertEqual(annotated[0]["matched_terms"], ["ne555 timer", "10 segment led"])
         self.assertEqual(annotated[0]["matched_count"], 2)
 
+    def test_chunk_match_annotation_does_not_match_short_terms_inside_words(self):
+        store = ProjectFinderStore(None, None)
+        terms = store._prepared_search_terms(["IC", "LED"])
+
+        annotated = store._annotate_chunk_matches(
+            [{"chunk_text": "Electronic parts are discussed here, but no integrated circuit token appears."}],
+            terms,
+        )
+
+        self.assertEqual(annotated, [])
+
+    def test_chunk_rows_rank_by_match_count_before_quality(self):
+        rows = [
+            {"source_path": "high-quality.pdf", "matched_count": 1, "quality_score": 0.99, "page_number": 1, "chunk_index": 1},
+            {"source_path": "better-match.pdf", "matched_count": 3, "quality_score": 0.2, "page_number": 1, "chunk_index": 2},
+            {"source_path": "middle.pdf", "matched_count": 2, "quality_score": 0.5, "page_number": 1, "chunk_index": 3},
+        ]
+
+        ranked = ProjectFinderStore._rank_chunk_rows(rows)
+
+        self.assertEqual([row["source_path"] for row in ranked], ["better-match.pdf", "middle.pdf", "high-quality.pdf"])
+
     def test_missing_part_summary_ranks_repeated_gaps(self):
         store = ProjectFinderStore(None, None)
         summary = store._missing_part_summary(

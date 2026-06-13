@@ -1,4 +1,5 @@
 import type { ProjectCandidateFilter } from "../types";
+import { LoadingSpinner } from "./LoadingSpinner";
 
 const filters: Array<{ id: ProjectCandidateFilter; label: string }> = [
   { id: "all", label: "All" },
@@ -9,10 +10,12 @@ const filters: Array<{ id: ProjectCandidateFilter; label: string }> = [
 export function ProjectCandidateFilters({
   active,
   counts,
+  loading,
   onChange
 }: {
   active: ProjectCandidateFilter;
   counts: Record<ProjectCandidateFilter, number>;
+  loading?: boolean;
   onChange: (filter: ProjectCandidateFilter) => void;
 }) {
   return (
@@ -25,6 +28,7 @@ export function ProjectCandidateFilters({
           onClick={() => onChange(filter.id)}
         >
           {filter.label}
+          {loading && active === filter.id ? <LoadingSpinner className="filter-button-spinner" /> : null}
           <span>{counts[filter.id]}</span>
         </button>
       ))}

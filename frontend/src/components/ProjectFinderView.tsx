@@ -121,7 +121,9 @@ export function ProjectFinderView({
             title="Build candidates"
             description={`${formatNumber(candidates.length)} visible of ${formatNumber(activeFilterTotal)} ${filterDescription(candidateFilter)} matches`}
           />
-          {hasFinderRun ? <ProjectCandidateFilters active={candidateFilter} counts={candidateCounts} onChange={changeCandidateFilter} /> : null}
+          {hasFinderRun ? (
+            <ProjectCandidateFilters active={candidateFilter} counts={candidateCounts} loading={finding} onChange={changeCandidateFilter} />
+          ) : null}
         </div>
         <ProjectCandidateList
           candidates={candidates}

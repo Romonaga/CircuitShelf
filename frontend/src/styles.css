@@ -2099,6 +2099,12 @@ nav {
   font-size: 0.82rem;
 }
 
+.filter-button-spinner {
+  width: 13px;
+  height: 13px;
+  border-width: 2px;
+}
+
 .project-candidate-pagination {
   display: flex;
   justify-content: center;
