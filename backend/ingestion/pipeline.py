@@ -12,6 +12,8 @@ from backend.ingestion.document_extractors import DocumentExtractor
 from backend.ingestion.document_state_writer import DocumentStateWriter, ocr_section
 from backend.ingestion.file_scanner import extract_first_number, scan_ingest_folder
 from backend.ingestion.models import ExtractedDocument, ImageAsset
+from backend.ingestion.worker_sizing import cpu_thermal_worker_pressure
+from backend.services.resource_sensors import read_cpu_temperature_status
 
 
 class IngestionPipeline:
@@ -129,11 +131,19 @@ class IngestionPipeline:
                 self.finish_document_worker()
 
         cpu_count = self.detected_cpu_count()
-        max_workers = self.document_worker_count(len(file_list), cpu_count=cpu_count)
+        cpu_temperature = read_cpu_temperature_status().get("temperatureC")
+        configured_workers = self.document_worker_count(len(file_list), cpu_count=cpu_count)
+        thermal_pressure = cpu_thermal_worker_pressure(configured_workers, cpu_temperature)
+        max_workers = int(thermal_pressure["targetWorkers"])
         self.trace_logger.info(
             f"Ingest worker budget: {cpu_count} cores detected, reserving {self.reserved_core_count(cpu_count)}, "
             f"{self.usable_core_count(cpu_count)} usable, {max_workers} document workers for {len(file_list)} files."
         )
+        if thermal_pressure.get("level") not in {"headroom", "unavailable", "not_applicable"}:
+            self.trace_logger.warning(
+                f"CPU thermal guard reduced document workers from {configured_workers} to {max_workers}: "
+                f"{thermal_pressure.get('temperatureC')}C, {thermal_pressure.get('reason')}."
+            )
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(process_file, filename): filename for filename in file_list}
             for future in as_completed(futures):

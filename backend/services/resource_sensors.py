@@ -137,6 +137,10 @@ def build_resource_status(cpu_count: int):
     }
 
 
+def read_cpu_temperature_status() -> dict[str, Any]:
+    return _read_cpu_temperature_status()
+
+
 def _cpu_temp_score(sensor_name: str, label: str) -> int:
     name = sensor_name.lower()
     normalized_label = label.lower()

@@ -22,6 +22,11 @@ GPU_QUEUE_LOCK_OFFSETS = {
     "ocr_cuda": 2000,
 }
 GPU_QUEUE_ADMISSION_LOCK_BASE = GPU_QUEUE_LOCK_BASE + 900000
+GPU_OOM_COOLDOWN_SECONDS = 300.0
+
+_GPU_OOM_COOLDOWN_LOCK = threading.Lock()
+_GPU_OOM_COOLDOWN_UNTIL = 0.0
+_GPU_OOM_LAST_EVENT: dict[str, Any] | None = None
 
 
 def _query_nvidia_smi_gpu_lines(query: str) -> list[list[str]]:
@@ -149,6 +154,67 @@ def _optional_float(value: Any) -> float | None:
         return None
 
 
+def is_cuda_out_of_memory(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__}: {exc}".lower()
+    if "cuda out of memory" in text or ("outofmemoryerror" in text and "cuda" in text):
+        return True
+    if "nv_err_no_memory" in text:
+        return True
+    gpu_markers = ("cuda", "gpu", "paddle", "nvidia", "cudnn", "cublas")
+    return "out of memory" in text and any(marker in text for marker in gpu_markers)
+
+
+def record_cuda_oom(
+    *,
+    resource_class: str | None = None,
+    error: BaseException | str | None = None,
+    cooldown_seconds: float = GPU_OOM_COOLDOWN_SECONDS,
+) -> dict[str, Any]:
+    """Record a recent GPU allocator failure for admission cooldown decisions."""
+
+    now = time.monotonic()
+    cooldown = max(1.0, float(cooldown_seconds or GPU_OOM_COOLDOWN_SECONDS))
+    event = {
+        "active": True,
+        "resourceClass": resource_class,
+        "recordedAtMonotonic": now,
+        "cooldownSeconds": cooldown,
+        "reason": "recent GPU out-of-memory event",
+        "error": str(error)[:300] if error is not None else None,
+    }
+    global _GPU_OOM_COOLDOWN_UNTIL, _GPU_OOM_LAST_EVENT
+    with _GPU_OOM_COOLDOWN_LOCK:
+        _GPU_OOM_COOLDOWN_UNTIL = max(_GPU_OOM_COOLDOWN_UNTIL, now + cooldown)
+        _GPU_OOM_LAST_EVENT = event
+        remaining = max(0.0, _GPU_OOM_COOLDOWN_UNTIL - now)
+    return {
+        "active": remaining > 0,
+        "remainingSeconds": round(remaining, 3),
+        "lastEvent": event,
+    }
+
+
+def current_gpu_oom_cooldown(*, now: float | None = None) -> dict[str, Any]:
+    sampled_at = time.monotonic() if now is None else float(now)
+    with _GPU_OOM_COOLDOWN_LOCK:
+        remaining = max(0.0, _GPU_OOM_COOLDOWN_UNTIL - sampled_at)
+        event = dict(_GPU_OOM_LAST_EVENT or {})
+    return {
+        "active": remaining > 0,
+        "remainingSeconds": round(remaining, 3),
+        "lastEvent": event or None,
+    }
+
+
+def clear_gpu_oom_cooldown() -> None:
+    """Clear process-local GPU OOM cooldown state. Primarily used by tests."""
+
+    global _GPU_OOM_COOLDOWN_UNTIL, _GPU_OOM_LAST_EVENT
+    with _GPU_OOM_COOLDOWN_LOCK:
+        _GPU_OOM_COOLDOWN_UNTIL = 0.0
+        _GPU_OOM_LAST_EVENT = None
+
+
 def resolve_adaptive_ocr_slots(
     max_slots: int,
     pressure: dict[str, Any],
@@ -177,15 +243,20 @@ def resolve_adaptive_ocr_slots(
     gpu_percent = _optional_float(pressure.get("gpuPercent")) or 0.0
     vram_percent = _optional_float(pressure.get("memoryUsedPercent")) or 0.0
     temperature_c = _optional_float(pressure.get("temperatureC")) or 0.0
-    if temperature_c >= 82 or vram_percent >= 94:
+    oom_cooldown = pressure.get("oomCooldown") or {}
+    if oom_cooldown.get("active"):
+        ratio = 1 / max_slots
+        reason = "recent GPU OOM cooldown"
+        pressure_level = "oom-cooldown"
+    elif temperature_c >= 82 or vram_percent >= 88:
         ratio = 0.25
         reason = "thermal or VRAM guard"
         pressure_level = "hard"
-    elif gpu_percent >= 92 or vram_percent >= 90:
+    elif gpu_percent >= 90 or vram_percent >= 84:
         ratio = 0.50
         reason = "high GPU pressure"
         pressure_level = "high"
-    elif gpu_percent >= 82 or vram_percent >= 88:
+    elif gpu_percent >= 80 or vram_percent >= 78:
         ratio = 0.75
         reason = "moderate GPU pressure"
         pressure_level = "moderate"
@@ -237,11 +308,16 @@ def resolve_cuda_batch_slots(
 
     vram_percent = _optional_float(pressure.get("memoryUsedPercent")) or 0.0
     temperature_c = _optional_float(pressure.get("temperatureC")) or 0.0
-    if temperature_c >= 82 or vram_percent >= 92:
+    oom_cooldown = pressure.get("oomCooldown") or {}
+    if oom_cooldown.get("active"):
+        target_slots = 0
+        reason = "recent GPU OOM cooldown"
+        pressure_level = "oom-cooldown"
+    elif temperature_c >= 82 or vram_percent >= 88:
         target_slots = 0
         reason = "thermal or VRAM guard"
         pressure_level = "hard"
-    elif vram_percent >= 88:
+    elif vram_percent >= 82:
         target_slots = max(1, math.ceil(max_slots * 0.5))
         reason = "high VRAM pressure"
         pressure_level = "high"
@@ -302,7 +378,12 @@ def resolve_local_llm_slots(
     # On smaller cards this scales down but still leaves a meaningful allocator
     # cushion. This is deterministic from hardware telemetry, not a document cap.
     required_free_mib = max(4096.0, min(8192.0, vram_total_mib * 0.30))
-    if temperature_c >= 82 or vram_percent >= 92:
+    oom_cooldown = pressure.get("oomCooldown") or {}
+    if oom_cooldown.get("active"):
+        target_slots = 0
+        reason = "recent GPU OOM cooldown"
+        pressure_level = "oom-cooldown"
+    elif temperature_c >= 82 or vram_percent >= 88:
         target_slots = 0
         reason = "thermal or VRAM guard"
         pressure_level = "hard"
@@ -329,12 +410,6 @@ def resolve_local_llm_slots(
         "pressureLevel": pressure_level,
         "pressure": pressure,
     }
-
-
-def is_cuda_out_of_memory(exc: BaseException) -> bool:
-    text = f"{type(exc).__name__}: {exc}".lower()
-    return "cuda out of memory" in text or ("outofmemoryerror" in text and "cuda" in text)
-
 
 def _resolve_slot_count(
     config: Any,
@@ -566,6 +641,13 @@ class LocalGpuWorkCoordinator:
             self._finish_without_lease(task_id, LocalGpuWorkStatusId.TIMED_OUT, str(exc))
             raise
         except Exception as exc:
+            if is_cuda_out_of_memory(exc):
+                cooldown = record_cuda_oom(resource_class=resource_class, error=exc)
+                if self.logger:
+                    self.logger.warning(
+                        "⚠️ Local GPU OOM cooldown opened for "
+                        f"{resource_class}: {cooldown.get('remainingSeconds')}s remaining."
+                    )
             if lease is not None and self.logger:
                 duration = (time.monotonic() - run_started) if run_started is not None else None
                 self.logger.warning(
@@ -647,6 +729,7 @@ class LocalGpuWorkCoordinator:
             "detectedGpus": self.detected_gpu_count,
             "processId": self.process_id,
             "queueTimeoutSeconds": self.queue_timeout_seconds,
+            "oomCooldown": current_gpu_oom_cooldown(),
             "active": counts.get("running", 0),
             "queued": counts.get("queued", 0),
             "completed": counts.get("completed", 0),
@@ -1035,7 +1118,7 @@ class LocalGpuWorkCoordinator:
         proposed_target = max(1, min(max_slots, int(payload.get("targetSlots") or max_slots)))
         running_slots = max(0, min(max_slots, int(payload.get("runningSlots") or 0)))
         pressure_level = str(payload.get("pressureLevel") or "")
-        hard_guard = pressure_level == "hard"
+        hard_guard = pressure_level in {"hard", "oom-cooldown"}
         with self._ocr_adaptive_lock:
             current_target = self._ocr_target_slots
             if current_target is None or current_target > max_slots:
@@ -1099,8 +1182,11 @@ class LocalGpuWorkCoordinator:
         now = time.monotonic()
         with self._pressure_lock:
             if self._pressure_sample and (now - self._pressure_sample[0]) <= max_age_seconds:
-                return dict(self._pressure_sample[1])
+                pressure = dict(self._pressure_sample[1])
+                pressure["oomCooldown"] = current_gpu_oom_cooldown(now=now)
+                return pressure
             pressure = read_local_gpu_pressure()
+            pressure["oomCooldown"] = current_gpu_oom_cooldown(now=now)
             self._pressure_sample = (now, dict(pressure))
             return pressure
 

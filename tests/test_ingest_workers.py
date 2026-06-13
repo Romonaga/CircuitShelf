@@ -1,6 +1,13 @@
 import unittest
 
-from backend.ingestion.worker_sizing import document_worker_count, ocr_worker_count, persist_worker_count, reserved_core_count, usable_core_count
+from backend.ingestion.worker_sizing import (
+    cpu_thermal_worker_pressure,
+    document_worker_count,
+    ocr_worker_count,
+    persist_worker_count,
+    reserved_core_count,
+    usable_core_count,
+)
 
 
 class IngestWorkerTests(unittest.TestCase):
@@ -19,6 +26,20 @@ class IngestWorkerTests(unittest.TestCase):
         self.assertEqual(document_worker_count(9, cpu_count=32), 9)
         self.assertEqual(document_worker_count(40, cpu_count=32), 15)
         self.assertEqual(document_worker_count(80, cpu_count=64), 16)
+
+    def test_document_workers_back_off_near_cpu_thermal_limit(self):
+        self.assertEqual(document_worker_count(40, cpu_count=32, cpu_temperature_c=83), 15)
+        self.assertEqual(document_worker_count(40, cpu_count=32, cpu_temperature_c=90), 11)
+        self.assertEqual(document_worker_count(40, cpu_count=32, cpu_temperature_c=92), 8)
+        self.assertEqual(document_worker_count(40, cpu_count=32, cpu_temperature_c=95), 1)
+
+    def test_cpu_thermal_worker_pressure_reports_reason(self):
+        pressure = cpu_thermal_worker_pressure(15, 92.5)
+
+        self.assertTrue(pressure["enabled"])
+        self.assertEqual(pressure["level"], "high")
+        self.assertEqual(pressure["targetWorkers"], 8)
+        self.assertEqual(pressure["temperatureC"], 92.5)
 
     def test_persist_workers_keep_save_queue_parallel_but_bounded(self):
         self.assertEqual(persist_worker_count(0, cpu_count=32), 0)

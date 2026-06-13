@@ -21,6 +21,7 @@ from typing import Any
 from PIL import Image
 
 from backend.ingestion.ocr_utils import OcrResult, run_ocr as run_tesseract_ocr, should_skip_image
+from backend.services.gpu_work_queue import is_cuda_out_of_memory, record_cuda_oom
 
 
 _PADDLE_LOCK = threading.Lock()
@@ -275,6 +276,8 @@ def _record_paddle_success() -> None:
 
 def _record_paddle_failure(error: Exception) -> None:
     global _PADDLE_FAILURE_COUNT, _PADDLE_DISABLED_UNTIL, _PADDLE_LAST_FAILURE
+    if is_cuda_out_of_memory(error):
+        record_cuda_oom(resource_class="ocr_cuda", error=error)
     with _PADDLE_CIRCUIT_LOCK:
         _PADDLE_LAST_FAILURE = str(error)[:500]
         _PADDLE_FAILURE_COUNT += 1
