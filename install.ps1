@@ -9,6 +9,9 @@ Set-Location $RootDir
 
 $ConfigFile = "config/config.yaml"
 $ExampleConfig = "config/config.example.yaml"
+$OllamaHelperModel = "electronics-helper"
+$OllamaBaseModel = "qwen3-coder:30b"
+$OllamaHelperModelfile = "ollama/Modelfile.electronics-helper"
 if ($IsWindows) {
     $VenvPython = Join-Path $VenvDir "Scripts/python.exe"
 }
@@ -112,6 +115,77 @@ function Test-DatabaseUrl {
     return $LASTEXITCODE -eq 0
 }
 
+function Test-OllamaHelperModel {
+    $Models = & ollama list 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    return [bool]($Models | Select-String -Pattern "^$([regex]::Escape($OllamaHelperModel)):latest\s")
+}
+
+function Install-OllamaIfMissing {
+    if (Get-Command "ollama" -ErrorAction SilentlyContinue) {
+        return
+    }
+
+    Write-Warn "Ollama was not found in PATH. The app can install, but queries need an Ollama server."
+    $InstallOllama = Read-Host "Install Ollama now? [Y/n]"
+    if (-not ([string]::IsNullOrWhiteSpace($InstallOllama) -or $InstallOllama -match "^[Yy]$")) {
+        Write-Warn "Skipping Ollama install. Install it later from https://ollama.com before using local model queries."
+        return
+    }
+
+    if (Get-Command "winget" -ErrorAction SilentlyContinue) {
+        Write-Info "Installing Ollama with winget"
+        & winget install --id Ollama.Ollama -e --accept-package-agreements --accept-source-agreements
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install Ollama with winget."
+        }
+    }
+    else {
+        Write-Warn "winget was not found. Install Ollama from https://ollama.com/download/windows, then rerun .\install.ps1."
+        return
+    }
+
+    if (-not (Get-Command "ollama" -ErrorAction SilentlyContinue)) {
+        Write-Warn "Ollama still is not available in this shell. Open a new terminal or update PATH, then rerun .\install.ps1."
+    }
+}
+
+function Setup-OllamaHelperModel {
+    if (-not (Get-Command "ollama" -ErrorAction SilentlyContinue)) {
+        return
+    }
+    if (-not (Test-Path $OllamaHelperModelfile)) {
+        Write-Warn "Missing $OllamaHelperModelfile; cannot create ${OllamaHelperModel}:latest."
+        return
+    }
+
+    if (Test-OllamaHelperModel) {
+        $RefreshModel = Read-Host "Refresh local Ollama model ${OllamaHelperModel}:latest from the repo Modelfile? [y/N]"
+        if ($RefreshModel -notmatch "^[Yy]$") {
+            return
+        }
+    }
+    else {
+        $CreateModel = Read-Host "Create local Ollama model ${OllamaHelperModel}:latest now? This pulls $OllamaBaseModel if needed. [Y/n]"
+        if (-not ([string]::IsNullOrWhiteSpace($CreateModel) -or $CreateModel -match "^[Yy]$")) {
+            Write-Warn "Skipping ${OllamaHelperModel}:latest creation. Queries will fail until the model exists in Ollama."
+            return
+        }
+    }
+
+    Write-Info "Preparing local Ollama model ${OllamaHelperModel}:latest"
+    & ollama pull $OllamaBaseModel
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to pull Ollama base model $OllamaBaseModel."
+    }
+    & ollama create $OllamaHelperModel -f $OllamaHelperModelfile
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create Ollama model ${OllamaHelperModel}:latest."
+    }
+}
+
 function Show-PostgresHelp {
     Write-Host @"
 
@@ -146,9 +220,7 @@ if (-not $TesseractCommand) {
     Write-Warn "Tesseract was not found. OCR will not work until Tesseract OCR is installed and in PATH."
 }
 
-if (-not (Get-Command "ollama" -ErrorAction SilentlyContinue)) {
-    Write-Warn "Ollama was not found in PATH. The app can install, but queries need an Ollama server."
-}
+Install-OllamaIfMissing
 
 Write-Info "Creating Python virtual environment"
 if (-not (Test-Path $VenvDir)) {
@@ -208,6 +280,8 @@ if ([string]::IsNullOrWhiteSpace($CreateAdmin) -or $CreateAdmin -match "^[Yy]$")
     }
     & $VenvPython tools/db_user.py upsert $AdminUsername --admin
 }
+
+Setup-OllamaHelperModel
 
 Write-Info "Building frontend"
 & npm --prefix frontend run build
