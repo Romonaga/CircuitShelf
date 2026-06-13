@@ -25,7 +25,7 @@ Verlyn PR creator: ___
 
 - [ ] Session baseline
 - [ ] Architecture check (if configured)
-- [ ] Verlyn workflow state checked with installed `verlyn` CLI/API
+- [ ] Verlyn workflow state checked with installed `verlyn` CLI
 - [ ] Other:
   - [ ] ___
 
@@ -54,6 +54,6 @@ Accountable human owner: ___
 ## Handoff Status
 
 - [ ] All acceptance criteria satisfied
-- [ ] DB-backed work items updated
+- [ ] Verlyn-managed work items updated
 - [ ] Outstanding blockers or deferred items noted
 - [ ] Ready to merge

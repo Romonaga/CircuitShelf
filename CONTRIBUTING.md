@@ -31,6 +31,20 @@ Before `git commit`, print a short checkpoint with the files being committed.
 - Tests pass
 - Any configured architecture or workflow guard passes
 
+### Engineering standards
+- Keep code organized by domain, feature, or clearly owned module; avoid dumping unrelated behavior into shared utility files.
+- Follow the best practices, naming conventions, formatting, and idioms of the language and framework already used in the repository.
+- Prefer small, cohesive functions and components with clear inputs and outputs.
+- Preserve existing public contracts unless the change explicitly updates the contract and documents the migration.
+- Avoid broad refactors, dependency changes, generated-code churn, and formatting-only edits unless they are part of the approved scope.
+- Keep secrets, credentials, tokens, local paths, and private environment details out of source, logs, tests, PR text, and generated artifacts.
+
+### Testing expectations
+- Add or update tests for critical paths, bug fixes, security-sensitive behavior, data migrations, public APIs, and user-facing workflows.
+- Use focused tests for narrow changes and broader integration or end-to-end checks when behavior crosses module, service, or UI boundaries.
+- If a meaningful test cannot be run, document the reason, the risk, and the manual verification that was performed.
+- Do not claim code is ready only because it compiles; verify the behavior that changed.
+
 ### For documentation or workflow changes
 - Markdown renders
 - Links work
@@ -51,6 +65,10 @@ Before `git commit`, print a short checkpoint with the files being committed.
 - Record AI assistance in the PR body.
 - Name an accountable human owner.
 - Keep verification, review findings, and dispositions visible in the repo workflow files.
+- AI agents should use Verlyn as the source of truth for repo binding, active changes, work items, reviews, delivery state, and evidence when that information is needed.
+- AI agents must inspect the existing code structure before editing and should follow local patterns instead of inventing new architecture.
+- AI agents should keep edits scoped to the active change, preserve user work, and avoid unrelated cleanup.
+- AI agents should explain remaining risks, skipped checks, and assumptions before handoff.
 - Humans working inside the target repo should follow `Documentation/guides/REPO_COLLABORATION_WORKFLOW.md`.
-- Assistants should start with `Documentation/guides/VERLYN_ASSISTANT_STARTUP.md`, then use `Documentation/guides/VERLYN_AGENT_WORKFLOW.md` for the working session loop.
+- Assistants should start with `Documentation/guides/VERLYN_AGENT_WORKFLOW.md`.
 - Do not use `--no-verify` or force-push without explicit instruction.

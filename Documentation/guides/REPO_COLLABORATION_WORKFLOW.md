@@ -1,16 +1,16 @@
 # Repo Collaboration Workflow
 
 Use this when you are a person working inside the target repo.
-If you are an assistant, switch to `Documentation/guides/VERLYN_ASSISTANT_STARTUP.md`, then `Documentation/guides/VERLYN_AGENT_WORKFLOW.md`.
+If you are an assistant, switch to `Documentation/guides/VERLYN_AGENT_WORKFLOW.md`.
 
 ## Session-Start Checklist
 
 Before editing anything on an in-progress branch:
 
-1. Identify the applicable DB-backed Verlyn change, or state explicitly that none applies.
+1. Identify the applicable Verlyn-managed change, or state explicitly that none applies.
 2. Read `RULES.md`.
-3. For feature or behavior-changing work, read the change details and proposal through the installed Verlyn CLI/API or UI first.
-4. Read the DB-backed work items for the change and note what is next.
+3. For feature or behavior-changing work, read the change details and proposal through the installed Verlyn CLI or UI first.
+4. Read the Verlyn-managed work items for the change and note what is next.
 5. Run the codebase health baseline for your stack.
 6. Identify the next incomplete acceptance-bearing work item before making edits.
 
@@ -22,8 +22,10 @@ When you are working inside the target repo, use the installed `verlyn` CLI inst
 
 ```bash
 verlyn auth status
+verlyn workflow assistant-startup --json
 verlyn target show --json
 verlyn changes list
+verlyn changes list --owner-scope all --status-scope all
 verlyn changes activate <change-id>
 verlyn work-items list <change-id>
 verlyn work-items update <change-id> --creates-json '[{"title":"New work item title"}]'
@@ -31,15 +33,17 @@ verlyn work-items update <change-id> --updates-json '[{"task_id":"<existing-work
 verlyn changes deliver <change-id> --merge-method squash
 ```
 
-Those commands resolve the current repo through the backend and keep change, work-item, review, and PR artifacts aligned with Verlyn workflow state. Durable workflow truth is DB-backed; repo-local files are source, governance docs, templates, or temporary scratch artifacts rather than the work-item/change source of truth.
+Those commands resolve the current repo through Verlyn and keep change, work-item, review, and PR artifacts aligned with Verlyn workflow state. Durable workflow truth is managed by Verlyn; repo-local files are source, governance docs, templates, or temporary scratch artifacts rather than the work-item/change source of truth.
 
-## Verlyn Helper Commands
+## Installed Public CLI Commands
 
 When working from a terminal or agent session, prefer the installed CLI:
 
 - `verlyn auth status`
+- `verlyn workflow assistant-startup --json`
 - `verlyn target show --json`
 - `verlyn changes list`
+- `verlyn changes list --owner-scope all --status-scope all`
 - `verlyn changes activate <change-id>`
 - `verlyn changes refresh-branch <change-id>`
 - `verlyn work-items list <change-id>`
@@ -58,7 +62,7 @@ When you need to prep several changes before starting code:
 3. Reorder prep work items through Verlyn work-item updates instead of editing workflow JSON by hand.
 4. Switch branches only when you are ready to start implementation on that specific change.
 
-Manual git branching and direct workflow-file edits remain escape hatches for blocked product paths, not the normal operating model.
+Manual git branching and direct workflow-file edits are not the normal operating model. If the installed Verlyn product path is blocked, record a Verlyn workflow blocker instead of bypassing it.
 
 ## Local-Git Closeout
 
@@ -72,19 +76,19 @@ When Verlyn is running in `local_git` mode, use the app closeout flow instead of
 
 Verlyn blocks branch deletion when the branch is current, is the base branch, or is not yet merged into `main`.
 
-Fresh governance installs do not vendor Verlyn Python source or repo-local workflow wrappers. Install the standalone `verlyn` CLI once on the workstation and use it for auth, workflow, clone, review, and delivery commands. `governance` is the only supported repo install mode; changes and work items are DB-backed Verlyn product behavior.
+Fresh governance installs use the standalone `verlyn` CLI for auth, workflow, clone, review, and delivery commands. `governance` is the only supported repo install mode; changes and work items are managed Verlyn product behavior.
 
 ## Multi-Agent Coordination
 
 - Every meaningful change uses one active branch.
-- Keep DB-backed review work items current with exact review-scope files when handing work to another reviewer or agent.
+- Keep Verlyn-managed review work items current with exact review-scope files when handing work to another reviewer or agent.
 - Write findings and dispositions into the change docs before summarizing them elsewhere.
 
 ## Session-End Protocol
 
 Before stopping with incomplete work:
 
-1. Update the DB-backed work items.
+1. Update the Verlyn-managed work items.
 2. Record the next acceptance-bearing step.
 3. Note blockers or unresolved validation failures.
 4. Create a session retro.

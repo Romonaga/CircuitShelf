@@ -18,7 +18,7 @@ labels: enhancement
 
 ## Linked Spec or Change
 
-- A DB-backed Verlyn baseline spec/contract record for stable repo-wide scope, or a DB-backed Verlyn change for change-local scope
+- A Verlyn-managed baseline spec/contract record for stable repo-wide scope, or a Verlyn-managed change for change-local scope
 - Needs a new Workstream change
 - Unknown
 
