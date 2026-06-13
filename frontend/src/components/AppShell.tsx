@@ -125,6 +125,9 @@ export function AppShell({
               <button type="button" onClick={() => setMonitorMode((value) => !value)}>
                 {monitorMode ? "Full menu" : "Monitor"}
               </button>
+              <button className="theme-button" type="button" onClick={onToggleTheme}>
+                {theme === "dark" ? "Light bench" : "Dark bench"}
+              </button>
               <button type="button" onClick={onLogout}>Sign out</button>
             </div>
           </div>
@@ -161,9 +164,6 @@ export function AppShell({
             <span>{viewLabels[activeView]}</span>
             <strong>{siteName}</strong>
           </div>
-          <button className="ghost-button theme-button" onClick={onToggleTheme}>
-            {theme === "dark" ? "Light bench" : "Dark bench"}
-          </button>
         </div>
         <div className="workspace-body">{children}</div>
       </main>

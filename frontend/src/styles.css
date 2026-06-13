@@ -786,8 +786,12 @@ nav {
   min-width: 0;
 }
 
-.theme-button {
+.workspace-topbar .theme-button {
   min-width: 116px;
+}
+
+.brand-actions .theme-button {
+  min-width: 0;
 }
 
 .view-grid {
