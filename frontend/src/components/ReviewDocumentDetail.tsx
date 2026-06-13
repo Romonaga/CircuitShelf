@@ -33,7 +33,7 @@ export function ReviewDocumentDetail({
   totalChunkCount
 }: {
   actionBusy: boolean;
-  approveSelected: (includeImages: boolean) => void;
+  approveSelected: (includeImages: boolean, minQuality?: number) => void;
   canLoadMoreChunks: boolean;
   canManageSystem: boolean;
   changeSelectedScope: (scope: "global" | "entity") => void;

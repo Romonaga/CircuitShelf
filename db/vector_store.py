@@ -452,6 +452,22 @@ class VectorStore:
             row = conn.execute(load_query("review_document_status_update.sql"), (int(status), reviewed_by, source_path)).fetchone()
         return dict(row) if row else None
 
+    def prune_document_chunks_below_quality(self, source_path: str, min_quality: float | None) -> dict[str, int]:
+        if min_quality is None:
+            return {"prunedChunks": 0, "prunedImageChunks": 0}
+        threshold = max(0.0, min(1.0, float(min_quality)))
+        if threshold <= 0.0:
+            return {"prunedChunks": 0, "prunedImageChunks": 0}
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("review_document_chunks_prune_below_quality.sql"),
+                (source_path, threshold),
+            ).fetchone()
+        return {
+            "prunedChunks": int((row or {}).get("pruned_chunks") or 0),
+            "prunedImageChunks": int((row or {}).get("pruned_image_chunks") or 0),
+        }
+
     def set_sources_status(self, source_paths: list[str], status: DocumentStatusId) -> list[str]:
         if not source_paths:
             return []

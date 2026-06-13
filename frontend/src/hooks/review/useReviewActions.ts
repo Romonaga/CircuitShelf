@@ -51,18 +51,24 @@ export function useReviewActions({
     }
   }
 
-  async function approveSelected(includeImages: boolean) {
+  function prunedSummary(prunedChunks: number): string {
+    return prunedChunks > 0 ? `; ${formatInteger(prunedChunks)} chunks pruned below threshold` : "";
+  }
+
+  async function approveSelected(includeImages: boolean, minQuality?: number) {
     if (selectedDocuments.length > 0) {
       await runDocumentAction("Could not approve selected documents", async () => {
         const result = await batchReviewDocuments({
           sources: selectedDocuments.map((document) => document.source),
           action: "approve",
-          includeImages
+          includeImages,
+          minQuality
         });
+        const prunedChunks = result.results.reduce((total, item) => total + Number(item.prunedChunks || 0), 0);
         setMessage(
           includeImages
-            ? `${formatInteger(result.okCount)} documents approved for retrieval with images${result.failedCount ? `; ${formatInteger(result.failedCount)} failed` : ""}.`
-            : `${formatInteger(result.okCount)} documents approved for retrieval without images${result.failedCount ? `; ${formatInteger(result.failedCount)} failed` : ""}.`
+            ? `${formatInteger(result.okCount)} documents approved for retrieval with images${prunedSummary(prunedChunks)}${result.failedCount ? `; ${formatInteger(result.failedCount)} failed` : ""}.`
+            : `${formatInteger(result.okCount)} documents approved for retrieval without images${prunedSummary(prunedChunks)}${result.failedCount ? `; ${formatInteger(result.failedCount)} failed` : ""}.`
         );
         clearDetails();
         clearSelection();
@@ -73,11 +79,11 @@ export function useReviewActions({
       return;
     }
     await runDocumentAction("Could not approve document", async () => {
-      await approveReviewDocument(selectedDocument.source, includeImages);
+      const result = await approveReviewDocument(selectedDocument.source, includeImages, minQuality);
       setMessage(
         includeImages
-          ? `${selectedDocument.displayName} approved for retrieval with images.`
-          : `${selectedDocument.displayName} approved for retrieval without images.`
+          ? `${selectedDocument.displayName} approved for retrieval with images${prunedSummary(Number(result.prunedChunks || 0))}.`
+          : `${selectedDocument.displayName} approved for retrieval without images${prunedSummary(Number(result.prunedChunks || 0))}.`
       );
       clearDetails();
     });

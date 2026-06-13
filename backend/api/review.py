@@ -16,6 +16,7 @@ class DocumentActionRequest(BaseModel):
     source: str = ""
     includeImages: bool = True
     deleteFile: bool = True
+    minQuality: float | None = None
 
 
 class DocumentScopeRequest(BaseModel):
@@ -30,6 +31,7 @@ class DocumentBatchActionRequest(BaseModel):
     includeImages: bool = True
     deleteFile: bool = True
     scope: str = "global"
+    minQuality: float | None = None
 
 
 def review_document_payload(row: Any) -> dict:
@@ -198,6 +200,15 @@ def create_router(
             return "Request failed."
         return str(payload.get("error") or payload.get("message") or "Request failed.")
 
+    def normalized_review_min_quality(value: float | None) -> float | None:
+        if value is None:
+            return None
+        try:
+            threshold = float(value)
+        except (TypeError, ValueError):
+            return None
+        return max(0.0, min(1.0, threshold))
+
     def unique_sources(sources: list[str]) -> list[str]:
         seen = set()
         clean = []
@@ -297,11 +308,15 @@ def create_router(
         source = payload.source
         if not payload.includeImages:
             image_store.delete_document_images(source)
+        prune_result = vector_store.prune_document_chunks_below_quality(
+            source,
+            normalized_review_min_quality(payload.minQuality),
+        )
         row = vector_store.set_document_status(source, DocumentStatusId.INDEXED, user.username)
         if not row:
             return JSONResponse({"error": "Document not found."}, status_code=404)
         image_count = refresh_active_state_from_db()
-        return {"ok": True, "document": dict(row), "imageCount": image_count}
+        return {"ok": True, "document": dict(row), "imageCount": image_count, **prune_result}
 
     @router.post("/api/review/documents/batch")
     async def review_documents_batch(req: Request, payload: DocumentBatchActionRequest):
@@ -337,12 +352,16 @@ def create_router(
                         continue
                     if not payload.includeImages:
                         image_store.delete_document_images(source)
+                    prune_result = vector_store.prune_document_chunks_below_quality(
+                        source,
+                        normalized_review_min_quality(payload.minQuality),
+                    )
                     row = vector_store.set_document_status(source, DocumentStatusId.INDEXED, user.username)
                     if not row:
                         results.append(batch_result(source, ok=False, action=action, error="Document not found.", status_code=404))
                         continue
                     changed_catalog = True
-                    results.append(batch_result(source, ok=True, action=action, extra={"document": dict(row)}))
+                    results.append(batch_result(source, ok=True, action=action, extra={"document": dict(row), **prune_result}))
                     continue
 
                 if action == "remove":
