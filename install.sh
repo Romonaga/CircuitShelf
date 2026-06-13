@@ -8,6 +8,9 @@ VENV_DIR="${VENV_DIR:-.venv}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 CONFIG_FILE="config/config.yaml"
 EXAMPLE_CONFIG="config/config.example.yaml"
+OLLAMA_HELPER_MODEL="electronics-helper"
+OLLAMA_BASE_MODEL="qwen3-coder:30b"
+OLLAMA_HELPER_MODELFILE="ollama/Modelfile.electronics-helper"
 
 info() {
   printf '\n==> %s\n' "$*"
@@ -95,6 +98,68 @@ test_database_url() {
   psql "$database_url" -At -f db/queries/install_connection_check.sql >/dev/null
 }
 
+install_ollama_if_missing() {
+  if command -v ollama >/dev/null 2>&1; then
+    return
+  fi
+
+  warn "Ollama was not found in PATH. The app can install, but queries need an Ollama server."
+  if ! prompt_yes_no "Install Ollama now?" "y"; then
+    warn "Skipping Ollama install. Install it later from https://ollama.com before using local model queries."
+    return
+  fi
+
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    if command -v brew >/dev/null 2>&1; then
+      info "Installing Ollama with Homebrew"
+      brew install ollama
+    else
+      warn "Homebrew was not found. Install Ollama from https://ollama.com/download, then rerun ./install.sh."
+      return
+    fi
+  else
+    if ! command -v curl >/dev/null 2>&1; then
+      warn "curl was not found. Install curl or install Ollama from https://ollama.com/download, then rerun ./install.sh."
+      return
+    fi
+    info "Installing Ollama from https://ollama.com"
+    curl -fsSL https://ollama.com/install.sh | sh
+  fi
+
+  if ! command -v ollama >/dev/null 2>&1; then
+    warn "Ollama still is not available in this shell. Open a new terminal or update PATH, then rerun ./install.sh."
+  fi
+}
+
+ollama_model_exists() {
+  ollama list | awk 'NR > 1 {print $1}' | grep -qx "${OLLAMA_HELPER_MODEL}:latest"
+}
+
+setup_ollama_helper_model() {
+  if ! command -v ollama >/dev/null 2>&1; then
+    return
+  fi
+  if [[ ! -f "$OLLAMA_HELPER_MODELFILE" ]]; then
+    warn "Missing $OLLAMA_HELPER_MODELFILE; cannot create $OLLAMA_HELPER_MODEL:latest."
+    return
+  fi
+
+  if ollama_model_exists; then
+    if ! prompt_yes_no "Refresh local Ollama model $OLLAMA_HELPER_MODEL:latest from the repo Modelfile?" "n"; then
+      return
+    fi
+  else
+    if ! prompt_yes_no "Create local Ollama model $OLLAMA_HELPER_MODEL:latest now? This pulls $OLLAMA_BASE_MODEL if needed." "y"; then
+      warn "Skipping $OLLAMA_HELPER_MODEL:latest creation. Queries will fail until the model exists in Ollama."
+      return
+    fi
+  fi
+
+  info "Preparing local Ollama model $OLLAMA_HELPER_MODEL:latest"
+  ollama pull "$OLLAMA_BASE_MODEL"
+  ollama create "$OLLAMA_HELPER_MODEL" -f "$OLLAMA_HELPER_MODELFILE"
+}
+
 show_postgres_help() {
   cat <<'EOF'
 
@@ -136,9 +201,7 @@ if ! command -v 7z >/dev/null 2>&1; then
   warn "7z was not found. .7z code bundle uploads will be skipped until p7zip-full is installed."
 fi
 
-if ! command -v ollama >/dev/null 2>&1; then
-  warn "Ollama was not found in PATH. The app can install, but queries need an Ollama server."
-fi
+install_ollama_if_missing
 
 info "Creating Python virtual environment"
 if [[ ! -d "$VENV_DIR" ]]; then
@@ -188,6 +251,8 @@ if prompt_yes_no "Create or update an admin login user now?" "y"; then
   admin_username="${admin_username:-admin}"
   "$VENV_DIR/bin/python" tools/db_user.py upsert "$admin_username" --admin
 fi
+
+setup_ollama_helper_model
 
 info "Building frontend"
 npm --prefix frontend run build

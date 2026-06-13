@@ -18,6 +18,7 @@ The following are intentionally ignored because this is planned as a public repo
 
 - `training/` source books and datasheets
 - `models/` downloaded model snapshots
+- Ollama model blobs, including the locally built `electronics-helper:latest` model
 - `data/` local logs or temporary operator output
 - `logs/` and local runtime output
 - `config/config.yaml` with local hosts, passwords, and database URLs
@@ -39,7 +40,7 @@ sudo apt install python3 python3-venv nodejs npm postgresql postgresql-client po
 
 `p7zip-full` provides the `7z` command used to expand `.7z` electronics code bundles during upload.
 
-Install Ollama from `https://ollama.com`, then run the guided installer:
+Install Ollama from `https://ollama.com`, or let the guided installer offer to install it for you:
 
 ```bash
 ./install.sh
@@ -81,6 +82,21 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 The Windows installer creates `.venv`, installs dependencies, creates `config/config.yaml` if needed, records the discovered `tesseract.exe` path, prompts for `DATABASE_URL`, applies migrations, optionally creates an admin user, and builds the React frontend.
+
+### Local Ollama Model
+
+CircuitShelf defaults to the local Ollama model name `electronics-helper:latest`. This repository includes the model recipe at `ollama/Modelfile.electronics-helper`, but it does not include the built Ollama model blob or the base model weights.
+
+The guided installers ask to install Ollama when it is missing, then ask to create or refresh `electronics-helper:latest` when Ollama is available.
+
+After installing Ollama, build the local helper model from this repo:
+
+```bash
+ollama pull qwen3-coder:30b
+ollama create electronics-helper -f ollama/Modelfile.electronics-helper
+```
+
+Run `ollama list` afterward and confirm `electronics-helper:latest` is present. A fresh clone will not have access to any local model you built on another machine unless you rebuild or otherwise distribute that Ollama model outside Git.
 
 ### Postgres Database
 
