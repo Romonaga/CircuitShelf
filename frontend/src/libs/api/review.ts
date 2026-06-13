@@ -37,10 +37,10 @@ export async function downloadReviewDocumentSource(source: string): Promise<Blob
   return response.blob();
 }
 
-export function approveReviewDocument(source: string, includeImages = true): Promise<{ ok: boolean }> {
-  return requestJson<{ ok: boolean }>("/api/review/document/approve", {
+export function approveReviewDocument(source: string, includeImages = true, minQuality?: number): Promise<{ ok: boolean; prunedChunks?: number; prunedImageChunks?: number }> {
+  return requestJson<{ ok: boolean; prunedChunks?: number; prunedImageChunks?: number }>("/api/review/document/approve", {
     method: "POST",
-    body: JSON.stringify({ source, includeImages })
+    body: JSON.stringify({ source, includeImages, minQuality })
   });
 }
 
@@ -49,17 +49,19 @@ export function batchReviewDocuments({
   action,
   includeImages = true,
   deleteFile = true,
-  scope = "global"
+  scope = "global",
+  minQuality
 }: {
   sources: string[];
   action: "approve" | "remove" | "reindex" | "scope";
   includeImages?: boolean;
   deleteFile?: boolean;
   scope?: "global" | "entity";
+  minQuality?: number;
 }): Promise<ReviewBatchActionResponse> {
   return requestJson<ReviewBatchActionResponse>("/api/review/documents/batch", {
     method: "POST",
-    body: JSON.stringify({ sources, action, includeImages, deleteFile, scope })
+    body: JSON.stringify({ sources, action, includeImages, deleteFile, scope, minQuality })
   });
 }
 

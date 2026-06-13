@@ -82,6 +82,8 @@ export interface ReviewBatchActionResult {
   statusCode?: number;
   error?: string;
   queued?: boolean;
+  prunedChunks?: number;
+  prunedImageChunks?: number;
 }
 
 export interface ReviewBatchActionResponse {
