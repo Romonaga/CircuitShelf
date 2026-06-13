@@ -30,6 +30,8 @@ CIRCUIT_CONTEXT_RE = re.compile(
 )
 CODE_SAMPLE_TITLE_RE = re.compile(r"\bcode\s+sample\b", re.IGNORECASE)
 MIN_PROJECT_TEXT_CHARS = 90
+PROJECT_FINDER_CHUNK_SOURCE_LIMIT = 1200
+PROJECT_FINDER_INTELLIGENCE_SOURCE_LIMIT = 400
 
 GENERIC_PART_PATTERNS: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"\b(?:ne|lm)?555\b|\b555\s+timer\b", re.IGNORECASE), "NE555 timer", "timer"),
@@ -249,21 +251,30 @@ class ProjectFinderStore:
         self.inventory_store = inventory_store
         self.logger = logger
 
-    def find(self, user_id: int, *, limit: int = 24) -> dict[str, Any]:
+    def find(self, user_id: int, *, limit: int = 24, offset: int = 0, candidate_filter: str = "all") -> dict[str, Any]:
+        limit = max(1, int(limit))
+        offset = max(0, int(offset))
         inventory = self.inventory_store.list_parts(user_id)
         term_rows = self.inventory_store.inventory_terms(user_id)
         terms = self._search_terms(term_rows)
         if not inventory or not terms:
-            return {"inventoryCount": len(inventory), "candidates": []}
+            return self._finder_response(
+                inventory_count=len(inventory),
+                term_count=len(terms),
+                ranked=[],
+                limit=limit,
+                offset=offset,
+                candidate_filter=candidate_filter,
+            )
 
         with self.database.connection() as conn:
             chunk_rows = conn.execute(
                 load_query("project_finder_chunk_candidates.sql"),
-                (terms, min(max(limit * 6, 20), 200)),
+                (terms, PROJECT_FINDER_CHUNK_SOURCE_LIMIT),
             ).fetchall()
             intelligence_rows = conn.execute(
                 load_query("project_finder_intelligence_candidates.sql"),
-                (terms, min(max(limit, 10), 80)),
+                (terms, PROJECT_FINDER_INTELLIGENCE_SOURCE_LIMIT),
             ).fetchall()
 
         inventory_index = self._inventory_index(inventory, term_rows)
@@ -277,14 +288,57 @@ class ProjectFinderStore:
             key=lambda item: (item["buildable"], item["score"], item["matchedPartCount"]),
             reverse=True,
         )
+        return self._finder_response(
+            inventory_count=len(inventory),
+            term_count=len(terms),
+            ranked=ranked,
+            limit=limit,
+            offset=offset,
+            candidate_filter=candidate_filter,
+        )
+
+    def _finder_response(
+        self,
+        *,
+        inventory_count: int,
+        term_count: int,
+        ranked: list[dict[str, Any]],
+        limit: int,
+        offset: int,
+        candidate_filter: str,
+    ) -> dict[str, Any]:
+        normalized_filter = self._normalize_candidate_filter(candidate_filter)
+        filtered = self._filter_candidates(ranked, normalized_filter)
+        page = filtered[offset:offset + limit]
         return {
-            "inventoryCount": len(inventory),
-            "termCount": len(terms),
+            "inventoryCount": inventory_count,
+            "termCount": term_count,
+            "candidateCount": len(ranked),
             "buildableCount": sum(1 for candidate in ranked if candidate["buildable"]),
             "needsPartsCount": sum(1 for candidate in ranked if not candidate["buildable"]),
             "missingPartSummary": self._missing_part_summary(ranked),
-            "candidates": ranked[:limit],
+            "filter": normalized_filter,
+            "filterCount": len(filtered),
+            "offset": offset,
+            "limit": limit,
+            "returnedCount": len(page),
+            "hasMore": offset + len(page) < len(filtered),
+            "candidates": page,
         }
+
+    @staticmethod
+    def _normalize_candidate_filter(candidate_filter: str) -> str:
+        if candidate_filter in {"buildable", "needs-parts"}:
+            return candidate_filter
+        return "all"
+
+    @staticmethod
+    def _filter_candidates(ranked: list[dict[str, Any]], candidate_filter: str) -> list[dict[str, Any]]:
+        if candidate_filter == "buildable":
+            return [candidate for candidate in ranked if candidate["buildable"]]
+        if candidate_filter == "needs-parts":
+            return [candidate for candidate in ranked if not candidate["buildable"]]
+        return ranked
 
     def _search_terms(self, rows: list[dict[str, Any]]) -> list[str]:
         terms = OrderedDict()

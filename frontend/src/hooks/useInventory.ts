@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { deleteInventoryPart, getInventoryLocations, getInventoryParts, getProjectCandidates, saveInventoryPart } from "../libs/api";
 import { errorMessage } from "../libs/errors";
-import type { InventoryLocation, InventoryPart, InventoryPartInput, ProjectCandidate, ProjectMissingPartSummary } from "../types";
+import type { InventoryLocation, InventoryPart, InventoryPartInput, ProjectCandidate, ProjectCandidateFilter, ProjectMissingPartSummary } from "../types";
 
 const emptyCandidates: ProjectCandidate[] = [];
+const projectFinderPageSize = 32;
 
 export function useInventory(isActive: boolean) {
   const [parts, setParts] = useState<InventoryPart[]>([]);
@@ -12,6 +13,12 @@ export function useInventory(isActive: boolean) {
   const [loading, setLoading] = useState(false);
   const [finding, setFinding] = useState(false);
   const [inventoryCount, setInventoryCount] = useState(0);
+  const [candidateCount, setCandidateCount] = useState(0);
+  const [filterCount, setFilterCount] = useState(0);
+  const [candidateOffset, setCandidateOffset] = useState(0);
+  const [candidateLimit, setCandidateLimit] = useState(projectFinderPageSize);
+  const [candidateHasMore, setCandidateHasMore] = useState(false);
+  const [candidateFilter, setCandidateFilter] = useState<ProjectCandidateFilter>("all");
   const [buildableCount, setBuildableCount] = useState(0);
   const [needsPartsCount, setNeedsPartsCount] = useState(0);
   const [missingPartSummary, setMissingPartSummary] = useState<ProjectMissingPartSummary[]>([]);
@@ -43,22 +50,34 @@ export function useInventory(isActive: boolean) {
     await Promise.all([loadParts(), loadLocations()]);
   }, [loadLocations, loadParts]);
 
-  const findProjects = useCallback(async () => {
+  const findProjects = useCallback(async (filter: ProjectCandidateFilter = "all", options: { append?: boolean } = {}) => {
     setFinding(true);
     setError("");
+    const append = Boolean(options.append);
+    const nextOffset = append ? candidateOffset + candidateLimit : 0;
     try {
-      const response = await getProjectCandidates(32);
+      const response = await getProjectCandidates({
+        limit: projectFinderPageSize,
+        offset: nextOffset,
+        filter
+      });
       setInventoryCount(response.inventoryCount);
+      setCandidateCount(response.candidateCount || 0);
+      setFilterCount(response.filterCount ?? response.candidates.length);
+      setCandidateOffset(response.offset || 0);
+      setCandidateLimit(response.limit || projectFinderPageSize);
+      setCandidateHasMore(Boolean(response.hasMore));
+      setCandidateFilter(response.filter || filter);
       setBuildableCount(response.buildableCount || 0);
       setNeedsPartsCount(response.needsPartsCount || 0);
       setMissingPartSummary(response.missingPartSummary || []);
-      setCandidates(response.candidates);
+      setCandidates((current) => append ? [...current, ...response.candidates] : response.candidates);
     } catch (err) {
       setError(errorMessage(err, "Could not find project candidates"));
     } finally {
       setFinding(false);
     }
-  }, []);
+  }, [candidateLimit, candidateOffset]);
 
   const savePart = useCallback(
     async (part: InventoryPartInput) => {
@@ -85,6 +104,11 @@ export function useInventory(isActive: boolean) {
       await deleteInventoryPart(partId);
       setParts((current) => current.filter((part) => part.id !== partId));
       setCandidates(emptyCandidates);
+      setCandidateCount(0);
+      setFilterCount(0);
+      setCandidateOffset(0);
+      setCandidateHasMore(false);
+      setCandidateFilter("all");
       setBuildableCount(0);
       setNeedsPartsCount(0);
       setMissingPartSummary([]);
@@ -126,6 +150,12 @@ export function useInventory(isActive: boolean) {
     locations,
     candidates,
     inventoryCount,
+    candidateCount,
+    filterCount,
+    candidateOffset,
+    candidateLimit,
+    candidateHasMore,
+    candidateFilter,
     buildableCount,
     needsPartsCount,
     missingPartSummary,
