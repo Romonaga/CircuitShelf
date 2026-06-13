@@ -923,6 +923,7 @@ nav {
 }
 
 .assembly-step {
+  display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: start;
   padding: 12px;
@@ -1003,7 +1004,9 @@ nav {
 .assembly-learning-card,
 .assembly-evidence-body,
 .assembly-photo-form,
-.assembly-photo-checks {
+.assembly-photo-checks,
+.assembly-photo-step-panel,
+.photo-verification {
   display: grid;
   gap: 10px;
 }
@@ -1018,6 +1021,19 @@ nav {
 
 .assembly-tool-panel h3 {
   margin: 0;
+}
+
+.assembly-photo-step-panel {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.assembly-photo-step-panel h3 {
+  margin: 0;
+  font-size: 0.95rem;
 }
 
 .assembly-export-controls {
@@ -1104,6 +1120,49 @@ nav {
   line-height: 1.45;
 }
 
+.photo-check-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.photo-verification-badge {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--panel);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.photo-verification-badge.looks_consistent {
+  color: var(--status-ok-text);
+  border-color: color-mix(in srgb, var(--status-ok-text) 45%, var(--line));
+}
+
+.photo-verification-badge.needs_attention {
+  color: var(--status-warn-text);
+  border-color: color-mix(in srgb, var(--status-warn-text) 45%, var(--line));
+}
+
+.photo-verification p,
+.photo-verification ul {
+  margin: 0;
+}
+
+.photo-verification ul {
+  padding-left: 18px;
+  color: var(--text);
+}
+
+.photo-verification small,
+.muted {
+  color: var(--muted);
+}
+
 .photo-diagnostics {
   display: flex;
   flex-wrap: wrap;
@@ -1116,7 +1175,7 @@ nav {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
-  background: #ffffff;
+  background: var(--panel);
   font-size: 0.78rem;
 }
 
@@ -6055,6 +6114,7 @@ nav {
 :root[data-theme="dark"] .assembly-evidence-chunk,
 :root[data-theme="dark"] .assembly-step,
 :root[data-theme="dark"] .assembly-tool-panel,
+:root[data-theme="dark"] .assembly-photo-step-panel,
 :root[data-theme="dark"] .build-card,
 :root[data-theme="dark"] .intelligence-panel,
 :root[data-theme="dark"] .ingest-status-panel,

@@ -111,12 +111,24 @@ export interface AssemblyLearningSession {
 export interface AssemblyPhotoCheck {
   id: string;
   planId: string;
+  stepId?: string | null;
   userId: number;
   imageMimeType: string;
   note: string;
   checklist: string;
   diagnostics?: BenchPhotoDiagnostics;
+  verification?: BenchPhotoVerification;
   createdAt?: string | null;
+}
+
+export interface BenchPhotoVerification {
+  status: "looks_consistent" | "needs_attention" | "cannot_verify" | string;
+  confidence?: number | null;
+  summary: string;
+  findings: string[];
+  requestedEvidence: string[];
+  provider: string;
+  model?: string | null;
 }
 
 export interface BenchPhotoDiagnostics {

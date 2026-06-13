@@ -116,9 +116,10 @@ export function AssemblyPlanDetail({
         <h3>Assembly checklist</h3>
         <div className="assembly-step-list">
           {plan.steps.map((step) => (
-            <label key={step.id} className={step.completed ? "assembly-step complete" : `assembly-step ${step.type}`}>
+            <article key={step.id} className={step.completed ? "assembly-step complete" : `assembly-step ${step.type}`}>
               <input
                 type="checkbox"
+                aria-label={`Mark step ${step.ordinal} complete`}
                 checked={step.completed}
                 disabled={stepBusy === step.id}
                 onChange={(event) => void toggleStep(step.id, event.target.checked)}
@@ -135,8 +136,9 @@ export function AssemblyPlanDetail({
                   </small>
                 ) : null}
                 <AssemblyStepEvidencePanel planId={plan.id} step={step} />
+                <AssemblyPhotoCheckPanel plan={plan} step={step} compact />
               </span>
-            </label>
+            </article>
           ))}
         </div>
       </section>

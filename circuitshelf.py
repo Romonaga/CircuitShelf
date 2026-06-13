@@ -89,6 +89,7 @@ register_api_routes(
     remove_document_from_store=runtime.document_management_service.remove_document_from_store,
     assembly_plan_store=stores.assembly_plan_store,
     bench_tools=runtime.bench_tools,
+    openai_assist_service=stores.openai_assist_service,
     get_rag_response=runtime.rag_service.get_rag_response,
     query_ollama_chat_with_retry=runtime.query_ollama_chat_with_retry,
     normalize_sources_for_api=runtime.normalize_sources_for_api,

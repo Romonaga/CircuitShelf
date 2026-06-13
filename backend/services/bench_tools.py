@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import math
 import re
 from collections import Counter
@@ -143,6 +144,193 @@ def build_photo_checklist(plan: dict, note: str = "", diagnostics: dict[str, Any
         for step in relevant_steps:
             lines.append(f"- Step {step['ordinal']}: {step['title']} -> {step['instruction']}")
     return "\n".join(lines)
+
+
+LOCAL_STEP_PHOTO_REVIEW_SYSTEM_PROMPT = (
+    "You are CircuitShelf's local bench photo inspection triage assistant. "
+    "You cannot see the photo pixels directly; you only receive image diagnostics and the build step text. "
+    "Return compact JSON only. Be conservative and never claim the circuit or wiring is correct. "
+    "Allowed status values are needs_attention or cannot_verify."
+)
+
+
+def step_for_id(plan: dict, step_id: str | None) -> dict | None:
+    if not step_id:
+        return None
+    return next((step for step in plan.get("steps") or [] if str(step.get("id")) == str(step_id)), None)
+
+
+def build_step_photo_local_prompt(
+    *,
+    plan: dict,
+    step: dict,
+    note: str,
+    diagnostics: dict[str, Any],
+) -> str:
+    return (
+        "Review whether these photo diagnostics are adequate for assisted bench inspection of one build step. "
+        "Return JSON with keys: status, confidence, summary, findings, requestedEvidence, escalateToOpenAI, reason. "
+        "status must be needs_attention or cannot_verify. confidence must be 0.0-1.0. "
+        "findings and requestedEvidence must be arrays of short strings. "
+        "Set escalateToOpenAI true only when the image appears usable enough for vision inspection and the user is asking about a concrete step.\n\n"
+        f"Plan: {plan.get('title') or 'Assembly plan'}\n"
+        f"Step: {step.get('ordinal')}. {step.get('title')} -> {step.get('instruction')} {step.get('note') or ''}\n"
+        f"User note: {note[:1000]}\n"
+        f"Diagnostics: {json.dumps(diagnostics, sort_keys=True)[:3000]}"
+    )
+
+
+def build_step_photo_checklist(
+    *,
+    plan: dict,
+    step: dict | None,
+    note: str = "",
+    diagnostics: dict[str, Any] | None = None,
+    verification: dict[str, Any] | None = None,
+) -> str:
+    lines = [
+        "Photo saved for Bench inspection.",
+        "This is confidence-based assistance, not proof that the circuit is correct or electrically safe.",
+        "",
+    ]
+    if step:
+        lines.extend([
+            f"Step inspected: {step.get('ordinal')}. {step.get('title')}",
+            f"Instruction: {step.get('instruction')}",
+        ])
+        if step.get("note"):
+            lines.append(f"Step note: {step.get('note')}")
+        lines.append("")
+    if verification:
+        lines.extend([
+            "Inspection result:",
+            f"- Status: {verification.get('status') or 'cannot_verify'}",
+            f"- Confidence: {verification.get('confidence') if verification.get('confidence') is not None else 'n/a'}",
+        ])
+        if verification.get("summary"):
+            lines.append(f"- Summary: {verification.get('summary')}")
+        for finding in verification.get("findings") or []:
+            lines.append(f"- Finding: {finding}")
+        for requested in verification.get("requestedEvidence") or []:
+            lines.append(f"- Next evidence: {requested}")
+        lines.append("")
+    if diagnostics:
+        lines.extend([
+            "Image diagnostics:",
+            f"- Resolution: {diagnostics.get('width')} x {diagnostics.get('height')}",
+            f"- Brightness: {diagnostics.get('brightness')}",
+            f"- Contrast: {diagnostics.get('contrast')}",
+            f"- Edge density: {diagnostics.get('edgeDensity')}",
+            f"- Blur score: {diagnostics.get('blurScore')}",
+        ])
+        for warning in diagnostics.get("warnings") or []:
+            lines.append(f"- Warning: {warning}")
+        lines.append("")
+    lines.extend([
+        "Manual checks still required:",
+        "- Confirm power is disconnected before moving jumpers.",
+        "- Check rails, IC orientation, and pin numbering against the plan.",
+        "- Verify continuity and expected resistance/voltage with a meter when the step depends on it.",
+    ])
+    if note:
+        lines.extend(["", f"User note: {note}"])
+    return "\n".join(lines)
+
+
+def deterministic_step_photo_verification(
+    *,
+    step: dict | None,
+    diagnostics: dict[str, Any],
+    note: str = "",
+    local_review: dict[str, Any] | None = None,
+    openai_review: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if openai_review:
+        return normalize_photo_verification(openai_review, provider="openai")
+    if local_review:
+        return normalize_photo_verification(local_review, provider="ollama")
+
+    warnings = [str(item) for item in diagnostics.get("warnings") or []]
+    score = 0.35
+    try:
+        width = int(diagnostics.get("width") or 0)
+        height = int(diagnostics.get("height") or 0)
+        brightness = float(diagnostics.get("brightness") or 0)
+        contrast = float(diagnostics.get("contrast") or 0)
+        edge_density = float(diagnostics.get("edgeDensity") or 0)
+        blur_score = float(diagnostics.get("blurScore") or 0)
+    except (TypeError, ValueError):
+        width = height = 0
+        brightness = contrast = edge_density = blur_score = 0.0
+
+    if min(width, height) >= 720:
+        score += 0.12
+    if 80 <= brightness <= 210:
+        score += 0.10
+    if contrast >= 35:
+        score += 0.08
+    if 0.035 <= edge_density <= 0.24:
+        score += 0.07
+    if blur_score >= 110:
+        score += 0.10
+    score = max(0.1, min(0.72, score - min(len(warnings), 5) * 0.05))
+
+    requested = []
+    if warnings:
+        requested.extend(warnings[:3])
+    else:
+        requested.append("Add a close-up photo that shows both ends of each jumper involved in this step.")
+    if step:
+        requested.append("Confirm this step with continuity or voltage measurements when applicable.")
+
+    status = "needs_attention" if warnings else "cannot_verify"
+    findings = [
+        "Diagnostics can judge image quality but cannot prove wire placement.",
+        f"Image appears suitable for assisted inspection with confidence {score:.2f}." if not warnings else "Image quality issues may limit inspection.",
+    ]
+    if note:
+        findings.append(f"User note considered: {note[:180]}")
+
+    return {
+        "status": status,
+        "confidence": round(score, 2),
+        "summary": "Photo quality reviewed; visual wiring correctness still requires manual inspection.",
+        "findings": findings,
+        "requestedEvidence": requested,
+        "provider": "diagnostics",
+        "model": None,
+        "raw": {},
+    }
+
+
+def normalize_photo_verification(review: dict[str, Any], *, provider: str) -> dict[str, Any]:
+    status = str(review.get("status") or "cannot_verify").strip().lower()
+    if status not in {"looks_consistent", "needs_attention", "cannot_verify"}:
+        status = "cannot_verify"
+    if provider != "openai" and status == "looks_consistent":
+        status = "cannot_verify"
+    try:
+        confidence = float(review.get("confidence"))
+    except (TypeError, ValueError):
+        confidence = None
+    if confidence is not None:
+        confidence = round(max(0.0, min(1.0, confidence)), 2)
+    findings = review.get("findings") or review.get("notes") or []
+    requested = review.get("requestedEvidence") or review.get("requested_evidence") or []
+    if isinstance(findings, str):
+        findings = [findings]
+    if isinstance(requested, str):
+        requested = [requested]
+    return {
+        "status": status,
+        "confidence": confidence,
+        "summary": str(review.get("summary") or review.get("reason") or "")[:1000],
+        "findings": [str(item)[:500] for item in findings[:8]],
+        "requestedEvidence": [str(item)[:500] for item in requested[:6]],
+        "provider": str(review.get("provider") or provider),
+        "model": review.get("model"),
+        "raw": review,
+    }
 
 
 def build_assembly_export(plan: dict, export_format: str) -> dict:

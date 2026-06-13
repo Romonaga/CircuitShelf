@@ -72,10 +72,18 @@ export function updateAssemblyLearning(planId: string, action: string): Promise<
   });
 }
 
-export function submitAssemblyPhotoCheck(planId: string, file: File, note: string): Promise<{ check: AssemblyPhotoCheck; checks: AssemblyPhotoCheck[] }> {
+export function submitAssemblyPhotoCheck(
+  planId: string,
+  file: File,
+  note: string,
+  stepId?: string | null
+): Promise<{ check: AssemblyPhotoCheck; checks: AssemblyPhotoCheck[] }> {
   const body = new FormData();
   body.append("file", file);
   body.append("note", note);
+  if (stepId) {
+    body.append("stepId", stepId);
+  }
   return requestJson<{ check: AssemblyPhotoCheck; checks: AssemblyPhotoCheck[] }>(
     `/api/assembly-plans/${encodeURIComponent(planId)}/photo-check`,
     {
@@ -86,6 +94,7 @@ export function submitAssemblyPhotoCheck(planId: string, file: File, note: strin
   );
 }
 
-export function getAssemblyPhotoChecks(planId: string): Promise<{ checks: AssemblyPhotoCheck[] }> {
-  return requestJson<{ checks: AssemblyPhotoCheck[] }>(`/api/assembly-plans/${encodeURIComponent(planId)}/photo-checks`);
+export function getAssemblyPhotoChecks(planId: string, stepId?: string | null): Promise<{ checks: AssemblyPhotoCheck[] }> {
+  const query = stepId ? `?stepId=${encodeURIComponent(stepId)}` : "";
+  return requestJson<{ checks: AssemblyPhotoCheck[] }>(`/api/assembly-plans/${encodeURIComponent(planId)}/photo-checks${query}`);
 }
