@@ -7,8 +7,9 @@ import type {
   AssemblyStepEvidence,
   BuildAssemblyPlanResponse,
   ConversationBenchPlanResponse,
+  FabricationPackageResponse,
 } from "../../types";
-import { requestJson } from "./core";
+import { readSessionToken, requestJson } from "./core";
 
 export function getAssemblyPlans(): Promise<{ plans: AssemblyPlanSummary[] }> {
   return requestJson<{ plans: AssemblyPlanSummary[] }>("/api/assembly-plans");
@@ -78,6 +79,23 @@ export function exportAssemblyPlan(planId: string, format: string): Promise<Asse
   return requestJson<AssemblyPlanExport>(
     `/api/assembly-plans/${encodeURIComponent(planId)}/export?format=${encodeURIComponent(format)}`
   );
+}
+
+export async function getFabricationPackage(planId: string): Promise<FabricationPackageResponse> {
+  const session = readSessionToken();
+  const response = await fetch(`/api/assembly-plans/${encodeURIComponent(planId)}/fabrication-package`, {
+    headers: {
+      ...(session ? { Authorization: `Bearer ${session}` } : {})
+    }
+  });
+  const data = (await response.json()) as FabricationPackageResponse;
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("circuitshelf-auth-expired"));
+  }
+  if (!response.ok && !data.package) {
+    throw new Error(data.error || `Request failed with status ${response.status}`);
+  }
+  return data;
 }
 
 export function getAssemblyLearning(planId: string): Promise<{ learning: AssemblyLearningSession }> {

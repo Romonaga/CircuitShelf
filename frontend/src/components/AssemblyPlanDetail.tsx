@@ -4,6 +4,7 @@ import { formatNumber } from "../libs/format";
 import type { AppConfig, AssemblyPlan } from "../types";
 import { ErrorMessage } from "./ErrorMessage";
 import { AssemblyExportPanel } from "./AssemblyExportPanel";
+import { AssemblyFabricationPanel } from "./AssemblyFabricationPanel";
 import { AssemblyLearningPanel } from "./AssemblyLearningPanel";
 import { AssemblyPhotoCheckPanel } from "./AssemblyPhotoCheckPanel";
 import { AssemblyStepEvidencePanel } from "./AssemblyStepEvidencePanel";
@@ -146,6 +147,7 @@ export function AssemblyPlanDetail({
       <div className="assembly-tool-grid">
         <AssemblyLearningPanel plan={plan} />
         <AssemblyExportPanel plan={plan} />
+        <AssemblyFabricationPanel plan={plan} />
         <AssemblyPhotoCheckPanel plan={plan} />
       </div>
 
