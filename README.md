@@ -1,6 +1,22 @@
 # CircuitShelf
 
-Local electronics-focused RAG for querying datasheets, electronics books, OCR output, and project notes through Ollama-backed models.
+CircuitShelf is a local AI electronics workbench for turning datasheets, books, OCR output, project notes, and bench inventory into searchable knowledge, build candidates, and guided assembly plans. It runs against your own Postgres/pgvector catalog with Ollama-backed local models by default and optional OpenAI escalation for workflows that need it.
+
+Keywords: electronics RAG, datasheet search, OCR, local AI, Ollama, OpenAI, pgvector, Postgres, hardware inventory, circuit design, Project Finder, Bench build plans, Arduino, Raspberry Pi.
+
+## Screenshots
+
+![Ask view for querying indexed electronics sources](docs/screenshots/ask.png)
+
+![Document upload and catalog management](docs/screenshots/documents.png)
+
+![Review queue for approving newly ingested sources](docs/screenshots/review.png)
+
+![Project Finder matching indexed sources against bench inventory](docs/screenshots/finder.png)
+
+![Live system status during ingestion and GPU queue work](docs/screenshots/status.png)
+
+![Bench plan workspace for guided assembly](docs/screenshots/bench.png)
 
 ## What This Repo Contains
 
@@ -9,6 +25,8 @@ Local electronics-focused RAG for querying datasheets, electronics books, OCR ou
 - A sanitized example config at `config/config.example.yaml`.
 - Postgres/pgvector-backed text and image retrieval.
 - Database-backed change detection for training files.
+- Project Finder candidate matching against your lab inventory.
+- Bench assembly plans with source evidence, wiring steps, checks, and photo-assisted verification.
 - Database migrations under `db/migrations/` and named SQL query files under `db/queries/`.
 - Database setup and user-management tools under `tools/`.
 
