@@ -61,7 +61,9 @@ def restore_keys(database_url: str, input_path: Path) -> int:
                         (
                             bool(row.get("enabled")),
                             row.get("encrypted_api_key") or "",
+                            row.get("encrypted_admin_api_key") or "",
                             row.get("key_preview") or "",
+                            row.get("admin_key_preview") or "",
                             row.get("default_model") or "",
                             row.get("updated_by"),
                             row.get("assist_mode") or "auto",
@@ -115,7 +117,7 @@ def rotate_secret(database_url: str, old_secret: str, new_secret: str) -> None:
         raise ValueError("Old and new encryption secrets are identical.")
     with psycopg.connect(database_url, row_factory=dict_row) as conn:
         with conn.transaction():
-            conn.execute(load_query("ai_provider_system_secret_rotate.sql"), (old_secret, new_secret))
+            conn.execute(load_query("ai_provider_system_secret_rotate.sql"), (old_secret, new_secret, old_secret, new_secret))
             conn.execute(load_query("ai_provider_entity_secret_rotate.sql"), (old_secret, new_secret))
             conn.execute(load_query("ai_provider_user_secret_rotate.sql"), (old_secret, new_secret))
 

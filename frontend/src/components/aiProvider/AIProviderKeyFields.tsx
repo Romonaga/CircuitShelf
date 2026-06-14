@@ -5,6 +5,12 @@ export function AIProviderKeyFields({
   canManage,
   clearApiKey,
   settings,
+  title = settings.hasApiKey ? "Key stored" : "No key stored",
+  preview = settings.keyPreview,
+  emptyText = "Paste a key to store it encrypted.",
+  replaceLabel = "Replace key",
+  clearLabel = "Clear stored key",
+  placeholder = "sk-...",
   onApiKeyChange,
   onClearApiKeyChange
 }: {
@@ -12,24 +18,30 @@ export function AIProviderKeyFields({
   canManage: boolean;
   clearApiKey: boolean;
   settings: AIProviderSettings;
+  title?: string;
+  preview?: string;
+  emptyText?: string;
+  replaceLabel?: string;
+  clearLabel?: string;
+  placeholder?: string;
   onApiKeyChange: (value: string) => void;
   onClearApiKeyChange: (value: boolean) => void;
 }) {
   return (
     <div className="ai-key-row">
       <div>
-        <strong>{settings.hasApiKey ? "Key stored" : "No key stored"}</strong>
-        <span>{settings.keyPreview || "Paste a key to store it encrypted."}</span>
+        <strong>{title}</strong>
+        <span>{preview || emptyText}</span>
       </div>
       <label>
-        Replace key
+        {replaceLabel}
         <input
           type="password"
           value={apiKey}
           disabled={!canManage || clearApiKey}
           onChange={(event) => onApiKeyChange(event.target.value)}
           autoComplete="off"
-          placeholder="sk-..."
+          placeholder={placeholder}
         />
       </label>
       <label className="inline-check">
@@ -39,7 +51,7 @@ export function AIProviderKeyFields({
           disabled={!canManage}
           onChange={(event) => onClearApiKeyChange(event.target.checked)}
         />
-        Clear stored key
+        {clearLabel}
       </label>
     </div>
   );

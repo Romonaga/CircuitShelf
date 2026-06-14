@@ -6,6 +6,18 @@ function formatDate(value?: string | null): string {
   return value ? new Date(value).toLocaleString() : "n/a";
 }
 
+function costLabel(event: AIUsageEvent): string {
+  if (event.finalCost !== null && event.finalCost !== undefined) {
+    return `${money(event.finalCost)} final`;
+  }
+  return `${money(event.estimatedCost)} est.`;
+}
+
+function statusLabel(event: AIUsageEvent): string {
+  const costStatus = event.costStatus && event.costStatus !== "estimated" ? ` / ${event.costStatus}` : "";
+  return `${event.success ? "OK" : event.errorMessage || "Failed"}${costStatus}`;
+}
+
 export function AIUsageEventsTable({ events }: { events: AIUsageEvent[] }) {
   return (
     <section className="performance-chart-card">
@@ -45,8 +57,8 @@ export function AIUsageEventsTable({ events }: { events: AIUsageEvent[] }) {
                 <td className="usage-reason">{event.decisionReason || event.contextType || "n/a"}</td>
                 <td>{event.latencyMs ? `${(event.latencyMs / 1000).toFixed(2)}s` : "n/a"}</td>
                 <td>{formatInteger(event.inputTokens + event.cachedInputTokens + event.outputTokens)}</td>
-                <td>{money(event.estimatedCost)}</td>
-                <td>{event.success ? "OK" : event.errorMessage || "Failed"}</td>
+                <td>{costLabel(event)}</td>
+                <td>{statusLabel(event)}</td>
               </tr>
             )) : (
               <tr>
