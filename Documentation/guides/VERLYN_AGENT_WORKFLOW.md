@@ -123,16 +123,19 @@ Do not create ad hoc local workflow files as durable truth.
 6. Do the implementation and verification.
 7. Update work items, review notes, and risks through Verlyn.
 8. When the change is ready to land, use `verlyn changes deliver <change-id> --merge-method squash`.
+9. When the delivered change should roll out to a configured deployment provider, use `verlyn changes deploy <change-id>`.
 
-`verlyn changes deliver` is the normal hosted closeout command. It commits local
+`verlyn changes deliver` is the normal hosted source-control closeout command. It commits local
 dirty work when `--commit-message` is supplied, pushes with Verlyn-managed
 provider credentials, opens or updates the PR, merges it, switches the local
 checkout back to the delivery base branch when local checkout context exists,
-and records closeout. It does not deploy by default; pass `--deploy` only when
-the operator explicitly wants the change closeout to also trigger or monitor a
-configured deployment provider. Credential issuance is gated by Verlyn repo write
-access, release operations entitlement, exact client-remote matching, and
-redacted audit recording; the CLI must not print provider tokens in JSON output.
+and records closeout. It does not deploy. `verlyn changes deploy <change-id>`
+is the normal change-aware deployment command; it resolves the delivered merge
+point from Verlyn, triggers or monitors the configured provider, records
+deployment evidence, and keeps provider credentials server-side. Credential
+issuance is gated by Verlyn repo write access, release operations entitlement,
+exact client-remote matching, and redacted audit recording; the CLI must not
+print provider tokens in JSON output.
 
 If local checkout cleanup is blocked or unsafe, the hosted merge remains
 complete and the CLI reports the blocker, `repair_status`, `unsafe`,
