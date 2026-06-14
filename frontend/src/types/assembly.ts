@@ -99,6 +99,53 @@ export interface AssemblyPlanExport {
   content: string;
 }
 
+export interface FabricationPackageCheck {
+  status: "pass" | "blocking" | string;
+  code: string;
+  message: string;
+}
+
+export interface FabricationPackageFile {
+  path: string;
+  kind: string;
+  bytes?: number;
+  mimeType?: string;
+  base64?: string;
+}
+
+export interface FabricationManifest {
+  schemaVersion: number;
+  projectName: string;
+  sourcePlanId?: string | null;
+  status: string;
+  downloadAllowed?: boolean;
+  requiredNextStep?: string;
+  files: FabricationPackageFile[];
+  checks: FabricationPackageCheck[];
+}
+
+export interface FabricationPackage {
+  generated: boolean;
+  status: string;
+  manifest: FabricationManifest;
+  files: FabricationPackageFile[];
+  zipBase64: string;
+  kicadProject?: {
+    exportable: boolean;
+    projectName: string;
+    zipBase64?: string;
+    validation?: {
+      blocking?: FabricationPackageCheck[];
+      warnings?: FabricationPackageCheck[];
+    };
+  };
+}
+
+export interface FabricationPackageResponse {
+  package?: FabricationPackage;
+  error?: string;
+}
+
 export interface AssemblyLearningSession {
   planId: string;
   currentOrdinal: number;

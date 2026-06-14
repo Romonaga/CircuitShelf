@@ -30,17 +30,21 @@ def build_fabrication_package(
         "projectName": project_name,
         "sourcePlanId": graph.get("planId") or plan.get("id"),
         "status": "pending",
+        "downloadAllowed": False,
+        "requiredNextStep": "",
         "files": [],
         "checks": [],
     }
     if not kicad_package.get("exportable"):
         manifest["status"] = "blocked"
+        manifest["requiredNextStep"] = "Resolve circuit graph validation findings before KiCad or fabrication export."
         manifest["checks"].append({"status": "blocking", "code": "kicad_project_not_exportable", "message": "KiCad project package is not exportable."})
         return package_result(False, manifest, [], kicad_package)
 
     pcb_file = find_file(kicad_package.get("files") or [], ".kicad_pcb")
     if not pcb_file:
         manifest["status"] = "needs_layout"
+        manifest["requiredNextStep"] = "Open the KiCad project, create/review a PCB layout, then rerun fabrication export."
         manifest["checks"].append({"status": "blocking", "code": "pcb_layout_missing", "message": "No KiCad PCB layout file is available yet."})
         manifest["files"].append({"path": f"{project_name}-kicad-project.zip", "kind": "kicad_project", "bytes": len(kicad_package.get("zipBase64") or "")})
         return package_result(False, manifest, [], kicad_package)
@@ -48,6 +52,7 @@ def build_fabrication_package(
     cli = kicad_cli_path or shutil.which("kicad-cli")
     if not cli:
         manifest["status"] = "tool_unavailable"
+        manifest["requiredNextStep"] = "Install KiCad command-line tools and rerun fabrication export."
         manifest["checks"].append({"status": "blocking", "code": "kicad_cli_missing", "message": "kicad-cli is required to export Gerber and drill files."})
         manifest["files"].append({"path": f"{project_name}-kicad-project.zip", "kind": "kicad_project", "bytes": len(kicad_package.get("zipBase64") or "")})
         return package_result(False, manifest, [], kicad_package)
@@ -66,6 +71,7 @@ def build_fabrication_package(
             run([cli, "pcb", "export", "drill", "--output", str(output_dir), str(pcb_path)], project_dir, output_dir)
         except Exception as exc:
             manifest["status"] = "failed"
+            manifest["requiredNextStep"] = "Fix the KiCad PCB project and rerun fabrication export."
             manifest["checks"].append({"status": "blocking", "code": "kicad_cli_failed", "message": str(exc)[:500]})
             manifest["files"].append({"path": f"{project_name}-kicad-project.zip", "kind": "kicad_project", "bytes": len(kicad_package.get("zipBase64") or "")})
             return package_result(False, manifest, [], kicad_package)
@@ -73,10 +79,13 @@ def build_fabrication_package(
         fabrication_files = collect_output_files(output_dir)
         if not fabrication_files:
             manifest["status"] = "failed"
+            manifest["requiredNextStep"] = "Review the KiCad export output and rerun fabrication export."
             manifest["checks"].append({"status": "blocking", "code": "fabrication_files_missing", "message": "KiCad export completed without Gerber or drill files."})
             return package_result(False, manifest, [], kicad_package)
 
     manifest["status"] = "generated"
+    manifest["downloadAllowed"] = True
+    manifest["requiredNextStep"] = "Review fabrication files before sending them to a PCB manufacturer."
     manifest["checks"].append({"status": "pass", "code": "fabrication_files_generated", "message": "Gerber/drill output files were generated."})
     manifest["files"] = [
         {"path": item["path"], "kind": item["kind"], "bytes": len(base64.b64decode(item["base64"]))}
