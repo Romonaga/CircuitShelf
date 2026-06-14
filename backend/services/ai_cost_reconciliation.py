@@ -18,6 +18,11 @@ class UsageCostEvent:
     provider: str
     model_name: str
     estimated_cost_usd: Decimal
+    input_tokens: int = 0
+    cached_input_tokens: int = 0
+    output_tokens: int = 0
+    provider_project_id: str = ""
+    provider_api_key_id: str = ""
 
 
 @dataclass(frozen=True)

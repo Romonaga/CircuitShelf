@@ -4,6 +4,7 @@ import { SectionHeader } from "./SectionHeader";
 import { AIProviderPricingOverrides } from "./AIProviderPricingOverrides";
 import { useAIProviderSettingsForm } from "../hooks/useAIProviderSettingsForm";
 import { AIProviderBudgetFields } from "./aiProvider/AIProviderBudgetFields";
+import { AIProviderBillingFields } from "./aiProvider/AIProviderBillingFields";
 import { AIProviderKeyFields } from "./aiProvider/AIProviderKeyFields";
 import { AIProviderMainFields } from "./aiProvider/AIProviderMainFields";
 import { AIProviderModelRefresh } from "./aiProvider/AIProviderModelRefresh";
@@ -90,6 +91,7 @@ export function AIProviderSettingsPanel({
           onClearApiKeyChange={setClearAdminApiKey}
         />
       ) : null}
+      <AIProviderBillingFields canManage={canManage} settings={settings} onChange={setSettings} />
 
       {loadModels ? (
         <AIProviderModelRefresh

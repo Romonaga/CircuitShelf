@@ -5,12 +5,14 @@ INSERT INTO system_ai_provider_settings (
     encrypted_admin_api_key,
     key_preview,
     admin_key_preview,
+    provider_project_id,
+    provider_api_key_id,
     assist_mode_id,
     default_model,
     updated_by,
     updated_at
 )
-SELECT p.id, %s, %s, %s, %s, %s, am.id, %s, %s, now()
+SELECT p.id, %s, %s, %s, %s, %s, %s, %s, am.id, %s, %s, now()
 FROM ai_provider_types p
 JOIN ai_assist_modes am ON am.code = %s
 WHERE p.code = %s
@@ -20,6 +22,8 @@ ON CONFLICT (provider_type_id) DO UPDATE SET
     encrypted_admin_api_key = EXCLUDED.encrypted_admin_api_key,
     key_preview = EXCLUDED.key_preview,
     admin_key_preview = EXCLUDED.admin_key_preview,
+    provider_project_id = EXCLUDED.provider_project_id,
+    provider_api_key_id = EXCLUDED.provider_api_key_id,
     assist_mode_id = EXCLUDED.assist_mode_id,
     default_model = EXCLUDED.default_model,
     updated_by = EXCLUDED.updated_by,

@@ -14,6 +14,8 @@ class AIProviderSettingsRequest(BaseModel):
     clearApiKey: bool = False
     adminApiKey: str | None = None
     clearAdminApiKey: bool = False
+    providerProjectId: str = ""
+    providerApiKeyId: str = ""
     keyPolicy: str | None = None
     assistMode: str = "auto"
     defaultModel: str = ""

@@ -62,6 +62,8 @@ def main() -> int:
     parser.add_argument("--group-by", action="append", choices=["project_id", "line_item", "api_key_id"], default=[])
     parser.add_argument("--project-id", action="append", default=[])
     parser.add_argument("--api-key-id", action="append", default=[])
+    parser.add_argument("--skip-configured-filters", action="store_true", help="Do not default to stored provider project/API key IDs.")
+    parser.add_argument("--skip-reprice", action="store_true", help="Do not recalculate stored event estimates before reconciliation.")
     parser.add_argument("--dry-run", action="store_true", help="Fetch and calculate but do not persist final costs.")
     args = parser.parse_args()
 
@@ -83,6 +85,12 @@ def main() -> int:
         return 2
     client = OpenAIOrganizationUsageClient(admin_api_key=admin_key, base_url=args.base_url)
     allocation_method = "estimated_cost_proportional"
+    configured_filters = {"projectIds": [], "apiKeyIds": []} if args.skip_configured_filters else store.openai_reconciliation_filters()
+    project_ids = args.project_id or configured_filters["projectIds"]
+    api_key_ids = args.api_key_id or configured_filters["apiKeyIds"]
+    group_by = list(args.group_by)
+    if api_key_ids and "api_key_id" not in group_by:
+        group_by.append("api_key_id")
 
     run_id = ""
     if not args.dry_run:
@@ -95,16 +103,35 @@ def main() -> int:
             allocation_method=allocation_method,
         )
     try:
+        repriced_count = 0
+        if not args.skip_reprice and not args.dry_run:
+            store.clear_openai_reconciliation_window(
+                start_time=args.start,
+                end_time=args.end,
+                project_ids=project_ids,
+                api_key_ids=api_key_ids,
+            )
+            repriced_count = store.reprice_openai_events_for_reconciliation(
+                start_time=args.start,
+                end_time=args.end,
+                project_ids=project_ids,
+                api_key_ids=api_key_ids,
+            )
         payload = client.fetch_costs(
             start_time=unix_seconds(args.start),
             end_time=unix_seconds(args.end),
             bucket_width=args.bucket_width,
-            group_by=args.group_by,
-            project_ids=args.project_id,
-            api_key_ids=args.api_key_id,
+            group_by=group_by,
+            project_ids=project_ids,
+            api_key_ids=api_key_ids,
         )
         verified_cost = verified_cost_from_openai_payload(payload)
-        events = store.list_openai_events_for_reconciliation(start_time=args.start, end_time=args.end)
+        events = store.list_openai_events_for_reconciliation(
+            start_time=args.start,
+            end_time=args.end,
+            project_ids=project_ids,
+            api_key_ids=api_key_ids,
+        )
         effective_run_id = run_id or "dry-run"
         updates = reconcile_cost_bucket(events, verified_cost_usd=verified_cost, reconciliation_run_id=effective_run_id)
         estimated_cost = sum((update.estimated_cost_usd for update in updates), Decimal("0"))
@@ -116,11 +143,23 @@ def main() -> int:
                 verified_cost=verified_cost,
                 estimated_cost=estimated_cost,
                 event_count=len(updates),
-                raw_provider_payload=payload,
+                raw_provider_payload={
+                    "filters": {
+                        "projectIds": project_ids,
+                        "apiKeyIds": api_key_ids,
+                        "groupBy": group_by,
+                        "repricedEvents": repriced_count,
+                    },
+                    "payload": payload,
+                },
             )
 
         print(f"OpenAI reconciliation {'dry run' if args.dry_run else 'complete'}")
         print(f"Window: {args.start.isoformat()} to {args.end.isoformat()}")
+        if project_ids or api_key_ids:
+            print(f"Filters: projects={len(project_ids)} api_keys={len(api_key_ids)} group_by={','.join(group_by) or 'none'}")
+        if not args.skip_reprice and not args.dry_run:
+            print(f"Repriced events: {repriced_count}")
         print(f"Verified cost: ${verified_cost:.8f}")
         print(f"Estimated event cost: ${estimated_cost:.8f}")
         print(f"Events reconciled: {len(updates)}")

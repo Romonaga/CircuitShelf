@@ -326,6 +326,8 @@ class AIProviderStore:
         estimated_cost: float = 0.0,
         paid_by: str = "unknown",
         provider_key_owner_user_id: int | None = None,
+        provider_project_id: str = "",
+        provider_api_key_id: str = "",
         success: bool = True,
         error_message: str | None = None,
         decision_reason: str = "",
@@ -351,6 +353,8 @@ class AIProviderStore:
                     float(estimated_cost or 0),
                     paid_by,
                     provider_key_owner_user_id,
+                    str(provider_project_id or "").strip(),
+                    str(provider_api_key_id or "").strip(),
                     bool(success),
                     str(error_message or "")[:1000] if error_message else None,
                     str(decision_reason or "")[:1000],
@@ -359,9 +363,21 @@ class AIProviderStore:
             ).fetchone()
         return int(row["id"]) if row else None
 
-    def list_openai_events_for_reconciliation(self, *, start_time: datetime, end_time: datetime) -> list[UsageCostEvent]:
+    def list_openai_events_for_reconciliation(
+        self,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        project_ids: list[str] | None = None,
+        api_key_ids: list[str] | None = None,
+    ) -> list[UsageCostEvent]:
+        project_filter = self._filter_or_none(project_ids)
+        api_key_filter = self._filter_or_none(api_key_ids)
         with self.database.connection() as conn:
-            rows = conn.execute(load_query("ai_assist_events_for_reconciliation.sql"), (start_time, end_time)).fetchall()
+            rows = conn.execute(
+                load_query("ai_assist_events_for_reconciliation.sql"),
+                (start_time, end_time, project_filter, project_filter, api_key_filter, api_key_filter),
+            ).fetchall()
         return [
             UsageCostEvent(
                 event_id=int(row["id"]),
@@ -369,9 +385,78 @@ class AIProviderStore:
                 provider=row["provider"],
                 model_name=row["model_name"] or "",
                 estimated_cost_usd=Decimal(str(row["estimated_cost"] or "0")),
+                input_tokens=int(row.get("input_tokens") or 0),
+                cached_input_tokens=int(row.get("cached_input_tokens") or 0),
+                output_tokens=int(row.get("output_tokens") or 0),
+                provider_project_id=row.get("provider_project_id") or "",
+                provider_api_key_id=row.get("provider_api_key_id") or "",
             )
             for row in rows
         ]
+
+    def reprice_openai_events_for_reconciliation(
+        self,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        project_ids: list[str] | None = None,
+        api_key_ids: list[str] | None = None,
+    ) -> int:
+        project_filter = self._filter_or_none(project_ids)
+        api_key_filter = self._filter_or_none(api_key_ids)
+        with self.database.connection() as conn:
+            rows = conn.execute(
+                load_query("ai_assist_events_for_reconciliation.sql"),
+                (start_time, end_time, project_filter, project_filter, api_key_filter, api_key_filter),
+            ).fetchall()
+            update_query = load_query("ai_assist_event_estimated_cost_update.sql")
+            updated = 0
+            for row in rows:
+                paid_by = row.get("paid_by") or "system"
+                user_id = row.get("provider_key_owner_user_id") if paid_by == "user" else row.get("user_id")
+                estimate = self.estimate_cost(
+                    provider="openai",
+                    model_name=row.get("model_name") or "",
+                    input_tokens=int(row.get("input_tokens") or 0),
+                    cached_input_tokens=int(row.get("cached_input_tokens") or 0),
+                    output_tokens=int(row.get("output_tokens") or 0),
+                    billing_scope=paid_by,
+                    entity_id=row.get("entity_id") if paid_by == "entity" else None,
+                    user_id=user_id if paid_by == "user" else None,
+                )
+                conn.execute(update_query, (Decimal(str(estimate)), row["id"]))
+                updated += 1
+        return updated
+
+    def clear_openai_reconciliation_window(
+        self,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        project_ids: list[str] | None = None,
+        api_key_ids: list[str] | None = None,
+    ) -> None:
+        project_filter = self._filter_or_none(project_ids)
+        api_key_filter = self._filter_or_none(api_key_ids)
+        with self.database.connection() as conn:
+            conn.execute(
+                load_query("ai_assist_event_reconciliation_clear.sql"),
+                (start_time, end_time, project_filter, project_filter, api_key_filter, api_key_filter),
+            )
+
+    def openai_reconciliation_filters(self) -> dict[str, list[str]]:
+        project_ids: list[str] = []
+        api_key_ids: list[str] = []
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("openai_reconciliation_configured_filters.sql")).fetchall()
+        for row in rows:
+            project_id = str(row.get("provider_project_id") or "").strip()
+            api_key_id = str(row.get("provider_api_key_id") or "").strip()
+            if project_id and project_id not in project_ids:
+                project_ids.append(project_id)
+            if api_key_id and api_key_id not in api_key_ids:
+                api_key_ids.append(api_key_id)
+        return {"projectIds": project_ids, "apiKeyIds": api_key_ids}
 
     def create_cost_reconciliation_run(
         self,
@@ -564,6 +649,8 @@ class AIProviderStore:
                     key_value,
                     self.encryption_secret(),
                     preview,
+                    self._billing_id(payload.get("providerProjectId")),
+                    self._billing_id(payload.get("providerApiKeyId")),
                     ids["assist_mode_id"],
                     str(payload.get("defaultModel") or ""),
                     updated_by,
@@ -609,6 +696,8 @@ class AIProviderStore:
                     key_value,
                     self.encryption_secret(),
                     preview,
+                    self._billing_id(payload.get("providerProjectId")),
+                    self._billing_id(payload.get("providerApiKeyId")),
                     ids["key_policy_id"],
                     ids["assist_mode_id"],
                     str(payload.get("defaultModel") or ""),
@@ -646,6 +735,8 @@ class AIProviderStore:
                     key_value,
                     self.encryption_secret(),
                     preview,
+                    self._billing_id(payload.get("providerProjectId")),
+                    self._billing_id(payload.get("providerApiKeyId")),
                     ids["key_policy_id"],
                     ids["assist_mode_id"],
                     str(payload.get("defaultModel") or ""),
@@ -723,6 +814,8 @@ class AIProviderStore:
             "adminApiKey": row.get("admin_api_key") or "",
             "keyPreview": row.get("key_preview") or "",
             "adminKeyPreview": row.get("admin_key_preview") or "",
+            "providerProjectId": row.get("provider_project_id") or "",
+            "providerApiKeyId": row.get("provider_api_key_id") or "",
             "keyPolicy": row.get("key_policy") or ("system" if scope == "system" else scope),
             "assistMode": row.get("assist_mode") or "auto",
             "defaultModel": row.get("default_model") or "",
@@ -748,6 +841,8 @@ class AIProviderStore:
             "modelName": row.get("defaultModel") or default_model,
             "paidBy": paid_by,
             "providerKeyOwnerUserId": owner_user_id if paid_by == "user" else None,
+            "providerProjectId": row.get("providerProjectId") or "",
+            "providerApiKeyId": row.get("providerApiKeyId") or "",
             "pricingScope": paid_by,
             "pricingEntityId": entity_id if paid_by == "entity" else None,
             "pricingUserId": user_id if paid_by == "user" else None,
@@ -776,6 +871,8 @@ class AIProviderStore:
                 "hasAdminApiKey": False,
                 "keyPreview": "",
                 "adminKeyPreview": "",
+                "providerProjectId": "",
+                "providerApiKeyId": "",
                 "keyPolicy": "system" if scope == "system" else ("entity" if scope == "entity" else "user_when_available"),
                 "assistMode": "auto",
                 "defaultModel": "",
@@ -795,6 +892,8 @@ class AIProviderStore:
             "hasAdminApiKey": bool(row.get("admin_key_preview")),
             "keyPreview": row["key_preview"] or "",
             "adminKeyPreview": row.get("admin_key_preview") or "",
+            "providerProjectId": row.get("provider_project_id") or "",
+            "providerApiKeyId": row.get("provider_api_key_id") or "",
             "keyPolicy": row.get("key_policy") or ("system" if scope == "system" else "entity"),
             "assistMode": row["assist_mode"],
             "defaultModel": row["default_model"] or "",
@@ -840,6 +939,8 @@ class AIProviderStore:
             "paidBy": row.get("paid_by") or "unknown",
             "providerKeyOwnerUserId": row.get("provider_key_owner_user_id"),
             "providerKeyOwnerUsername": row.get("provider_key_owner_username"),
+            "providerProjectId": row.get("provider_project_id") or "",
+            "providerApiKeyId": row.get("provider_api_key_id") or "",
             "success": bool(row.get("success")),
             "errorMessage": row.get("error_message"),
             "decisionReason": row.get("decision_reason") or "",
@@ -902,3 +1003,16 @@ class AIProviderStore:
         if not context_id:
             return str(context_type)
         return f"{context_type}:{str(context_id)[:8]}"
+
+    @staticmethod
+    def _billing_id(value: Any) -> str:
+        return str(value or "").strip()[:120]
+
+    @staticmethod
+    def _filter_or_none(values: list[str] | None) -> list[str] | None:
+        clean: list[str] = []
+        for value in values or []:
+            item = str(value or "").strip()
+            if item and item not in clean:
+                clean.append(item)
+        return clean or None

@@ -5,6 +5,8 @@ SELECT p.code AS provider_code,
            ELSE pgp_sym_decrypt(decode(s.encrypted_api_key, 'base64'), %s::text)
        END AS api_key,
        s.key_preview,
+       s.provider_project_id,
+       s.provider_api_key_id,
        kp.code AS key_policy,
        am.code AS assist_mode,
        s.default_model,

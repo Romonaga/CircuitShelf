@@ -10,6 +10,8 @@ SELECT p.code AS provider_code,
        END AS admin_api_key,
        s.key_preview,
        s.admin_key_preview,
+       s.provider_project_id,
+       s.provider_api_key_id,
        am.code AS assist_mode,
        s.default_model
 FROM system_ai_provider_settings s

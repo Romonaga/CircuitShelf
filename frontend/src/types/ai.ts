@@ -36,6 +36,8 @@ export interface AIProviderSettings {
   hasAdminApiKey: boolean;
   keyPreview: string;
   adminKeyPreview: string;
+  providerProjectId: string;
+  providerApiKeyId: string;
   keyPolicy: string;
   assistMode: string;
   defaultModel: string;
@@ -52,6 +54,8 @@ export interface AIProviderSettingsPayload {
   clearApiKey?: boolean;
   adminApiKey?: string;
   clearAdminApiKey?: boolean;
+  providerProjectId?: string;
+  providerApiKeyId?: string;
   keyPolicy?: string;
   assistMode: string;
   defaultModel: string;
@@ -96,6 +100,8 @@ export interface AIUsageEvent {
   paidBy: string;
   providerKeyOwnerUserId?: number | null;
   providerKeyOwnerUsername?: string | null;
+  providerProjectId?: string;
+  providerApiKeyId?: string;
   decisionReason?: string;
   latencyMs?: number;
   success: boolean;

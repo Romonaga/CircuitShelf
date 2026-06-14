@@ -4,6 +4,8 @@ INSERT INTO entity_ai_provider_settings (
     enabled,
     encrypted_api_key,
     key_preview,
+    provider_project_id,
+    provider_api_key_id,
     key_policy_id,
     assist_mode_id,
     default_model,
@@ -30,6 +32,8 @@ VALUES (
     %s,
     %s,
     %s,
+    %s,
+    %s,
     now()
 )
 ON CONFLICT (entity_id, provider_type_id) DO UPDATE SET
@@ -42,6 +46,8 @@ ON CONFLICT (entity_id, provider_type_id) DO UPDATE SET
         WHEN %s::boolean THEN EXCLUDED.key_preview
         ELSE entity_ai_provider_settings.key_preview
     END,
+    provider_project_id = EXCLUDED.provider_project_id,
+    provider_api_key_id = EXCLUDED.provider_api_key_id,
     key_policy_id = EXCLUDED.key_policy_id,
     assist_mode_id = EXCLUDED.assist_mode_id,
     default_model = EXCLUDED.default_model,

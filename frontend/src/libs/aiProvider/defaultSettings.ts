@@ -8,6 +8,8 @@ export const defaultAIProviderSettings: AIProviderSettings = {
   hasAdminApiKey: false,
   keyPreview: "",
   adminKeyPreview: "",
+  providerProjectId: "",
+  providerApiKeyId: "",
   keyPolicy: "user_when_available",
   assistMode: "auto",
   defaultModel: "",

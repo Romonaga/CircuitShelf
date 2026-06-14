@@ -91,6 +91,8 @@ def test_ai_provider_settings_row_exposes_admin_key_preview():
         "enabled": True,
         "key_preview": "sk-live...1234",
         "admin_key_preview": "sk-admin...5678",
+        "provider_project_id": "proj_123",
+        "provider_api_key_id": "key_456",
         "key_policy": "system",
         "assist_mode": "auto",
         "default_model": "gpt-5-chat-latest",
@@ -108,7 +110,34 @@ def test_ai_provider_settings_row_exposes_admin_key_preview():
 
     assert settings["hasAdminApiKey"] is True
     assert settings["adminKeyPreview"] == "sk-admin...5678"
+    assert settings["providerProjectId"] == "proj_123"
+    assert settings["providerApiKeyId"] == "key_456"
     assert "adminApiKey" not in settings
+
+
+def test_resolved_provider_carries_billing_ids():
+    settings = AIProviderStore(database=None, config_path="config/config.yaml")._resolved_provider(
+        row={
+            "provider": "openai",
+            "apiKey": "sk-live",
+            "assistMode": "auto",
+            "defaultModel": "gpt-5-chat-latest",
+            "providerProjectId": "proj_123",
+            "providerApiKeyId": "key_456",
+            "monthlyBudget": 0,
+            "warnPercent": 80,
+            "stopPercent": 100,
+            "scope": "system",
+        },
+        paid_by="system",
+        owner_user_id=None,
+        default_model="fallback",
+        entity_id=None,
+        user_id=None,
+    )
+
+    assert settings["providerProjectId"] == "proj_123"
+    assert settings["providerApiKeyId"] == "key_456"
 
 
 def test_ai_provider_admin_api_key_for_provider_uses_system_secret_row(monkeypatch):
