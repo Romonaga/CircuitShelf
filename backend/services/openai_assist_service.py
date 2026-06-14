@@ -29,3 +29,6 @@ class OpenAIAssistService:
 
     def triage_project_finder(self, **kwargs):
         return self.tasks.triage_project_finder(**kwargs)
+
+    def enrich_circuit_graph(self, **kwargs):
+        return self.tasks.enrich_circuit_graph(**kwargs)

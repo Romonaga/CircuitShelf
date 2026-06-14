@@ -14,6 +14,8 @@ from backend.api.dependencies import ApiDependencies
 from backend.services.assembly_assistant_service import answer_assembly_assistant
 from backend.services.assembly_learning_service import build_learning_payload, update_learning_session
 from backend.services.assembly_plan_build_service import AssemblyPlanBuildService
+from backend.services.circuit_graph import build_circuit_graph
+from backend.services.circuit_graph_ai import CircuitGraphAiEnrichmentService
 from backend.services.ingestion_ai_review_service import estimate_local_tokens
 from backend.services.openai_assist_utils import parse_json_object
 
@@ -65,6 +67,12 @@ def create_router(
         build_recovery_prompt=build_recovery_prompt,
         parse_recovered_build_card=parse_recovered_build_card,
         recovery_system_prompt=recovery_system_prompt,
+    )
+    graph_ai_service = CircuitGraphAiEnrichmentService(
+        ai_provider_store=deps.ai_provider_store,
+        openai_assist_service=openai_assist_service,
+        query_local_llm=query_ollama_chat_with_retry,
+        local_model_name=default_model,
     )
 
     @router.get("/api/assembly-plans")
@@ -191,6 +199,28 @@ def create_router(
         if not plan:
             return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
         return bench_tools.build_assembly_export(plan, format)
+
+    @router.get("/api/assembly-plans/{plan_id}/circuit-graph")
+    async def assembly_plan_circuit_graph(plan_id: str, req: Request, enrich: bool = Query(False)):
+        user, error = deps.require_authenticated_user(req)
+        if error:
+            return error
+        user_id = deps.user_id_for_user(user)
+        plan = assembly_plan_store.get(plan_id, user_id)
+        if not plan:
+            return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+        graph = build_circuit_graph(plan)
+        if not enrich:
+            return {"graph": graph}
+        ai_enrichment = await run_in_threadpool(
+            graph_ai_service.enrich,
+            plan=plan,
+            graph=graph,
+            entity_id=current_entity_id(deps, user_id),
+            user_id=user_id,
+        )
+        graph["aiEnrichment"] = ai_enrichment
+        return {"graph": graph}
 
     @router.get("/api/assembly-plans/{plan_id}/learning")
     async def assembly_learning_get(plan_id: str, req: Request):

@@ -53,6 +53,17 @@ PROJECT_FINDER_TRIAGE_INSTRUCTIONS = (
     "Do not invent components or claim a project is buildable without evidence."
 )
 
+LOCAL_CIRCUIT_GRAPH_ENRICHMENT_SYSTEM_PROMPT = (
+    "You are CircuitShelf's local circuit graph reviewer. Return compact JSON only. "
+    "Use only the assembly plan, existing graph, and cited evidence. Be conservative: "
+    "do not invent pins, nets, values, packages, or PCB-ready topology."
+)
+
+CIRCUIT_GRAPH_ENRICHMENT_INSTRUCTIONS = (
+    "You are CircuitShelf's circuit graph enrichment assistant. Return compact JSON only. "
+    "Use only the provided assembly plan and graph. Do not invent unsupported electronics facts."
+)
+
 LOCAL_PROJECT_FINDER_TRIAGE_SYSTEM_PROMPT = (
     "You are CircuitShelf's local Project Finder triage reviewer. Return compact JSON only. "
     "Review whether low-confidence electronics project candidates are useful and grounded. "
@@ -205,4 +216,57 @@ def build_project_finder_triage_prompt(
         "to decide confidently. Do not escalate just to polish wording.\n\n"
         f"Deterministic reason: {deterministic_reason}\n"
         f"Candidates: {json.dumps(compact_candidates, sort_keys=True)}"
+    )
+
+
+def build_circuit_graph_enrichment_prompt(
+    *,
+    plan: dict[str, Any],
+    graph: dict[str, Any],
+    local_review: dict[str, Any] | None = None,
+) -> str:
+    compact_plan = {
+        "id": plan.get("id"),
+        "title": plan.get("title"),
+        "objective": plan.get("objective"),
+        "componentName": plan.get("componentName"),
+        "componentType": plan.get("componentType"),
+        "summary": str(plan.get("summary") or "")[:1200],
+        "parts": (plan.get("parts") or [])[:40],
+        "power": (plan.get("power") or [])[:12],
+        "steps": [
+            {
+                "id": step.get("id"),
+                "ordinal": step.get("ordinal"),
+                "type": step.get("type"),
+                "title": step.get("title"),
+                "instruction": step.get("instruction"),
+                "note": step.get("note"),
+                "sourcePath": step.get("sourcePath"),
+                "page": step.get("page"),
+            }
+            for step in (plan.get("steps") or [])[:80]
+        ],
+        "sources": (plan.get("sources") or [])[:20],
+    }
+    compact_graph = {
+        "status": graph.get("status"),
+        "components": (graph.get("components") or [])[:60],
+        "pins": (graph.get("pins") or [])[:100],
+        "nets": (graph.get("nets") or [])[:80],
+        "connections": (graph.get("connections") or [])[:100],
+        "validationFindings": (graph.get("validationFindings") or [])[:80],
+        "stats": graph.get("stats") or {},
+    }
+    return (
+        "Review and enrich this CircuitShelf circuit graph. Return JSON with keys: "
+        "useful, confidence, summary, proposedPins, proposedNets, proposedConnections, "
+        "validationFindings, escalateToOpenAI, reason. useful and escalateToOpenAI are booleans. "
+        "confidence is 0.0-1.0. proposedPins/proposedNets/proposedConnections/validationFindings are arrays. "
+        "Every proposed item must include evidenceStepId or sourcePath/page when evidence exists. "
+        "Do not mark the graph PCB-ready if concrete pin numbers or circuit nets are missing. "
+        "Prefer adding validation findings over guessing.\n\n"
+        f"Assembly plan: {json.dumps(compact_plan, sort_keys=True)[:12000]}\n\n"
+        f"Current graph: {json.dumps(compact_graph, sort_keys=True)[:12000]}\n\n"
+        f"Local review: {json.dumps(local_review or {}, sort_keys=True)[:5000]}"
     )
