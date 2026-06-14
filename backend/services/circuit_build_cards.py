@@ -18,6 +18,7 @@ BUILD_CARD_REQUEST_PATTERN = re.compile(
     re.IGNORECASE,
 )
 BUILD_ACTION_PATTERN = re.compile(r"\b(build|make|create|assemble)\b", re.IGNORECASE)
+PROJECT_FINDER_CANDIDATE_PATTERN = re.compile(r"\bProject Finder candidate\b", re.IGNORECASE)
 BUILD_CONTEXT_PATTERN = re.compile(
     r"\b("
     r"arduino|raspberry|gpio|555|timer|op[\s-]?amp|optocoupler|transistor|mosfet|led|relay|sensor|"
@@ -65,9 +66,9 @@ def build_circuit_build_card(
     component_type = intelligence.get("componentType") or "component"
     lower = f"{ranking_question} {component} {component_type}".lower()
     pins = intelligence.get("pinout", {}).get("pins", [])
-    wiring = _pinout_wiring(pins)
-    if len(wiring) < 2:
+    if len(pins) < 2 and PROJECT_FINDER_CANDIDATE_PATTERN.search(question or ""):
         return None
+    wiring = _pinout_wiring(pins, component)
     facts = intelligence.get("facts", [])
 
     return {
@@ -80,7 +81,7 @@ def build_circuit_build_card(
         "power": _power_notes(facts),
         "wiring": wiring,
         "checks": _checks(component_type, wiring),
-        "warnings": _warnings(facts, component_type),
+        "warnings": _warnings(facts, component_type, len(pins) < 2),
         "sourceNotes": _source_notes(source_payload, intelligence),
     }
 
@@ -195,13 +196,34 @@ def _parts(lower: str, component: str, component_type: str) -> list[dict]:
     return _dedupe_dicts(parts, "name")
 
 
-def _pinout_wiring(pins: list[dict]) -> list[dict]:
+def _pinout_wiring(pins: list[dict], component: str) -> list[dict]:
     rows = []
     for pin in pins[:16]:
         function = pin.get("function") or pin.get("label") or "Unknown"
         destination = _destination_for_function(function)
         rows.append(_wire(f"Pin {pin.get('pin')} {function}", destination, "Confirm against the cited datasheet page before powering.", pins, pin.get("pin")))
+    if len(rows) < 2:
+        rows.extend(_pinout_gap_wiring(component, len(rows)))
     return rows
+
+
+def _pinout_gap_wiring(component: str, existing_count: int) -> list[dict]:
+    component_name = component or "Component"
+    rows = [
+        {
+            "from": f"{component_name} power pins",
+            "to": "Power rails after exact pinout is confirmed",
+            "note": "Pinout evidence is incomplete; identify exact power and ground pins from a datasheet before wiring.",
+            "page": None,
+        },
+        {
+            "from": f"{component_name} signal pins",
+            "to": "Target circuit or controller after exact pinout is confirmed",
+            "note": "Pinout evidence is incomplete; do not connect signal pins until their functions are verified.",
+            "page": None,
+        },
+    ]
+    return rows[: max(0, 2 - int(existing_count or 0))]
 
 
 def _destination_for_function(function: str) -> str:
@@ -252,13 +274,15 @@ def _checks(component_type: str, wiring: list[dict]) -> list[str]:
     return checks
 
 
-def _warnings(facts: list[dict], component_type: str) -> list[str]:
+def _warnings(facts: list[dict], component_type: str, pinout_incomplete: bool = False) -> list[str]:
     warnings = []
     for fact in facts:
         if fact.get("type") in {"warning", "absolute_maximum"}:
             warnings.append(fact.get("value") or fact.get("evidence") or "")
     if "optocoupler" in component_type:
         warnings.append("Isolation ratings depend on PCB spacing and package limits; do not use a breadboard for hazardous voltages.")
+    if pinout_incomplete:
+        warnings.append("Pinout evidence is incomplete; verify every pin before wiring.")
     if not warnings:
         warnings.append("Datasheet limits are not design targets; stay inside recommended operating conditions.")
     return [item for item in _dedupe_strings(warnings) if item][:5]
