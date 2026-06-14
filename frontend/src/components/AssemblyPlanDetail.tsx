@@ -10,7 +10,7 @@ import { AssemblyPhotoCheckPanel } from "./AssemblyPhotoCheckPanel";
 import { AssemblyStepEvidencePanel } from "./AssemblyStepEvidencePanel";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { SectionHeader } from "./SectionHeader";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 export function AssemblyPlanDetail({
   plan,
@@ -27,6 +27,7 @@ export function AssemblyPlanDetail({
   const [assistantBusy, setAssistantBusy] = useState(false);
   const [assistantMessage, setAssistantMessage] = useState("");
   const [error, setError] = useState("");
+  const [openStepIds, setOpenStepIds] = useState<Record<string, boolean>>({});
 
   const progress = useMemo(() => {
     if (!plan?.stepCount) {
@@ -34,6 +35,15 @@ export function AssemblyPlanDetail({
     }
     return Math.round((plan.completedStepCount / plan.stepCount) * 100);
   }, [plan]);
+
+  useEffect(() => {
+    if (!plan) {
+      setOpenStepIds({});
+      return;
+    }
+    const defaultOpenStep = plan.steps.find((step) => !step.completed) ?? plan.steps[0];
+    setOpenStepIds(Object.fromEntries(plan.steps.map((step) => [step.id, step.id === defaultOpenStep?.id])));
+  }, [plan?.id, plan?.steps.length]);
 
   async function toggleStep(stepId: string, completed: boolean) {
     if (!plan) {
@@ -49,6 +59,13 @@ export function AssemblyPlanDetail({
     } finally {
       setStepBusy("");
     }
+  }
+
+  function toggleStepDetails(stepId: string) {
+    setOpenStepIds((current) => ({
+      ...current,
+      [stepId]: !current[stepId]
+    }));
   }
 
   async function submitAssistant(event: FormEvent) {
@@ -116,31 +133,49 @@ export function AssemblyPlanDetail({
       <section>
         <h3>Assembly checklist</h3>
         <div className="assembly-step-list">
-          {plan.steps.map((step) => (
-            <article key={step.id} className={step.completed ? "assembly-step complete" : `assembly-step ${step.type}`}>
-              <input
-                type="checkbox"
-                aria-label={`Mark step ${step.ordinal} complete`}
-                checked={step.completed}
-                disabled={stepBusy === step.id}
-                onChange={(event) => void toggleStep(step.id, event.target.checked)}
-              />
-              <span className="assembly-step-body">
-                <strong>
-                  {step.ordinal}. {step.title}
-                </strong>
-                <span>{step.instruction}</span>
-                {step.note ? <small>{step.note}</small> : null}
-                {step.sourcePath || step.page ? (
-                  <small>
-                    Evidence: {step.sourcePath || "source"} {step.page ? `page ${step.page}` : ""}
-                  </small>
+          {plan.steps.map((step) => {
+            const detailsOpen = Boolean(openStepIds[step.id]);
+            return (
+              <article key={step.id} className={step.completed ? "assembly-step complete" : `assembly-step ${step.type}`}>
+                <header className="assembly-step-header">
+                  <input
+                    type="checkbox"
+                    aria-label={`Mark step ${step.ordinal} complete`}
+                    checked={step.completed}
+                    disabled={stepBusy === step.id}
+                    onChange={(event) => void toggleStep(step.id, event.target.checked)}
+                  />
+                  <button
+                    type="button"
+                    className="assembly-step-toggle"
+                    aria-expanded={detailsOpen}
+                    aria-controls={`assembly-step-details-${step.id}`}
+                    onClick={() => toggleStepDetails(step.id)}
+                  >
+                    <span className="collapse-caret" aria-hidden="true">{detailsOpen ? "v" : ">"}</span>
+                    <span className="assembly-step-heading">
+                      <strong>
+                        {step.ordinal}. {step.title}
+                      </strong>
+                      <small>{step.instruction}</small>
+                    </span>
+                  </button>
+                </header>
+                {detailsOpen ? (
+                  <div className="assembly-step-body" id={`assembly-step-details-${step.id}`}>
+                    {step.note ? <small>{step.note}</small> : null}
+                    {step.sourcePath || step.page ? (
+                      <small>
+                        Evidence: {step.sourcePath || "source"} {step.page ? `page ${step.page}` : ""}
+                      </small>
+                    ) : null}
+                    <AssemblyStepEvidencePanel planId={plan.id} step={step} />
+                    <AssemblyPhotoCheckPanel plan={plan} step={step} compact />
+                  </div>
                 ) : null}
-                <AssemblyStepEvidencePanel planId={plan.id} step={step} />
-                <AssemblyPhotoCheckPanel plan={plan} step={step} compact />
-              </span>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </section>
 
