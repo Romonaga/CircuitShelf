@@ -102,6 +102,15 @@ export interface AIUsageEvent {
   errorMessage?: string | null;
 }
 
+export interface AIUsageCostPoint {
+  date: string;
+  calls: number;
+  reconciledCalls: number;
+  estimatedCost: number;
+  actualCost: number;
+  verifiedCost: number;
+}
+
 export interface AIUsageReport {
   summary: {
     calls: number;
@@ -112,7 +121,9 @@ export interface AIUsageReport {
     outputTokens: number;
     estimatedCost: number;
     billableCost: number;
+    actualCost: number;
     finalCost: number;
+    verifiedCost: number;
     reconciledCalls: number;
   };
   byTask: AIUsageBreakdown[];
@@ -120,5 +131,6 @@ export interface AIUsageReport {
   byPayer: AIUsageBreakdown[];
   byModel: AIUsageBreakdown[];
   byContext: AIUsageBreakdown[];
+  costTimeline: AIUsageCostPoint[];
   events: AIUsageEvent[];
 }

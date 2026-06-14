@@ -480,7 +480,16 @@ class AIProviderStore:
         limit: int = 250,
     ) -> dict[str, Any]:
         usage_scope = scope if scope in {"system", "entity", "user"} else "entity"
+        safe_days = max(1, int(days))
         with self.database.connection() as conn:
+            summary_row = conn.execute(
+                load_query("ai_assist_usage_summary.sql"),
+                self._usage_scope_args(usage_scope, entity_id, user_id, safe_days),
+            ).fetchone()
+            timeline_rows = conn.execute(
+                load_query("ai_assist_usage_cost_timeline.sql"),
+                self._usage_scope_args(usage_scope, entity_id, user_id, safe_days),
+            ).fetchall()
             rows = conn.execute(
                 load_query("ai_assist_usage_events.sql"),
                 (
@@ -490,35 +499,33 @@ class AIProviderStore:
                     usage_scope,
                     user_id,
                     user_id,
-                    max(1, int(days)),
+                    safe_days,
                     max(1, int(limit)),
                 ),
             ).fetchall()
         events = [self._usage_event_row(row) for row in rows]
-        total_cost = sum(event["estimatedCost"] for event in events)
-        billable_cost = sum(event["billableCost"] for event in events)
-        final_cost = sum((event["finalCost"] or 0) for event in events)
-        total_tokens = sum(event["inputTokens"] + event["cachedInputTokens"] + event["outputTokens"] for event in events)
         return {
             "events": events,
-            "summary": {
-                "calls": len(events),
-                "successfulCalls": sum(1 for event in events if event["success"]),
-                "tokens": total_tokens,
-                "inputTokens": sum(event["inputTokens"] for event in events),
-                "cachedInputTokens": sum(event["cachedInputTokens"] for event in events),
-                "outputTokens": sum(event["outputTokens"] for event in events),
-                "estimatedCost": round(total_cost, 8),
-                "billableCost": round(billable_cost, 8),
-                "finalCost": round(final_cost, 8),
-                "reconciledCalls": sum(1 for event in events if event["finalCost"] is not None),
-            },
+            "summary": self._usage_summary_row(summary_row),
+            "costTimeline": [self._usage_cost_timeline_row(row) for row in timeline_rows],
             "byTask": self._usage_breakdown(events, "taskLabel"),
             "byUser": self._usage_breakdown(events, "username"),
             "byPayer": self._usage_breakdown(events, "paidBy"),
             "byModel": self._usage_breakdown(events, "modelName"),
             "byContext": self._usage_breakdown(events, "contextLabel"),
         }
+
+    @staticmethod
+    def _usage_scope_args(usage_scope: str, entity_id: int | None, user_id: int | None, days: int) -> tuple[Any, ...]:
+        return (
+            usage_scope,
+            usage_scope,
+            entity_id,
+            usage_scope,
+            user_id,
+            user_id,
+            max(1, int(days)),
+        )
 
     def get_system_settings(self, provider: str = "openai") -> dict[str, Any]:
         with self.database.connection() as conn:
@@ -837,6 +844,40 @@ class AIProviderStore:
             "errorMessage": row.get("error_message"),
             "decisionReason": row.get("decision_reason") or "",
             "latencyMs": int(row.get("latency_ms") or 0),
+        }
+
+    @staticmethod
+    def _usage_summary_row(row: dict[str, Any] | None) -> dict[str, Any]:
+        input_tokens = int((row or {}).get("input_tokens") or 0)
+        cached_input_tokens = int((row or {}).get("cached_input_tokens") or 0)
+        output_tokens = int((row or {}).get("output_tokens") or 0)
+        actual_cost = float((row or {}).get("actual_cost") or 0)
+        verified_cost = float((row or {}).get("verified_cost") or 0)
+        return {
+            "calls": int((row or {}).get("calls") or 0),
+            "successfulCalls": int((row or {}).get("successful_calls") or 0),
+            "tokens": input_tokens + cached_input_tokens + output_tokens,
+            "inputTokens": input_tokens,
+            "cachedInputTokens": cached_input_tokens,
+            "outputTokens": output_tokens,
+            "estimatedCost": round(float((row or {}).get("estimated_cost") or 0), 8),
+            "billableCost": round(actual_cost, 8),
+            "actualCost": round(actual_cost, 8),
+            "finalCost": round(verified_cost, 8),
+            "verifiedCost": round(verified_cost, 8),
+            "reconciledCalls": int((row or {}).get("reconciled_calls") or 0),
+        }
+
+    @staticmethod
+    def _usage_cost_timeline_row(row: dict[str, Any]) -> dict[str, Any]:
+        bucket_date = row.get("bucket_date")
+        return {
+            "date": bucket_date.isoformat() if bucket_date else "",
+            "calls": int(row.get("calls") or 0),
+            "reconciledCalls": int(row.get("reconciled_calls") or 0),
+            "estimatedCost": round(float(row.get("estimated_cost") or 0), 8),
+            "actualCost": round(float(row.get("actual_cost") or 0), 8),
+            "verifiedCost": round(float(row.get("verified_cost") or 0), 8),
         }
 
     @staticmethod
