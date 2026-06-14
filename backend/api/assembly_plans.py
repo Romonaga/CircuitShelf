@@ -18,6 +18,7 @@ from backend.services.circuit_graph import build_circuit_graph
 from backend.services.circuit_graph_ai import CircuitGraphAiEnrichmentService
 from backend.services.conversation_bench_plan_service import ConversationBenchPlanService
 from backend.services.ingestion_ai_review_service import estimate_local_tokens
+from backend.services.kicad_export import build_kicad_project_package
 from backend.services.openai_assist_utils import parse_json_object
 
 
@@ -272,6 +273,26 @@ def create_router(
         )
         graph["aiEnrichment"] = ai_enrichment
         return {"graph": graph}
+
+    @router.get("/api/assembly-plans/{plan_id}/kicad-project")
+    async def assembly_plan_kicad_project(plan_id: str, req: Request):
+        user, error = deps.require_authenticated_user(req)
+        if error:
+            return error
+        plan = assembly_plan_store.get(plan_id, deps.user_id_for_user(user))
+        if not plan:
+            return JSONResponse({"error": "Assembly plan not found."}, status_code=404)
+        graph = build_circuit_graph(plan)
+        package = build_kicad_project_package(plan, graph)
+        if not package.get("exportable"):
+            return JSONResponse(
+                {
+                    "error": "Circuit graph is not ready for KiCad export.",
+                    "package": package,
+                },
+                status_code=422,
+            )
+        return {"package": package}
 
     @router.get("/api/assembly-plans/{plan_id}/learning")
     async def assembly_learning_get(plan_id: str, req: Request):
