@@ -32,3 +32,6 @@ class OpenAIAssistService:
 
     def enrich_circuit_graph(self, **kwargs):
         return self.tasks.enrich_circuit_graph(**kwargs)
+
+    def synthesize_conversation_bench_plan(self, **kwargs):
+        return self.tasks.synthesize_conversation_bench_plan(**kwargs)

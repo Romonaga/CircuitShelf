@@ -53,7 +53,7 @@ export function AppViewRouter({
   return (
     <>
       <ViewPane activeView={activeView} view="ask" mounted>
-        <AskView config={config} isActive={activeView === "ask"} />
+        <AskView config={config} isActive={activeView === "ask"} setActiveView={setActiveView} />
       </ViewPane>
       <Suspense fallback={<main className="loading-screen compact"><LoadingSpinner /><p>Loading view...</p></main>}>
         <ViewPane activeView={activeView} view="bench" mounted={visitedViews.has("bench")}>

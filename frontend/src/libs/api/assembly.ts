@@ -1,4 +1,13 @@
-import type { AssemblyLearningSession, AssemblyPhotoCheck, AssemblyPlan, AssemblyPlanExport, AssemblyPlanSummary, AssemblyStepEvidence, BuildAssemblyPlanResponse } from "../../types";
+import type {
+  AssemblyLearningSession,
+  AssemblyPhotoCheck,
+  AssemblyPlan,
+  AssemblyPlanExport,
+  AssemblyPlanSummary,
+  AssemblyStepEvidence,
+  BuildAssemblyPlanResponse,
+  ConversationBenchPlanResponse,
+} from "../../types";
 import { requestJson } from "./core";
 
 export function getAssemblyPlans(): Promise<{ plans: AssemblyPlanSummary[] }> {
@@ -24,6 +33,16 @@ export function buildAssemblyPlan(payload: {
   strategy: string;
 }): Promise<BuildAssemblyPlanResponse> {
   return requestJson<BuildAssemblyPlanResponse>("/api/assembly-plans/build", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function createAssemblyPlanFromConversation(payload: {
+  conversationId: string;
+  objective?: string;
+}): Promise<ConversationBenchPlanResponse> {
+  return requestJson<ConversationBenchPlanResponse>("/api/assembly-plans/from-conversation", {
     method: "POST",
     body: JSON.stringify(payload)
   });

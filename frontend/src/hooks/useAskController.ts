@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { deleteConversation, getConversation, getConversations, getUserPreference, runQuery } from "../libs/api";
+import { createAssemblyPlanFromConversation, deleteConversation, getConversation, getConversations, getUserPreference, runQuery } from "../libs/api";
 import { ASK_RETRIEVAL_PREFERENCE_KEY, resolveAskPreferences, type AskRetrievalPreference } from "../libs/askPreferences";
+import { rememberBenchPlanSelection } from "../libs/benchSelection";
 import { errorMessage } from "../libs/errors";
 import { formatElapsed } from "../libs/time";
 import type { AppConfig, ChatTurn, ConversationSummary, QueryOptions, QueryResponse } from "../types";
@@ -60,6 +61,8 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
   const [conversationsBusy, setConversationsBusy] = useState(false);
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [busy, setBusy] = useState(false);
+  const [promoteBusy, setPromoteBusy] = useState(false);
+  const [promoteMessage, setPromoteMessage] = useState("");
   const [error, setError] = useState("");
 
   const elapsedSeconds = useElapsedSeconds(busy);
@@ -113,6 +116,7 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
     }
     setBusy(true);
     setError("");
+    setPromoteMessage("");
     try {
       const response = await runQuery({
         ...options,
@@ -138,6 +142,7 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
 
   async function selectConversation(conversationId: string) {
     setError("");
+    setPromoteMessage("");
     setBusy(true);
     try {
       const response = await getConversation(conversationId);
@@ -157,6 +162,7 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
 
   async function removeConversation(conversationId: string) {
     setError("");
+    setPromoteMessage("");
     try {
       await deleteConversation(conversationId);
       if (conversationId === activeConversationId) {
@@ -174,6 +180,33 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
     setContextChatHistory([]);
     setResult(null);
     setQuestion("");
+    setPromoteMessage("");
+  }
+
+  async function createBenchProjectFromConversation(onCreated?: () => void) {
+    if (!activeConversationId || promoteBusy) {
+      return;
+    }
+    setPromoteBusy(true);
+    setError("");
+    setPromoteMessage("");
+    try {
+      const response = await createAssemblyPlanFromConversation({
+        conversationId: activeConversationId,
+        objective: result?.question || question
+      });
+      if (!response.plan) {
+        setError(response.error || "No Bench plan was created.");
+        return;
+      }
+      rememberBenchPlanSelection(response.plan.id);
+      setPromoteMessage(`Bench project created: ${response.plan.title}`);
+      onCreated?.();
+    } catch (err) {
+      setError(errorMessage(err, "Could not create Bench project"));
+    } finally {
+      setPromoteBusy(false);
+    }
   }
 
   return {
@@ -183,7 +216,10 @@ export function useAskController({ config, isActive }: { config: AppConfig; isAc
     chatHistory,
     conversations,
     conversationsBusy,
+    createBenchProjectFromConversation,
     error,
+    promoteBusy,
+    promoteMessage,
     question,
     result,
     removeConversation,

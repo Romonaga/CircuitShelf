@@ -249,3 +249,44 @@ def test_bench_photo_verification_records_photo_check_usage(monkeypatch):
     assert store.events[0]["task_type"] == "photo_check"
     assert store.events[0]["context_type"] == "bench_photo_verification"
     assert store.events[0]["estimated_cost"] == 0.0123
+
+
+def test_conversation_bench_plan_synthesis_records_assembly_plan_usage(monkeypatch):
+    store = IngestionAssistStore()
+    service = OpenAIAssistService(store)
+
+    monkeypatch.setattr(
+        service.tasks,
+        "_create_response",
+        lambda **_kwargs: {
+            "output_text": (
+                '{"title":"555 LED flasher","componentName":"NE555","componentType":"timer",'
+                '"summary":"Blink an LED.","confidence":0.74,'
+                '"parts":[{"name":"NE555 timer IC","detail":"DIP"}],'
+                '"power":["Use 5V."],'
+                '"wiring":[{"from":"Pin 1 GND","to":"Ground rail","note":"Common ground","page":3},'
+                '{"from":"Pin 8 VCC","to":"5V rail","note":"Power","page":3}],'
+                '"checks":["Verify polarity"],"warnings":["Confirm pinout"],'
+                '"sourceNotes":[{"source":"training/ne555.pdf","pages":[3],"chunks":2}],'
+                '"useful":true,"escalateToOpenAI":false,"reason":"grounded"}'
+            ),
+            "usage": {"input_tokens": 130, "output_tokens": 45, "input_tokens_details": {"cached_tokens": 6}},
+        },
+    )
+
+    result = service.synthesize_conversation_bench_plan(
+        objective="Build a 555 LED flasher",
+        conversation={"id": "conv-1", "title": "555", "turns": [{"question": "build it", "answer": "use pins"}]},
+        source_payload=[{"source": "training/ne555.pdf", "displayName": "NE555", "pages": [3], "chunkCount": 2}],
+        local_review={"useful": True, "confidence": 0.31},
+        entity_id=4,
+        user_id=7,
+        enabled=True,
+        decision_reason="local Ask-to-Bench synthesis requested OpenAI escalation",
+    )
+
+    assert result["componentName"] == "NE555"
+    assert result["estimatedCost"] == 0.0123
+    assert store.events[0]["task_type"] == "assembly_plan"
+    assert store.events[0]["context_type"] == "conversation_to_bench"
+    assert store.events[0]["context_id"] == "conv-1"

@@ -152,3 +152,19 @@ export interface BuildAssemblyPlanResponse {
   averageQueryTime?: number | null;
   error?: string;
 }
+
+export interface ConversationBenchPlanResponse extends BuildAssemblyPlanResponse {
+  source?: string;
+  aiReview?: {
+    provider?: string;
+    model?: string | null;
+    useful?: boolean;
+    confidence?: number | null;
+    summary?: string;
+    warnings?: string[];
+    escalateToOpenAI?: boolean;
+    reason?: string;
+    estimatedCost?: number | null;
+    paidBy?: string | null;
+  } | null;
+}
