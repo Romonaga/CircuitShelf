@@ -5838,6 +5838,119 @@ nav {
   line-height: 1;
 }
 
+.ai-cost-graph {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-cost-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.ai-cost-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-cost-legend i {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.ai-cost-legend .estimated,
+.ai-cost-bar-track .estimated {
+  background: var(--accent);
+}
+
+.ai-cost-legend .actual,
+.ai-cost-bar-track .actual {
+  background: var(--accent-green);
+}
+
+.ai-cost-legend .verified,
+.ai-cost-bar-track .verified {
+  background: var(--accent-hot);
+}
+
+.ai-cost-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-cost-row {
+  display: grid;
+  grid-template-columns: minmax(78px, 0.16fr) minmax(240px, 1fr) minmax(120px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.ai-cost-row strong {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.ai-cost-row small {
+  color: var(--muted);
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ai-cost-bar-stack {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ai-cost-bar-line {
+  display: grid;
+  grid-template-columns: 74px minmax(80px, 1fr) 86px;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.ai-cost-bar-line span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.ai-cost-bar-line em {
+  color: var(--ink);
+  font-style: normal;
+  font-weight: 850;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ai-cost-bar-track {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.ai-cost-bar-track b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
 .ai-usage-breakdown-layout {
   display: grid;
   grid-template-columns: minmax(320px, 0.9fr) minmax(520px, 1.4fr);
@@ -6420,6 +6533,8 @@ nav {
   }
 
   .policy-grid,
+  .ai-cost-row,
+  .ai-cost-bar-line,
   .ai-provider-grid,
   .ai-provider-grid.compact,
   .ai-key-row,

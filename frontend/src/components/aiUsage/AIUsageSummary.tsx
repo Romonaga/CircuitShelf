@@ -9,6 +9,8 @@ export function AIUsageSummary({ report, scope }: { report?: AIUsageReport | nul
   const successRate = summary?.calls ? Math.round(((summary.successfulCalls || 0) / summary.calls) * 100) : 0;
   const inputTokens = (summary?.inputTokens ?? 0) + (summary?.cachedInputTokens ?? 0);
   const reconciledCalls = summary?.reconciledCalls ?? 0;
+  const actualCost = summary?.actualCost ?? summary?.billableCost ?? 0;
+  const verifiedCost = summary?.verifiedCost ?? summary?.finalCost ?? 0;
   return (
     <section className="ai-usage-hero">
       <div className="ai-usage-scope-card">
@@ -20,7 +22,8 @@ export function AIUsageSummary({ report, scope }: { report?: AIUsageReport | nul
         <span>Estimated spend</span>
         <strong>{money(summary?.estimatedCost)}</strong>
         <div className="ai-usage-spend-meta">
-          <span>{money(summary?.billableCost)} billable</span>
+          <span>{money(actualCost)} actual</span>
+          <span>{money(verifiedCost)} verified</span>
           <span>{formatInteger(summary?.calls)} calls</span>
           <span>{formatInteger(summary?.tokens)} total tokens</span>
           <span>{successRate}% successful</span>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -146,3 +146,51 @@ def test_usage_event_row_exposes_reconciliation_fields():
     assert event["costStatus"] == "adjusted"
     assert event["costDiscrepancy"] == 0.0025
     assert event["reconciliationRunId"] == "11111111-1111-1111-1111-111111111111"
+
+
+def test_usage_summary_row_exposes_estimated_actual_and_verified_costs():
+    row = {
+        "calls": 614,
+        "successful_calls": 612,
+        "input_tokens": 1000,
+        "cached_input_tokens": 25,
+        "output_tokens": 250,
+        "estimated_cost": Decimal("2.14801400"),
+        "actual_cost": Decimal("6.96919945"),
+        "verified_cost": Decimal("6.96919945"),
+        "reconciled_calls": 191,
+    }
+
+    summary = AIProviderStore(database=None, config_path="config/config.yaml")._usage_summary_row(row)
+
+    assert summary["calls"] == 614
+    assert summary["successfulCalls"] == 612
+    assert summary["tokens"] == 1275
+    assert summary["estimatedCost"] == 2.148014
+    assert summary["actualCost"] == 6.96919945
+    assert summary["billableCost"] == 6.96919945
+    assert summary["verifiedCost"] == 6.96919945
+    assert summary["finalCost"] == 6.96919945
+    assert summary["reconciledCalls"] == 191
+
+
+def test_usage_cost_timeline_row_maps_daily_cost_comparison():
+    row = {
+        "bucket_date": date(2026, 6, 13),
+        "calls": 25,
+        "reconciled_calls": 12,
+        "estimated_cost": Decimal("0.50"),
+        "actual_cost": Decimal("1.25"),
+        "verified_cost": Decimal("1.10"),
+    }
+
+    point = AIProviderStore(database=None, config_path="config/config.yaml")._usage_cost_timeline_row(row)
+
+    assert point == {
+        "date": "2026-06-13",
+        "calls": 25,
+        "reconciledCalls": 12,
+        "estimatedCost": 0.5,
+        "actualCost": 1.25,
+        "verifiedCost": 1.1,
+    }

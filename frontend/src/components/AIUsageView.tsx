@@ -5,6 +5,7 @@ import { downloadBlob } from "../libs/download";
 import { errorMessage } from "../libs/errors";
 import { type AIUsageScope, useAIUsageReport } from "../hooks/useAIUsageReport";
 import { AIUsageBreakdownGrid } from "./aiUsage/AIUsageBreakdownGrid";
+import { AIUsageCostGraph } from "./aiUsage/AIUsageCostGraph";
 import { AIUsageSummary } from "./aiUsage/AIUsageSummary";
 import { AIUsageEventsTable } from "./AIUsageEventsTable";
 import { ErrorMessage } from "./ErrorMessage";
@@ -61,6 +62,7 @@ export function AIUsageView({
       <ErrorMessage message={report.error} />
       <ErrorMessage message={exportError} />
       <AIUsageSummary report={report.report} scope={scope} />
+      <AIUsageCostGraph report={report.report} />
       <AIUsageBreakdownGrid report={report.report} />
       <AIUsageEventsTable events={report.report?.events ?? []} />
     </section>
