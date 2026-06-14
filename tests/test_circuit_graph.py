@@ -126,6 +126,7 @@ def test_circuit_graph_endpoint_returns_graph_for_owned_plan():
         create_router(
             deps,
             assembly_plan_store=Store(),
+            conversation_store=None,
             bench_tools=SimpleNamespace(build_assembly_export=lambda plan, format: {}),
             openai_assist_service=None,
             get_rag_response=lambda **kwargs: None,

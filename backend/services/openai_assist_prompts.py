@@ -64,6 +64,17 @@ CIRCUIT_GRAPH_ENRICHMENT_INSTRUCTIONS = (
     "Use only the provided assembly plan and graph. Do not invent unsupported electronics facts."
 )
 
+LOCAL_CONVERSATION_BENCH_PLAN_SYSTEM_PROMPT = (
+    "You are CircuitShelf's local Ask-to-Bench plan synthesizer. Return strict JSON only. "
+    "Use only the conversation transcript and retrieved source summaries. Be conservative: "
+    "do not invent pins, voltages, component values, or safety-critical steps."
+)
+
+CONVERSATION_BENCH_PLAN_INSTRUCTIONS = (
+    "You are CircuitShelf's Ask-to-Bench plan synthesizer. Return strict JSON only. "
+    "Use only the conversation transcript and retrieved source summaries. Do not invent unsupported electronics facts."
+)
+
 LOCAL_PROJECT_FINDER_TRIAGE_SYSTEM_PROMPT = (
     "You are CircuitShelf's local Project Finder triage reviewer. Return compact JSON only. "
     "Review whether low-confidence electronics project candidates are useful and grounded. "
@@ -269,4 +280,75 @@ def build_circuit_graph_enrichment_prompt(
         f"Assembly plan: {json.dumps(compact_plan, sort_keys=True)[:12000]}\n\n"
         f"Current graph: {json.dumps(compact_graph, sort_keys=True)[:12000]}\n\n"
         f"Local review: {json.dumps(local_review or {}, sort_keys=True)[:5000]}"
+    )
+
+
+def build_conversation_bench_plan_prompt(
+    *,
+    objective: str,
+    conversation: dict[str, Any],
+    source_payload: list[dict[str, Any]],
+    local_review: dict[str, Any] | None = None,
+) -> str:
+    turns = []
+    for turn in (conversation.get("turns") or [])[-10:]:
+        turns.append(
+            {
+                "ordinal": turn.get("ordinal"),
+                "question": str(turn.get("question") or "")[:1800],
+                "answer": str(turn.get("answer") or "")[:2400],
+                "confidence": turn.get("confidence"),
+            }
+        )
+    sources = []
+    for source in (source_payload or [])[:12]:
+        chunks = []
+        for chunk in source.get("chunks") or []:
+            chunks.append(
+                {
+                    "page": chunk.get("page"),
+                    "section": chunk.get("section"),
+                    "preview": str(chunk.get("preview") or "")[:420],
+                }
+            )
+        sources.append(
+            {
+                "source": source.get("source"),
+                "displayName": source.get("displayName"),
+                "pages": source.get("pages") or [],
+                "chunkCount": source.get("chunkCount") or source.get("chunks") or 0,
+                "chunks": chunks[:4],
+            }
+        )
+    payload = {
+        "objective": objective,
+        "conversationTitle": conversation.get("title"),
+        "turns": turns,
+        "sources": sources,
+        "localReview": local_review or {},
+        "schema": {
+            "title": "short bench project title",
+            "componentName": "main component or project family",
+            "componentType": "component category",
+            "summary": "one paragraph",
+            "confidence": 0.0,
+            "parts": [{"name": "part", "detail": "why/value/package"}],
+            "power": ["power note"],
+            "wiring": [{"from": "pin/component/rail", "to": "pin/component/rail", "note": "specific instruction", "page": None}],
+            "checks": ["verification step"],
+            "warnings": ["safety, evidence, or uncertainty warning"],
+            "sourceNotes": [{"source": "source path/name", "pages": [1], "chunks": 1}],
+            "useful": True,
+            "escalateToOpenAI": False,
+            "reason": "short reason",
+        },
+    }
+    return (
+        "Create one CircuitShelf Bench assembly plan JSON object from this Ask conversation. "
+        "Only produce a plan when the conversation contains a concrete low-voltage electronics project or wiring objective. "
+        "Prefer pin-by-pin wiring only when the conversation or source evidence supports it. "
+        "If required pins, component values, or safety-critical information are missing, include warnings and checks. "
+        "If a useful plan cannot be formed, return JSON with useful=false, escalateToOpenAI as appropriate, and reason. "
+        "Do not use a fixed recipe for any specific chip unless the conversation calls for it.\n\n"
+        f"{json.dumps(payload, ensure_ascii=False)}"
     )

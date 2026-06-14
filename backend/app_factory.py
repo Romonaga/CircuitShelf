@@ -125,6 +125,7 @@ def register_api_routes(
     app.include_router(assembly_plans_api.create_router(
         api_dependencies,
         assembly_plan_store=assembly_plan_store,
+        conversation_store=conversation_store,
         bench_tools=bench_tools,
         openai_assist_service=openai_assist_service,
         get_rag_response=get_rag_response,
@@ -135,6 +136,7 @@ def register_api_routes(
         recovery_system_prompt=recovery_system_prompt,
         default_model=default_model,
         username_for_user=username_for_user,
+        trace_logger=trace_logger,
     ))
     app.include_router(documents_api.create_router(
         api_dependencies,

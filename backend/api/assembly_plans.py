@@ -16,6 +16,7 @@ from backend.services.assembly_learning_service import build_learning_payload, u
 from backend.services.assembly_plan_build_service import AssemblyPlanBuildService
 from backend.services.circuit_graph import build_circuit_graph
 from backend.services.circuit_graph_ai import CircuitGraphAiEnrichmentService
+from backend.services.conversation_bench_plan_service import ConversationBenchPlanService
 from backend.services.ingestion_ai_review_service import estimate_local_tokens
 from backend.services.openai_assist_utils import parse_json_object
 
@@ -27,6 +28,11 @@ class AssemblyBuildRequest(BaseModel):
     distanceThreshold: float = 4.0
     maxTokens: int = 1800
     strategy: str = "Vector + CrossEncoder"
+
+
+class ConversationBenchPlanRequest(BaseModel):
+    conversationId: str = ""
+    objective: str = ""
 
 
 class StepUpdateRequest(BaseModel):
@@ -47,6 +53,7 @@ def create_router(
     deps: ApiDependencies,
     *,
     assembly_plan_store: Any,
+    conversation_store: Any,
     bench_tools: Any,
     openai_assist_service: Any | None,
     get_rag_response: Callable[..., Any],
@@ -57,6 +64,7 @@ def create_router(
     recovery_system_prompt: str,
     default_model: str,
     username_for_user: Callable[[Any], str | None],
+    trace_logger: Any = None,
 ) -> APIRouter:
     router = APIRouter()
     build_service = AssemblyPlanBuildService(
@@ -73,6 +81,16 @@ def create_router(
         openai_assist_service=openai_assist_service,
         query_local_llm=query_ollama_chat_with_retry,
         local_model_name=default_model,
+        trace_logger=trace_logger,
+    )
+    conversation_bench_service = ConversationBenchPlanService(
+        conversation_store=conversation_store,
+        assembly_plan_store=assembly_plan_store,
+        ai_provider_store=deps.ai_provider_store,
+        openai_assist_service=openai_assist_service,
+        query_local_llm=query_ollama_chat_with_retry,
+        local_model_name=default_model,
+        trace_logger=trace_logger,
     )
 
     @router.get("/api/assembly-plans")
@@ -145,6 +163,39 @@ def create_router(
             "averageQueryTime": result.get("averageQueryTime"),
             "cacheStats": result.get("cacheStats"),
             "chatHistory": result.get("chatHistory"),
+            "validation": result.get("validation"),
+        }
+
+    @router.post("/api/assembly-plans/from-conversation")
+    async def assembly_plan_from_conversation(req: Request, payload: ConversationBenchPlanRequest):
+        user, entity, error = deps.require_entity_member(req)
+        if error:
+            return error
+        conversation_id = payload.conversationId.strip()
+        if not conversation_id:
+            return JSONResponse({"error": "Conversation id is required."}, status_code=400)
+        user_id = deps.user_id_for_user(user)
+        result = await run_in_threadpool(
+            conversation_bench_service.create_plan,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            username=username_for_user(user),
+            entity_id=entity.entity_id,
+            objective_override=payload.objective,
+        )
+        if not result.get("ok"):
+            return JSONResponse(
+                {
+                    "error": result.get("error") or "Conversation could not be converted into a Bench plan.",
+                    "aiReview": result.get("aiReview"),
+                    "validation": result.get("validation"),
+                },
+                status_code=int(result.get("status") or 422),
+            )
+        return {
+            "plan": result.get("plan"),
+            "source": result.get("source"),
+            "aiReview": result.get("aiReview"),
             "validation": result.get("validation"),
         }
 

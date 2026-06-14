@@ -8,6 +8,7 @@ from backend.services.openai_assist_prompts import (
     ANSWER_VALIDATION_INSTRUCTIONS,
     BENCH_PHOTO_VERIFICATION_INSTRUCTIONS,
     CIRCUIT_GRAPH_ENRICHMENT_INSTRUCTIONS,
+    CONVERSATION_BENCH_PLAN_INSTRUCTIONS,
     DATASHEET_REPAIR_INSTRUCTIONS,
     FALLBACK_ANSWER_INSTRUCTIONS,
     INGESTION_REVIEW_INSTRUCTIONS,
@@ -15,6 +16,7 @@ from backend.services.openai_assist_prompts import (
     PROJECT_FINDER_TRIAGE_INSTRUCTIONS,
     build_bench_photo_verification_prompt,
     build_circuit_graph_enrichment_prompt,
+    build_conversation_bench_plan_prompt,
     build_datasheet_repair_prompt,
     build_fallback_answer_prompt,
     build_ingestion_review_prompt,
@@ -568,6 +570,64 @@ class OpenAIAssistTaskRunner(OpenAIAssistAccountingMixin):
             self._record_ai_failure(event_base, message, latency_ms=int((time.time() - started_at) * 1000))
             if self.logger:
                 self.logger.warning(f"OpenAI circuit graph enrichment failed: {message}")
+            return None
+
+    def synthesize_conversation_bench_plan(
+        self,
+        *,
+        objective: str,
+        conversation: dict[str, Any],
+        source_payload: list[dict[str, Any]],
+        local_review: dict[str, Any] | None,
+        entity_id: int | None,
+        user_id: int | None,
+        enabled: bool,
+        decision_reason: str,
+    ) -> dict[str, Any] | None:
+        if not enabled:
+            return None
+        settings = self.ai_provider_store.resolve_openai_assist(entity_id=entity_id, user_id=user_id)
+        if not settings or not settings.get("apiKey") or settings.get("assistMode") == "off":
+            return None
+        event_base = self._assist_event_base(
+            settings=settings,
+            entity_id=entity_id,
+            user_id=user_id,
+            task_type="assembly_plan",
+            context_type="conversation_to_bench",
+            context_id=str(conversation.get("id") or ""),
+            decision_reason=decision_reason,
+        )
+        if self._record_budget_block_if_needed(event_base, settings):
+            return None
+        started_at = time.time()
+        try:
+            data = self._create_response(
+                api_key=settings["apiKey"],
+                model=settings["modelName"],
+                instructions=CONVERSATION_BENCH_PLAN_INSTRUCTIONS,
+                input_text=build_conversation_bench_plan_prompt(
+                    objective=objective,
+                    conversation=conversation,
+                    source_payload=source_payload,
+                    local_review=local_review,
+                ),
+                max_output_tokens=1800,
+            )
+            usage = extract_usage(data)
+            estimated_cost = self._estimate_openai_cost(settings, usage)
+            parsed = parse_json_object(extract_response_text(data))
+            self._record_ai_success(event_base, usage, estimated_cost, latency_ms=int((time.time() - started_at) * 1000))
+            parsed["provider"] = "openai"
+            parsed["model"] = settings["modelName"]
+            parsed["paidBy"] = settings["paidBy"]
+            parsed["estimatedCost"] = estimated_cost
+            return parsed
+        except Exception as exc:
+            message = safe_error_message(exc)
+            self._record_ai_failure(event_base, message, latency_ms=int((time.time() - started_at) * 1000))
+            if self.logger:
+                self.logger.warning(f"OpenAI Ask-to-Bench synthesis failed: {message}")
             return None
 
     def _create_response(
