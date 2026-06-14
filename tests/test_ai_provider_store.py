@@ -83,3 +83,40 @@ def test_ai_provider_encryption_secret_requires_configuration(monkeypatch, tmp_p
 
     with pytest.raises(RuntimeError, match="AI key encryption secret"):
         store.encryption_secret()
+
+
+def test_ai_provider_settings_row_exposes_admin_key_preview():
+    row = {
+        "provider_code": "openai",
+        "enabled": True,
+        "key_preview": "sk-live...1234",
+        "admin_key_preview": "sk-admin...5678",
+        "key_policy": "system",
+        "assist_mode": "auto",
+        "default_model": "gpt-5-chat-latest",
+        "monthly_budget": 0,
+        "warn_percent": 80,
+        "stop_percent": 100,
+        "updated_at": None,
+        "entity_id": None,
+        "user_id": None,
+    }
+    store = AIProviderStore(database=None, config_path="config/config.yaml")
+    store.pricing_overrides = lambda **kwargs: []
+
+    settings = store._settings_row(row, scope="system", provider="openai")
+
+    assert settings["hasAdminApiKey"] is True
+    assert settings["adminKeyPreview"] == "sk-admin...5678"
+    assert "adminApiKey" not in settings
+
+
+def test_ai_provider_admin_api_key_for_provider_uses_system_secret_row(monkeypatch):
+    store = AIProviderStore(database=None, config_path="config/config.yaml")
+    monkeypatch.setattr(
+        store,
+        "_secret_row",
+        lambda scope, *, provider, entity_id=None, user_id=None: {"adminApiKey": "admin-secret"} if scope == "system" and provider == "openai" else None,
+    )
+
+    assert store.admin_api_key_for_provider("openai") == "admin-secret"

@@ -8,6 +8,7 @@ export function AIUsageSummary({ report, scope }: { report?: AIUsageReport | nul
   const summary = report?.summary;
   const successRate = summary?.calls ? Math.round(((summary.successfulCalls || 0) / summary.calls) * 100) : 0;
   const inputTokens = (summary?.inputTokens ?? 0) + (summary?.cachedInputTokens ?? 0);
+  const reconciledCalls = summary?.reconciledCalls ?? 0;
   return (
     <section className="ai-usage-hero">
       <div className="ai-usage-scope-card">
@@ -19,6 +20,7 @@ export function AIUsageSummary({ report, scope }: { report?: AIUsageReport | nul
         <span>Estimated spend</span>
         <strong>{money(summary?.estimatedCost)}</strong>
         <div className="ai-usage-spend-meta">
+          <span>{money(summary?.billableCost)} billable</span>
           <span>{formatInteger(summary?.calls)} calls</span>
           <span>{formatInteger(summary?.tokens)} total tokens</span>
           <span>{successRate}% successful</span>
@@ -27,7 +29,7 @@ export function AIUsageSummary({ report, scope }: { report?: AIUsageReport | nul
       <div className="ai-usage-token-strip">
         <AIUsageMetric label="Input + cached" value={formatInteger(inputTokens)} />
         <AIUsageMetric label="Output" value={formatInteger(summary?.outputTokens)} />
-        <AIUsageMetric label="Successful" value={formatInteger(summary?.successfulCalls)} />
+        <AIUsageMetric label="Reconciled" value={formatInteger(reconciledCalls)} />
       </div>
     </section>
   );

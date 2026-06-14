@@ -4,7 +4,12 @@ SELECT p.code AS provider_code,
            WHEN s.encrypted_api_key = '' THEN ''
            ELSE pgp_sym_decrypt(decode(s.encrypted_api_key, 'base64'), %s::text)
        END AS api_key,
+       CASE
+           WHEN s.encrypted_admin_api_key = '' THEN ''
+           ELSE pgp_sym_decrypt(decode(s.encrypted_admin_api_key, 'base64'), %s::text)
+       END AS admin_api_key,
        s.key_preview,
+       s.admin_key_preview,
        am.code AS assist_mode,
        s.default_model
 FROM system_ai_provider_settings s

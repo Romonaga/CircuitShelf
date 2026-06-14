@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 import json
 
+from backend.services.ai_cost_reconciliation import EventCostUpdate, UsageCostEvent
 from db.ai_key_secret import load_ai_key_encryption_secret
 from db.connection import Database
 from db.sql import load_query
@@ -299,6 +302,12 @@ class AIProviderStore:
             return ""
         return str(row.get("apiKey") or "")
 
+    def admin_api_key_for_provider(self, provider: str = "openai") -> str:
+        row = self._secret_row("system", provider=provider)
+        if not row:
+            return ""
+        return str(row.get("adminApiKey") or "")
+
     def record_ai_assist_event(
         self,
         *,
@@ -349,6 +358,91 @@ class AIProviderStore:
                 ),
             ).fetchone()
         return int(row["id"]) if row else None
+
+    def list_openai_events_for_reconciliation(self, *, start_time: datetime, end_time: datetime) -> list[UsageCostEvent]:
+        with self.database.connection() as conn:
+            rows = conn.execute(load_query("ai_assist_events_for_reconciliation.sql"), (start_time, end_time)).fetchall()
+        return [
+            UsageCostEvent(
+                event_id=int(row["id"]),
+                created_at=row["created_at"],
+                provider=row["provider"],
+                model_name=row["model_name"] or "",
+                estimated_cost_usd=Decimal(str(row["estimated_cost"] or "0")),
+            )
+            for row in rows
+        ]
+
+    def create_cost_reconciliation_run(
+        self,
+        *,
+        provider: str,
+        source: str,
+        start_time: datetime,
+        end_time: datetime,
+        bucket_width: str,
+        allocation_method: str,
+        created_by: int | None = None,
+    ) -> str:
+        with self.database.connection() as conn:
+            row = conn.execute(
+                load_query("ai_cost_reconciliation_run_insert.sql"),
+                (
+                    provider,
+                    source,
+                    start_time,
+                    end_time,
+                    bucket_width,
+                    allocation_method,
+                    created_by,
+                ),
+            ).fetchone()
+        return str(row["id"])
+
+    def apply_cost_reconciliation_updates(self, updates: list[EventCostUpdate]) -> None:
+        if not updates:
+            return
+        with self.database.connection() as conn:
+            query = load_query("ai_assist_event_reconciliation_update.sql")
+            for update in updates:
+                conn.execute(
+                    query,
+                    (
+                        update.final_cost_usd,
+                        update.cost_status,
+                        update.cost_discrepancy_usd,
+                        update.reconciliation_run_id,
+                        update.allocation_method,
+                        update.event_id,
+                    ),
+                )
+
+    def complete_cost_reconciliation_run(
+        self,
+        *,
+        run_id: str,
+        verified_cost: Decimal,
+        estimated_cost: Decimal,
+        event_count: int,
+        raw_provider_payload: dict[str, Any],
+    ) -> None:
+        discrepancy = Decimal(str(verified_cost)) - Decimal(str(estimated_cost))
+        with self.database.connection() as conn:
+            conn.execute(
+                load_query("ai_cost_reconciliation_run_complete.sql"),
+                (
+                    Decimal(str(verified_cost)),
+                    Decimal(str(estimated_cost)),
+                    discrepancy,
+                    int(event_count or 0),
+                    json.dumps(raw_provider_payload or {}),
+                    run_id,
+                ),
+            )
+
+    def fail_cost_reconciliation_run(self, *, run_id: str, error_message: str) -> None:
+        with self.database.connection() as conn:
+            conn.execute(load_query("ai_cost_reconciliation_run_fail.sql"), (str(error_message or "")[:2000], run_id))
 
     def record_document_ingest_ai_review(
         self,
@@ -402,6 +496,8 @@ class AIProviderStore:
             ).fetchall()
         events = [self._usage_event_row(row) for row in rows]
         total_cost = sum(event["estimatedCost"] for event in events)
+        billable_cost = sum(event["billableCost"] for event in events)
+        final_cost = sum((event["finalCost"] or 0) for event in events)
         total_tokens = sum(event["inputTokens"] + event["cachedInputTokens"] + event["outputTokens"] for event in events)
         return {
             "events": events,
@@ -413,6 +509,9 @@ class AIProviderStore:
                 "cachedInputTokens": sum(event["cachedInputTokens"] for event in events),
                 "outputTokens": sum(event["outputTokens"] for event in events),
                 "estimatedCost": round(total_cost, 8),
+                "billableCost": round(billable_cost, 8),
+                "finalCost": round(final_cost, 8),
+                "reconciledCalls": sum(1 for event in events if event["finalCost"] is not None),
             },
             "byTask": self._usage_breakdown(events, "taskLabel"),
             "byUser": self._usage_breakdown(events, "username"),
@@ -438,9 +537,15 @@ class AIProviderStore:
 
     def save_system_settings(self, payload: dict[str, Any], updated_by: int | None, provider: str = "openai") -> dict[str, Any]:
         ids = self._lookup_ids(provider, payload.get("assistMode") or "auto", "system")
+        current = self.get_system_settings(provider)
         api_key = payload.get("apiKey")
         clear_key = bool(payload.get("clearApiKey"))
-        key_value, preview, update_key = self._key_update(api_key, clear_key, self.get_system_settings(provider).get("keyPreview", ""))
+        key_value, preview, update_key = self._key_update(api_key, clear_key, current.get("keyPreview", ""))
+        admin_key_value, admin_preview, update_admin_key = self._key_update(
+            payload.get("adminApiKey"),
+            bool(payload.get("clearAdminApiKey")),
+            current.get("adminKeyPreview", ""),
+        )
         with self.database.connection() as conn:
             conn.execute(
                 load_query("system_ai_provider_upsert.sql"),
@@ -459,6 +564,19 @@ class AIProviderStore:
                     update_key,
                 ),
             )
+            if update_admin_key:
+                conn.execute(
+                    load_query("system_ai_provider_admin_key_update.sql"),
+                    (
+                        admin_key_value,
+                        admin_key_value,
+                        admin_key_value,
+                        self.encryption_secret(),
+                        admin_preview,
+                        updated_by,
+                        provider,
+                    ),
+                )
         if isinstance(payload.get("pricingOverrides"), list):
             self.save_pricing_overrides(
                 scope="system",
@@ -567,7 +685,8 @@ class AIProviderStore:
     ) -> dict[str, Any] | None:
         try:
             if scope == "system":
-                args = (self.encryption_secret(), provider)
+                secret = self.encryption_secret()
+                args = (secret, secret, provider)
                 query = "system_ai_provider_secret_get.sql"
             elif scope == "entity":
                 if entity_id is None:
@@ -594,7 +713,9 @@ class AIProviderStore:
             "provider": row["provider_code"],
             "enabled": bool(row["enabled"]),
             "apiKey": row.get("api_key") or "",
+            "adminApiKey": row.get("admin_api_key") or "",
             "keyPreview": row.get("key_preview") or "",
+            "adminKeyPreview": row.get("admin_key_preview") or "",
             "keyPolicy": row.get("key_policy") or ("system" if scope == "system" else scope),
             "assistMode": row.get("assist_mode") or "auto",
             "defaultModel": row.get("default_model") or "",
@@ -645,16 +766,18 @@ class AIProviderStore:
                 "provider": provider,
                 "enabled": False,
                 "hasApiKey": False,
+                "hasAdminApiKey": False,
                 "keyPreview": "",
+                "adminKeyPreview": "",
                 "keyPolicy": "system" if scope == "system" else ("entity" if scope == "entity" else "user_when_available"),
                 "assistMode": "auto",
                 "defaultModel": "",
                 "monthlyBudget": 0,
                 "warnPercent": 80,
                 "stopPercent": 100,
-            "updatedAt": None,
-            "pricingOverrides": [],
-        }
+                "updatedAt": None,
+                "pricingOverrides": [],
+            }
         scope_entity_id = int(row.get("entity_id")) if row.get("entity_id") is not None else None
         scope_user_id = int(row.get("user_id")) if row.get("user_id") is not None else None
         return {
@@ -662,7 +785,9 @@ class AIProviderStore:
             "provider": row["provider_code"],
             "enabled": bool(row["enabled"]),
             "hasApiKey": bool(row["key_preview"]),
+            "hasAdminApiKey": bool(row.get("admin_key_preview")),
             "keyPreview": row["key_preview"] or "",
+            "adminKeyPreview": row.get("admin_key_preview") or "",
             "keyPolicy": row.get("key_policy") or ("system" if scope == "system" else "entity"),
             "assistMode": row["assist_mode"],
             "defaultModel": row["default_model"] or "",
@@ -699,6 +824,12 @@ class AIProviderStore:
             "cachedInputTokens": int(row.get("cached_input_tokens") or 0),
             "outputTokens": int(row.get("output_tokens") or 0),
             "estimatedCost": float(row.get("estimated_cost") or 0),
+            "finalCost": float(row["final_cost"]) if row.get("final_cost") is not None else None,
+            "billableCost": float(row["final_cost"]) if row.get("final_cost") is not None else float(row.get("estimated_cost") or 0),
+            "costStatus": row.get("cost_status") or "estimated",
+            "costDiscrepancy": float(row.get("cost_discrepancy") or 0),
+            "reconciliationRunId": str(row.get("reconciliation_run_id")) if row.get("reconciliation_run_id") else "",
+            "allocationMethod": row.get("allocation_method") or "",
             "paidBy": row.get("paid_by") or "unknown",
             "providerKeyOwnerUserId": row.get("provider_key_owner_user_id"),
             "providerKeyOwnerUsername": row.get("provider_key_owner_username"),

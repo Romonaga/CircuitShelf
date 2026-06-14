@@ -17,7 +17,8 @@ export function AIProviderSettingsPanel({
   saveSettings,
   canManage,
   showKeyPolicy = true,
-  showBudget = true
+  showBudget = true,
+  showAdminKey = false
 }: {
   title: string;
   description: string;
@@ -27,11 +28,14 @@ export function AIProviderSettingsPanel({
   canManage: boolean;
   showKeyPolicy?: boolean;
   showBudget?: boolean;
+  showAdminKey?: boolean;
 }) {
   const {
+    adminApiKey,
     apiKey,
     availableModels,
     busy,
+    clearAdminApiKey,
     clearApiKey,
     error,
     message,
@@ -42,7 +46,9 @@ export function AIProviderSettingsPanel({
     selectedPrice,
     settings,
     refreshAvailableModels,
+    setAdminApiKey,
     setApiKey,
+    setClearAdminApiKey,
     setClearApiKey,
     setSettings,
     submit,
@@ -68,6 +74,22 @@ export function AIProviderSettingsPanel({
         onApiKeyChange={setApiKey}
         onClearApiKeyChange={setClearApiKey}
       />
+      {showAdminKey ? (
+        <AIProviderKeyFields
+          apiKey={adminApiKey}
+          canManage={canManage}
+          clearApiKey={clearAdminApiKey}
+          settings={settings}
+          title={settings.hasAdminApiKey ? "Organization cost key stored" : "No organization cost key stored"}
+          preview={settings.adminKeyPreview}
+          emptyText="Paste an OpenAI admin key to use verified organization costs."
+          replaceLabel="Replace cost key"
+          clearLabel="Clear stored cost key"
+          placeholder="sk-..."
+          onApiKeyChange={setAdminApiKey}
+          onClearApiKeyChange={setClearAdminApiKey}
+        />
+      ) : null}
 
       {loadModels ? (
         <AIProviderModelRefresh

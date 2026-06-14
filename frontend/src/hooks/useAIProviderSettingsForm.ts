@@ -21,6 +21,8 @@ export function useAIProviderSettingsForm({
   const [availableModels, setAvailableModels] = useState<AIAvailableModel[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [clearApiKey, setClearApiKey] = useState(false);
+  const [adminApiKey, setAdminApiKey] = useState("");
+  const [clearAdminApiKey, setClearAdminApiKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refreshingModels, setRefreshingModels] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -100,6 +102,8 @@ export function useAIProviderSettingsForm({
         enabled: settings.enabled,
         apiKey: apiKey.trim() || undefined,
         clearApiKey,
+        adminApiKey: adminApiKey.trim() || undefined,
+        clearAdminApiKey,
         keyPolicy: settings.keyPolicy,
         assistMode: settings.assistMode,
         defaultModel: settings.defaultModel,
@@ -111,6 +115,8 @@ export function useAIProviderSettingsForm({
       setSettings(response.settings);
       setApiKey("");
       setClearApiKey(false);
+      setAdminApiKey("");
+      setClearAdminApiKey(false);
       setMessage("AI provider settings saved.");
     } catch (err) {
       setError(errorMessage(err, "Could not save AI provider settings"));
@@ -120,9 +126,11 @@ export function useAIProviderSettingsForm({
   }
 
   return {
+    adminApiKey,
     apiKey,
     availableModels,
     busy,
+    clearAdminApiKey,
     clearApiKey,
     error,
     message,
@@ -133,7 +141,9 @@ export function useAIProviderSettingsForm({
     selectedPrice,
     settings,
     refreshAvailableModels,
+    setAdminApiKey,
     setApiKey,
+    setClearAdminApiKey,
     setClearApiKey,
     setSettings,
     submit,

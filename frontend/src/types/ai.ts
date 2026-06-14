@@ -33,7 +33,9 @@ export interface AIProviderSettings {
   provider: string;
   enabled: boolean;
   hasApiKey: boolean;
+  hasAdminApiKey: boolean;
   keyPreview: string;
+  adminKeyPreview: string;
   keyPolicy: string;
   assistMode: string;
   defaultModel: string;
@@ -48,6 +50,8 @@ export interface AIProviderSettingsPayload {
   enabled: boolean;
   apiKey?: string;
   clearApiKey?: boolean;
+  adminApiKey?: string;
+  clearAdminApiKey?: boolean;
   keyPolicy?: string;
   assistMode: string;
   defaultModel: string;
@@ -83,6 +87,12 @@ export interface AIUsageEvent {
   cachedInputTokens: number;
   outputTokens: number;
   estimatedCost: number;
+  finalCost?: number | null;
+  billableCost: number;
+  costStatus: string;
+  costDiscrepancy: number;
+  reconciliationRunId?: string;
+  allocationMethod?: string;
   paidBy: string;
   providerKeyOwnerUserId?: number | null;
   providerKeyOwnerUsername?: string | null;
@@ -101,6 +111,9 @@ export interface AIUsageReport {
     cachedInputTokens: number;
     outputTokens: number;
     estimatedCost: number;
+    billableCost: number;
+    finalCost: number;
+    reconciledCalls: number;
   };
   byTask: AIUsageBreakdown[];
   byUser: AIUsageBreakdown[];

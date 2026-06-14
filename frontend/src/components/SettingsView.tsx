@@ -63,6 +63,7 @@ export function SettingsView() {
           canManage
           showKeyPolicy={false}
           showBudget={false}
+          showAdminKey
         />
       </div>
     </section>

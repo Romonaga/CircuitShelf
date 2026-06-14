@@ -1,6 +1,7 @@
 SELECT p.code AS provider_code,
        s.enabled,
        s.key_preview,
+       s.admin_key_preview,
        am.code AS assist_mode,
        s.default_model,
        s.updated_at
