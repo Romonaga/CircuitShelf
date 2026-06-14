@@ -4,11 +4,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
-from uuid import uuid4
 
 import requests
 
-MONEY_QUANT = Decimal("0.00000001")
+from backend.services.ai_billing_reconciliation import (
+    MONEY_QUANT,
+    BillingUsageEvent,
+    EventCostUpdate,
+    reconcile_costs,
+    verified_cost_from_openai_payload,
+)
 
 
 @dataclass(frozen=True)
@@ -25,17 +30,6 @@ class UsageCostEvent:
     provider_api_key_id: str = ""
 
 
-@dataclass(frozen=True)
-class EventCostUpdate:
-    event_id: int
-    estimated_cost_usd: Decimal
-    final_cost_usd: Decimal
-    cost_status: str
-    cost_discrepancy_usd: Decimal
-    reconciliation_run_id: str
-    allocation_method: str
-
-
 def reconcile_cost_bucket(
     events: list[UsageCostEvent],
     *,
@@ -44,44 +38,54 @@ def reconcile_cost_bucket(
     reconciliation_run_id: str | None = None,
     allocation_method: str = "estimated_cost_proportional",
 ) -> list[EventCostUpdate]:
-    billable_events = [event for event in events if event.provider == "openai"]
-    if not billable_events:
-        return []
-
-    run_id = reconciliation_run_id or str(uuid4())
-    verified = Decimal(str(verified_cost_usd)).quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
-    estimated_total = sum((event.estimated_cost_usd for event in billable_events), Decimal("0")).quantize(
-        MONEY_QUANT,
-        rounding=ROUND_HALF_UP,
-    )
-    total_discrepancy = (verified - estimated_total).quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
-    bucket_status = "verified" if abs(total_discrepancy) <= tolerance_usd else "adjusted"
-    allocated = _allocate_verified_costs(billable_events, verified)
-
-    updates: list[EventCostUpdate] = []
-    for event, final_cost in zip(billable_events, allocated, strict=True):
-        discrepancy = (final_cost - event.estimated_cost_usd).quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
-        updates.append(
-            EventCostUpdate(
-                event_id=event.event_id,
-                estimated_cost_usd=event.estimated_cost_usd,
-                final_cost_usd=final_cost,
-                cost_status=bucket_status,
-                cost_discrepancy_usd=discrepancy,
-                reconciliation_run_id=run_id,
-                allocation_method=allocation_method,
-            )
+    billing_events = [
+        BillingUsageEvent(
+            event_id=event.event_id,
+            created_at=event.created_at,
+            provider=event.provider,
+            model_name=event.model_name,
+            estimated_cost_usd=event.estimated_cost_usd,
+            input_tokens=event.input_tokens,
+            cached_input_tokens=event.cached_input_tokens,
+            output_tokens=event.output_tokens,
+            provider_project_id=event.provider_project_id,
+            provider_api_key_id=event.provider_api_key_id,
         )
-    return updates
+        for event in events
+    ]
+    return reconcile_costs(
+        billing_events,
+        verified_cost_usd=Decimal(str(verified_cost_usd)).quantize(MONEY_QUANT, rounding=ROUND_HALF_UP),
+        tolerance_usd=tolerance_usd,
+        reconciliation_run_id=reconciliation_run_id,
+        allocation_method=allocation_method,
+    ).updates
 
 
-def verified_cost_from_openai_payload(payload: dict[str, Any]) -> Decimal:
-    total = Decimal("0")
-    for bucket in payload.get("data") or []:
-        for result in bucket.get("results") or []:
-            amount = result.get("amount") or {}
-            total += Decimal(str(amount.get("value") or "0"))
-    return total.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
+def reconciliation_diagnostics(
+    events: list[UsageCostEvent],
+    *,
+    verified_cost_usd: Decimal,
+) -> dict[str, Any]:
+    result = reconcile_costs(
+        [
+            BillingUsageEvent(
+                event_id=event.event_id,
+                created_at=event.created_at,
+                provider=event.provider,
+                model_name=event.model_name,
+                estimated_cost_usd=event.estimated_cost_usd,
+                input_tokens=event.input_tokens,
+                cached_input_tokens=event.cached_input_tokens,
+                output_tokens=event.output_tokens,
+                provider_project_id=event.provider_project_id,
+                provider_api_key_id=event.provider_api_key_id,
+            )
+            for event in events
+        ],
+        verified_cost_usd=verified_cost_usd,
+    )
+    return result.diagnostics.as_dict()
 
 
 class OpenAIOrganizationUsageClient:
@@ -145,24 +149,3 @@ class OpenAIOrganizationUsageClient:
             if not payload.get("has_more") or not page:
                 return {"object": "page", "data": buckets, "has_more": False, "next_page": None}
 
-
-def _allocate_verified_costs(events: list[UsageCostEvent], verified_cost_usd: Decimal) -> list[Decimal]:
-    if len(events) == 1:
-        return [verified_cost_usd.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)]
-
-    estimated_total = sum((event.estimated_cost_usd for event in events), Decimal("0"))
-    if estimated_total <= 0:
-        weights = [Decimal(1) / Decimal(len(events)) for _ in events]
-    else:
-        weights = [event.estimated_cost_usd / estimated_total for event in events]
-
-    allocated: list[Decimal] = []
-    remaining = verified_cost_usd
-    for index, weight in enumerate(weights):
-        if index == len(weights) - 1:
-            final_cost = remaining
-        else:
-            final_cost = (verified_cost_usd * weight).quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
-            remaining -= final_cost
-        allocated.append(final_cost.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP))
-    return allocated

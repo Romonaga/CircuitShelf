@@ -5,6 +5,16 @@ from decimal import Decimal
 
 import pytest
 
+from backend.services.ai_billing_reconciliation import (
+    BillingCapture,
+    BillingPricing,
+    BillingReconciliationFilters,
+    BillingUsageEvent,
+    capture_from_openai_response,
+    capture_from_openai_response_payload,
+    estimate_event_cost,
+    reconcile_costs,
+)
 from backend.services.ai_cost_reconciliation import (
     OpenAIOrganizationUsageClient,
     UsageCostEvent,
@@ -12,6 +22,116 @@ from backend.services.ai_cost_reconciliation import (
     verified_cost_from_openai_payload,
 )
 from db.ai_provider_store import AIProviderStore
+
+
+def test_billing_capture_from_openai_response_returns_persistable_fields():
+    capture = capture_from_openai_response(
+        model_name="gpt-5-chat-latest",
+        usage={"inputTokens": 1000, "cachedInputTokens": 100, "outputTokens": 50},
+        provider_project_id="proj_123",
+        provider_api_key_id="key_456",
+        provider_request_id="req_789",
+        service_tier="default",
+    )
+
+    assert capture.as_event_fields() == {
+        "provider": "openai",
+        "model_name": "gpt-5-chat-latest",
+        "input_tokens": 1000,
+        "cached_input_tokens": 100,
+        "output_tokens": 50,
+        "provider_project_id": "proj_123",
+        "provider_api_key_id": "key_456",
+        "provider_request_id": "req_789",
+        "service_tier": "default",
+    }
+
+
+def test_billing_capture_from_openai_response_payload_extracts_usage_and_response_metadata():
+    capture = capture_from_openai_response_payload(
+        {
+            "id": "resp_123",
+            "model": "gpt-5-chat-latest",
+            "service_tier": "default",
+            "usage": {
+                "input_tokens": 2000,
+                "input_tokens_details": {"cached_tokens": 250},
+                "output_tokens": 75,
+            },
+        },
+        provider_project_id="proj_123",
+        provider_api_key_id="key_456",
+    )
+
+    assert capture.provider_request_id == "resp_123"
+    assert capture.model_name == "gpt-5-chat-latest"
+    assert capture.input_tokens == 2000
+    assert capture.cached_input_tokens == 250
+    assert capture.output_tokens == 75
+    assert capture.service_tier == "default"
+    assert capture.provider_project_id == "proj_123"
+    assert capture.provider_api_key_id == "key_456"
+
+
+def test_estimate_event_cost_uses_model_specific_rates():
+    capture = BillingCapture(
+        provider="openai",
+        model_name="gpt-5-chat-latest",
+        input_tokens=1000,
+        cached_input_tokens=100,
+        output_tokens=50,
+    )
+    pricing = BillingPricing(
+        model_name="gpt-5-chat-latest",
+        input_per_million=Decimal("5"),
+        cached_input_per_million=Decimal("0.5"),
+        output_per_million=Decimal("30"),
+    )
+
+    assert estimate_event_cost(capture, pricing) == Decimal("0.00605000")
+
+
+def test_billing_reconciliation_filters_add_api_key_grouping():
+    filters = BillingReconciliationFilters(
+        project_ids=["", "proj_1", "proj_1"],
+        api_key_ids=["key_1"],
+        group_by=["line_item"],
+    ).normalized()
+
+    assert filters.project_ids == ["proj_1"]
+    assert filters.api_key_ids == ["key_1"]
+    assert filters.group_by == ["line_item", "api_key_id"]
+
+
+def test_reconcile_costs_returns_diagnostics_for_effective_estimator():
+    now = datetime.now(timezone.utc)
+    event = BillingUsageEvent(
+        event_id=1,
+        created_at=now,
+        provider="openai",
+        model_name="gpt-5-chat-latest",
+        estimated_cost_usd=Decimal("7.05005600"),
+        input_tokens=487576,
+        cached_input_tokens=3072,
+        output_tokens=154200,
+        provider_project_id="proj_123",
+        provider_api_key_id="key_456",
+    )
+    pricing = {
+        "gpt-5-chat-latest": BillingPricing(
+            model_name="gpt-5-chat-latest",
+            input_per_million=Decimal("5"),
+            cached_input_per_million=Decimal("0.5"),
+            output_per_million=Decimal("30"),
+        )
+    }
+
+    result = reconcile_costs([event], verified_cost_usd=Decimal("2.98419850"), pricing_by_model=pricing, reconciliation_run_id="run-1")
+
+    assert result.updates[0].final_cost_usd == Decimal("2.98419850")
+    assert result.diagnostics.actual_to_estimate_ratio == Decimal("0.4233")
+    assert result.diagnostics.inferred_output_per_million == Decimal("3.632571")
+    assert result.diagnostics.warnings
 
 
 def test_reconcile_cost_bucket_allocates_verified_cost_proportionally():

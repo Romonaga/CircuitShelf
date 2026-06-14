@@ -14,10 +14,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from backend.services.ai_billing_reconciliation import (  # noqa: E402
+    BillingPricing,
+    BillingReconciliationFilters,
+    BillingUsageEvent,
+    reconcile_costs,
+    verified_cost_from_openai_payload,
+)
 from backend.services.ai_cost_reconciliation import (  # noqa: E402
     OpenAIOrganizationUsageClient,
-    reconcile_cost_bucket,
-    verified_cost_from_openai_payload,
 )
 from db.ai_provider_store import AIProviderStore  # noqa: E402
 from db.connection import Database  # noqa: E402
@@ -48,6 +53,28 @@ def load_config() -> dict:
 
 def unix_seconds(value: datetime) -> int:
     return int(value.timestamp())
+
+
+def _pricing_by_model(catalog: list[dict]) -> dict[str, BillingPricing]:
+    pricing: dict[str, BillingPricing] = {}
+    for row in catalog:
+        model_name = str(row.get("modelName") or "").strip()
+        if not model_name:
+            continue
+        pricing[model_name] = BillingPricing(
+            model_name=model_name,
+            input_per_million=Decimal(str(row.get("inputPerMillion") or 0)),
+            cached_input_per_million=Decimal(str(row.get("cachedInputPerMillion") or 0)),
+            output_per_million=Decimal(str(row.get("outputPerMillion") or 0)),
+            currency=str(row.get("currency") or "USD"),
+        )
+    return pricing
+
+
+def _format_optional_decimal(value: Decimal | None) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value}"
 
 
 def main() -> int:
@@ -86,11 +113,11 @@ def main() -> int:
     client = OpenAIOrganizationUsageClient(admin_api_key=admin_key, base_url=args.base_url)
     allocation_method = "estimated_cost_proportional"
     configured_filters = {"projectIds": [], "apiKeyIds": []} if args.skip_configured_filters else store.openai_reconciliation_filters()
-    project_ids = args.project_id or configured_filters["projectIds"]
-    api_key_ids = args.api_key_id or configured_filters["apiKeyIds"]
-    group_by = list(args.group_by)
-    if api_key_ids and "api_key_id" not in group_by:
-        group_by.append("api_key_id")
+    filters = BillingReconciliationFilters(
+        project_ids=args.project_id or configured_filters["projectIds"],
+        api_key_ids=args.api_key_id or configured_filters["apiKeyIds"],
+        group_by=list(args.group_by),
+    ).normalized()
 
     run_id = ""
     if not args.dry_run:
@@ -108,32 +135,54 @@ def main() -> int:
             store.clear_openai_reconciliation_window(
                 start_time=args.start,
                 end_time=args.end,
-                project_ids=project_ids,
-                api_key_ids=api_key_ids,
+                project_ids=filters.project_ids,
+                api_key_ids=filters.api_key_ids,
             )
             repriced_count = store.reprice_openai_events_for_reconciliation(
                 start_time=args.start,
                 end_time=args.end,
-                project_ids=project_ids,
-                api_key_ids=api_key_ids,
+                project_ids=filters.project_ids,
+                api_key_ids=filters.api_key_ids,
             )
         payload = client.fetch_costs(
             start_time=unix_seconds(args.start),
             end_time=unix_seconds(args.end),
             bucket_width=args.bucket_width,
-            group_by=group_by,
-            project_ids=project_ids,
-            api_key_ids=api_key_ids,
+            group_by=filters.group_by,
+            project_ids=filters.project_ids,
+            api_key_ids=filters.api_key_ids,
         )
         verified_cost = verified_cost_from_openai_payload(payload)
         events = store.list_openai_events_for_reconciliation(
             start_time=args.start,
             end_time=args.end,
-            project_ids=project_ids,
-            api_key_ids=api_key_ids,
+            project_ids=filters.project_ids,
+            api_key_ids=filters.api_key_ids,
         )
         effective_run_id = run_id or "dry-run"
-        updates = reconcile_cost_bucket(events, verified_cost_usd=verified_cost, reconciliation_run_id=effective_run_id)
+        pricing_by_model = _pricing_by_model(store.pricing_catalog("openai"))
+        result = reconcile_costs(
+            [
+                BillingUsageEvent(
+                    event_id=event.event_id,
+                    created_at=event.created_at,
+                    provider=event.provider,
+                    model_name=event.model_name,
+                    estimated_cost_usd=event.estimated_cost_usd,
+                    input_tokens=event.input_tokens,
+                    cached_input_tokens=event.cached_input_tokens,
+                    output_tokens=event.output_tokens,
+                    provider_project_id=event.provider_project_id,
+                    provider_api_key_id=event.provider_api_key_id,
+                )
+                for event in events
+            ],
+            verified_cost_usd=verified_cost,
+            pricing_by_model=pricing_by_model,
+            reconciliation_run_id=effective_run_id,
+            allocation_method=allocation_method,
+        )
+        updates = result.updates
         estimated_cost = sum((update.estimated_cost_usd for update in updates), Decimal("0"))
 
         if not args.dry_run:
@@ -145,23 +194,29 @@ def main() -> int:
                 event_count=len(updates),
                 raw_provider_payload={
                     "filters": {
-                        "projectIds": project_ids,
-                        "apiKeyIds": api_key_ids,
-                        "groupBy": group_by,
+                        "projectIds": filters.project_ids,
+                        "apiKeyIds": filters.api_key_ids,
+                        "groupBy": filters.group_by,
                         "repricedEvents": repriced_count,
                     },
+                    "diagnostics": result.diagnostics.as_dict(),
                     "payload": payload,
                 },
             )
 
         print(f"OpenAI reconciliation {'dry run' if args.dry_run else 'complete'}")
         print(f"Window: {args.start.isoformat()} to {args.end.isoformat()}")
-        if project_ids or api_key_ids:
-            print(f"Filters: projects={len(project_ids)} api_keys={len(api_key_ids)} group_by={','.join(group_by) or 'none'}")
+        if filters.project_ids or filters.api_key_ids:
+            print(f"Filters: projects={len(filters.project_ids)} api_keys={len(filters.api_key_ids)} group_by={','.join(filters.group_by) or 'none'}")
         if not args.skip_reprice and not args.dry_run:
             print(f"Repriced events: {repriced_count}")
         print(f"Verified cost: ${verified_cost:.8f}")
         print(f"Estimated event cost: ${estimated_cost:.8f}")
+        print(f"Actual/estimate ratio: {_format_optional_decimal(result.diagnostics.actual_to_estimate_ratio)}")
+        print(f"Effective blended rate: {_format_optional_decimal(result.diagnostics.effective_total_per_million)} / 1M tokens")
+        print(f"Inferred output rate: {_format_optional_decimal(result.diagnostics.inferred_output_per_million)} / 1M output tokens")
+        for warning in result.diagnostics.warnings:
+            print(f"Warning: {warning}")
         print(f"Events reconciled: {len(updates)}")
         if run_id:
             print(f"Run ID: {run_id}")
