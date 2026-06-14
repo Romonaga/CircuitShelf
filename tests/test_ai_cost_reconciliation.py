@@ -132,6 +132,8 @@ def test_usage_event_row_exposes_reconciliation_fields():
         "paid_by": "system",
         "provider_key_owner_user_id": None,
         "provider_key_owner_username": None,
+        "provider_project_id": "proj_123",
+        "provider_api_key_id": "key_456",
         "success": True,
         "error_message": None,
         "decision_reason": "test",
@@ -146,6 +148,8 @@ def test_usage_event_row_exposes_reconciliation_fields():
     assert event["costStatus"] == "adjusted"
     assert event["costDiscrepancy"] == 0.0025
     assert event["reconciliationRunId"] == "11111111-1111-1111-1111-111111111111"
+    assert event["providerProjectId"] == "proj_123"
+    assert event["providerApiKeyId"] == "key_456"
 
 
 def test_usage_summary_row_exposes_estimated_actual_and_verified_costs():

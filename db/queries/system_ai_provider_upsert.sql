@@ -3,6 +3,8 @@ INSERT INTO system_ai_provider_settings (
     enabled,
     encrypted_api_key,
     key_preview,
+    provider_project_id,
+    provider_api_key_id,
     assist_mode_id,
     default_model,
     updated_by,
@@ -20,6 +22,8 @@ VALUES (
     %s,
     %s,
     %s,
+    %s,
+    %s,
     now()
 )
 ON CONFLICT (provider_type_id) DO UPDATE SET
@@ -32,6 +36,8 @@ ON CONFLICT (provider_type_id) DO UPDATE SET
         WHEN %s::boolean THEN EXCLUDED.key_preview
         ELSE system_ai_provider_settings.key_preview
     END,
+    provider_project_id = EXCLUDED.provider_project_id,
+    provider_api_key_id = EXCLUDED.provider_api_key_id,
     assist_mode_id = EXCLUDED.assist_mode_id,
     default_model = EXCLUDED.default_model,
     updated_by = EXCLUDED.updated_by,

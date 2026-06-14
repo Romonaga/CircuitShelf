@@ -104,6 +104,8 @@ export function useAIProviderSettingsForm({
         clearApiKey,
         adminApiKey: adminApiKey.trim() || undefined,
         clearAdminApiKey,
+        providerProjectId: settings.providerProjectId.trim(),
+        providerApiKeyId: settings.providerApiKeyId.trim(),
         keyPolicy: settings.keyPolicy,
         assistMode: settings.assistMode,
         defaultModel: settings.defaultModel,

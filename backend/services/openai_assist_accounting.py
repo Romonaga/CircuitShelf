@@ -32,6 +32,8 @@ class OpenAIAssistAccountingMixin:
             "decision_reason": decision_reason,
             "paid_by": settings["paidBy"],
             "provider_key_owner_user_id": settings.get("providerKeyOwnerUserId"),
+            "provider_project_id": settings.get("providerProjectId") or "",
+            "provider_api_key_id": settings.get("providerApiKeyId") or "",
         }
 
     def _estimate_openai_cost(self, settings: dict[str, Any], usage: dict[str, int]) -> float:
