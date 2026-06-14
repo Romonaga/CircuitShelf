@@ -6,11 +6,25 @@ function formatDate(value?: string | null): string {
   return value ? new Date(value).toLocaleString() : "n/a";
 }
 
-function costLabel(event: AIUsageEvent): string {
+function actualCostLabel(event: AIUsageEvent): string {
   if (event.finalCost !== null && event.finalCost !== undefined) {
-    return `${money(event.finalCost)} final`;
+    return money(event.finalCost);
   }
-  return `${money(event.estimatedCost)} est.`;
+  if (event.costStatus === "not_billable" || event.provider !== "openai") {
+    return "Not billable";
+  }
+  return "Pending";
+}
+
+function costDeltaLabel(event: AIUsageEvent): string {
+  if (event.finalCost === null || event.finalCost === undefined) {
+    return "";
+  }
+  const delta = event.finalCost - event.estimatedCost;
+  if (Math.abs(delta) < 0.00000001) {
+    return "";
+  }
+  return delta > 0 ? `+${money(delta)}` : `-${money(Math.abs(delta))}`;
 }
 
 function statusLabel(event: AIUsageEvent): string {
@@ -57,7 +71,13 @@ export function AIUsageEventsTable({ events }: { events: AIUsageEvent[] }) {
                 <td className="usage-reason">{event.decisionReason || event.contextType || "n/a"}</td>
                 <td>{event.latencyMs ? `${(event.latencyMs / 1000).toFixed(2)}s` : "n/a"}</td>
                 <td>{formatInteger(event.inputTokens + event.cachedInputTokens + event.outputTokens)}</td>
-                <td>{costLabel(event)}</td>
+                <td>
+                  <div className="ai-usage-cost-cell">
+                    <span><b>Est.</b> {money(event.estimatedCost)}</span>
+                    <span><b>Actual</b> {actualCostLabel(event)}</span>
+                    {costDeltaLabel(event) ? <small>{costDeltaLabel(event)} delta</small> : null}
+                  </div>
+                </td>
                 <td>{statusLabel(event)}</td>
               </tr>
             )) : (

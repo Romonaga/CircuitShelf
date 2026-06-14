@@ -23,7 +23,7 @@ function barWidth(value: number, max: number): string {
 }
 
 export function AIUsageCostGraph({ report }: { report?: AIUsageReport | null }) {
-  const points = report?.costTimeline ?? [];
+  const points = [...(report?.costTimeline ?? [])].sort((left, right) => right.date.localeCompare(left.date));
   const max = maxCost(points);
   const summary = report?.summary;
   const delta = (summary?.actualCost ?? summary?.billableCost ?? 0) - (summary?.estimatedCost ?? 0);

@@ -6020,6 +6020,31 @@ nav {
   min-width: 1360px;
 }
 
+.ai-usage-cost-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 96px;
+}
+
+.ai-usage-cost-cell span,
+.ai-usage-cost-cell small {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ai-usage-cost-cell b {
+  color: var(--ink);
+  font-weight: 850;
+}
+
+.ai-usage-cost-cell small {
+  color: var(--accent-hot);
+  font-weight: 850;
+}
+
 .ai-usage-table .usage-reason {
   max-width: 340px;
   color: var(--muted);
