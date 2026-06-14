@@ -26,6 +26,7 @@ verlyn workflow assistant-startup --json
 verlyn target show --json
 verlyn changes list
 verlyn changes list --owner-scope all --status-scope all
+verlyn changes create --title "..." --change-type <type> --effort-band <small|medium|large>
 verlyn changes activate <change-id>
 verlyn work-items list <change-id>
 verlyn work-items update <change-id> --creates-json '[{"title":"New work item title"}]'
@@ -44,6 +45,7 @@ When working from a terminal or agent session, prefer the installed CLI:
 - `verlyn target show --json`
 - `verlyn changes list`
 - `verlyn changes list --owner-scope all --status-scope all`
+- `verlyn changes create --title "..." --change-type <type> --effort-band <small|medium|large>`
 - `verlyn changes activate <change-id>`
 - `verlyn changes refresh-branch <change-id>`
 - `verlyn work-items list <change-id>`
@@ -95,7 +97,7 @@ Before stopping with incomplete work:
 
 ## Work Routing
 
-Use workstream change records when work:
+Use Verlyn-managed change records when work:
 - changes behavior
 - affects a contract, schema, or public interface
 - spans multiple components

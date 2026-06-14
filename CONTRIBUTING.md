@@ -34,6 +34,7 @@ Before `git commit`, print a short checkpoint with the files being committed.
 ### Engineering standards
 - Keep code organized by domain, feature, or clearly owned module; avoid dumping unrelated behavior into shared utility files.
 - Follow the best practices, naming conventions, formatting, and idioms of the language and framework already used in the repository.
+- Follow the recommended source-code folder structure for the programming language, framework, and package manager in use; do not invent flat or ad hoc layouts when the ecosystem has an accepted project structure.
 - Prefer small, cohesive functions and components with clear inputs and outputs.
 - Preserve existing public contracts unless the change explicitly updates the contract and documents the migration.
 - Avoid broad refactors, dependency changes, generated-code churn, and formatting-only edits unless they are part of the approved scope.

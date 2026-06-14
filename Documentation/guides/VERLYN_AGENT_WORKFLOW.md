@@ -94,7 +94,7 @@ Use installed `verlyn` commands for normal repository workflow:
 ```bash
 verlyn changes list
 verlyn changes show <change-id>
-verlyn changes create --title "..." --change-type <type>
+verlyn changes create --title "..." --change-type <type> --effort-band <small|medium|large>
 verlyn changes update <change-id> --proposal-summary "..." --proposal-scope "..."
 verlyn changes activate <change-id>
 verlyn changes refresh-branch <change-id>
@@ -128,9 +128,11 @@ Do not create ad hoc local workflow files as durable truth.
 dirty work when `--commit-message` is supplied, pushes with Verlyn-managed
 provider credentials, opens or updates the PR, merges it, switches the local
 checkout back to the delivery base branch when local checkout context exists,
-and records closeout. Credential issuance is gated by Verlyn repo write access,
-release operations entitlement, exact client-remote matching, and redacted audit
-recording; the CLI must not print provider tokens in JSON output.
+and records closeout. It does not deploy by default; pass `--deploy` only when
+the operator explicitly wants the change closeout to also trigger or monitor a
+configured deployment provider. Credential issuance is gated by Verlyn repo write
+access, release operations entitlement, exact client-remote matching, and
+redacted audit recording; the CLI must not print provider tokens in JSON output.
 
 If local checkout cleanup is blocked or unsafe, the hosted merge remains
 complete and the CLI reports the blocker, `repair_status`, `unsafe`,
