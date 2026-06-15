@@ -5,6 +5,9 @@ It is the single assistant-facing workflow guide installed by the governance
 pack. `AGENTS.md` remains authoritative for policy, and `RULES.md` may contain
 project-owned guidance for this repo.
 
+Use `Documentation/guides/VERLYN_PUBLIC_CLI.md` as the command reference for
+public CLI intent, optional arguments, and deliver-versus-deploy behavior.
+
 ## Read In This Order
 
 1. `AGENTS.md`
@@ -13,7 +16,8 @@ project-owned guidance for this repo.
 4. `.verlyn/runtime_context.json` when present
 5. `Documentation/AI_USAGE_POLICY.md`
 6. This guide
-7. Active change details from Verlyn when work already exists
+7. `Documentation/guides/VERLYN_PUBLIC_CLI.md`
+8. Active change details from Verlyn when work already exists
 
 After session compaction, compressed-summary recovery, or any resume where the
 operator may question whether rules were reloaded, reread the governed files
@@ -113,6 +117,11 @@ workflow trail.
 Use the batchable work-item update command for one or many work-item mutations.
 Do not create ad hoc local workflow files as durable truth.
 
+For command intent and optional argument meanings, read
+`Documentation/guides/VERLYN_PUBLIC_CLI.md`. In normal logged-in repo work,
+avoid adding `--profile`, `--server`, `--repo-slug`, or `--target` unless you
+are intentionally bootstrapping or overriding context.
+
 ## Session Loop
 
 1. Read the governed files and inspect active change details from Verlyn.
@@ -122,20 +131,21 @@ Do not create ad hoc local workflow files as durable truth.
 5. Create or update change and work-item records through the installed `verlyn` CLI.
 6. Do the implementation and verification.
 7. Update work items, review notes, and risks through Verlyn.
-8. When the change is ready to land, use `verlyn changes deliver <change-id> --merge-method squash`.
-9. When the delivered change should roll out to a configured deployment provider, use `verlyn changes deploy <change-id>`.
+8. When the change is ready to land without deployment, use `verlyn changes deliver <change-id> --merge-method squash`.
+9. When the change should land and deploy to the configured provider, use `verlyn changes deploy <change-id>`.
 
 `verlyn changes deliver` is the normal hosted source-control closeout command. It commits local
 dirty work when `--commit-message` is supplied, pushes with Verlyn-managed
 provider credentials, opens or updates the PR, merges it, switches the local
 checkout back to the delivery base branch when local checkout context exists,
 and records closeout. It does not deploy. `verlyn changes deploy <change-id>`
-is the normal change-aware deployment command; it resolves the delivered merge
-point from Verlyn, triggers or monitors the configured provider, records
-deployment evidence, and keeps provider credentials server-side. Credential
-issuance is gated by Verlyn repo write access, release operations entitlement,
-exact client-remote matching, and redacted audit recording; the CLI must not
-print provider tokens in JSON output.
+runs the same hosted source-control closeout path and then triggers or monitors
+the configured provider. When an already delivered source ref must be deployed,
+pass `--source-ref` and optional `--commit-sha`; Verlyn then resolves that
+delivered point and records deployment evidence. Credential issuance is gated
+by Verlyn repo write access, release operations entitlement, exact client-remote
+matching, and redacted audit recording; the CLI must not print provider tokens
+in JSON output.
 
 If local checkout cleanup is blocked or unsafe, the hosted merge remains
 complete and the CLI reports the blocker, `repair_status`, `unsafe`,

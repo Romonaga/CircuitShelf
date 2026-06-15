@@ -36,6 +36,11 @@ verlyn changes deliver <change-id> --merge-method squash
 
 Those commands resolve the current repo through Verlyn and keep change, work-item, review, and PR artifacts aligned with Verlyn workflow state. Durable workflow truth is managed by Verlyn; repo-local files are source, governance docs, templates, or temporary scratch artifacts rather than the work-item/change source of truth.
 
+For command intent and optional argument meanings, read
+`Documentation/guides/VERLYN_PUBLIC_CLI.md`. Most logged-in repo work should not
+need `--profile`, `--server`, `--repo-slug`, or `--target`; those are
+bootstrap, diagnostic, or override arguments.
+
 ## Installed Public CLI Commands
 
 When working from a terminal or agent session, prefer the installed CLI:

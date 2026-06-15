@@ -20,6 +20,9 @@ Before starting a session, read the guide that matches how you are working:
 - `repo contributor mode`: use the installed public `verlyn` CLI from this checkout
 - `assistant mode`: `Documentation/guides/VERLYN_AGENT_WORKFLOW.md`
 
+Use `Documentation/guides/VERLYN_PUBLIC_CLI.md` as the installed public CLI
+command reference before guessing command behavior or optional flags.
+
 Always read `Documentation/AI_USAGE_POLICY.md` before using AI-assisted paths.
 
 ## Default Orders
@@ -59,7 +62,7 @@ After session compaction, summary recovery, or any other context-compressed resu
 - Once a Verlyn change is active, use the installed public `verlyn` CLI path first for branch repair, PR delivery, merge, and workflow state changes. If the product path is missing or blocked, record the blocker as Verlyn workflow feedback instead of bypassing it.
 - When a workflow mutation or delivery action exists in Verlyn, use the installed public CLI path before shell fallbacks such as `gh`.
 - For hosted PR closeout, prefer the Verlyn hosted delivery path from a repo-visible owner session. If the current session cannot see the repo, treat that as a scope/access gap to fix or switch sessions for, not as permission to bypass Verlyn's hosted workflow or fall back to `gh`.
-- Use `verlyn changes deliver <change-id>` for hosted source-control closeout when a change is ready to land; use `verlyn changes deploy <change-id>` afterward only when the operator wants deployment.
+- Use `verlyn changes deliver <change-id>` for hosted source-control closeout when a change is ready to land; use `verlyn changes deploy <change-id>` when the same closeout should also deploy to the configured provider.
 - Keep change, work-item, review, and handoff records current while work is in progress.
 - Treat workflow friction as product feedback: if the process is confusing or blocked, record it as a change or work item instead of bypassing it.
 - Use subagents only for narrow, bounded, low-coupling parallel work. Avoid delegating tightly coupled workflow logic, central orchestration, or state-heavy UI changes unless there is a strong reason the speedup outweighs reintegration cost.
