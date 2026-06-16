@@ -160,16 +160,12 @@ PR step. Both commands create or update the pull request, merge it, and record
 source-control closeout. Use `deliver` when you want PR closeout only. Use
 `deploy` when you want that same PR closeout followed by provider deployment.
 
-Both commands perform the hosted PR closeout step. `deliver` creates or updates
-the pull request, merges it, records closeout, and stops before deployment.
-`deploy` runs that same PR closeout path first, then triggers or monitors the
-configured deployment provider.
-
 `verlyn changes deliver` is the normal hosted source-control closeout command. It commits local
 dirty work when `--commit-message` is supplied, pushes with Verlyn-managed
 provider credentials, opens or updates the PR, merges it, switches the local
 checkout back to the delivery base branch when local checkout context exists,
-and records closeout. It does not deploy. `verlyn changes deploy <change-id>`
+records closeout, and reconciles safe client-local branch deletion back into
+the change metadata. It does not deploy. `verlyn changes deploy <change-id>`
 runs the same hosted source-control closeout path and then triggers or monitors
 the configured provider. When an already delivered source ref must be deployed,
 pass `--source-ref` and optional `--commit-sha`; Verlyn then resolves that
