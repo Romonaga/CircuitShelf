@@ -111,7 +111,11 @@ verlyn changes next
   context: description, proposal sections, acceptance criteria, work items,
   review/delivery posture, chain/dependency context, and a next action. With
   `--json`, it returns the sanitized change record plus a structured
-  `review_context` object so agents do not have to scrape prose.
+  `review_context` object so agents do not have to scrape prose. When the
+  command runs from a managed checkout, JSON also includes `client_checkout`
+  and preserves the server record as `recorded_branch`; the displayed `branch`
+  object is refreshed with current client head data when it can be matched
+  safely.
 - `changes update` changes metadata such as proposal sections, acceptance
   criteria, priority, dependencies, and owner.
 - `changes activate` starts implementation and binds or creates the governed
@@ -155,7 +159,10 @@ existing work items. Each item in the JSON array is one work-item mutation.
 task planning. They include parent change context, dependency/chain context,
 purpose, blockers, evidence expectations, and next-action guidance where the
 backend record supplies it. Their `--json` output exposes the same context in
-structured, sanitized fields.
+structured, sanitized fields. `changes show --json` and
+`work-items show --json` also place enriched task descriptions and planning
+fields on the top-level `tasks`, `work_items`, or `work_item` entries so
+consumers do not have to know that `review_context` is the richer source.
 
 ## Delivery Versus Deployment
 
