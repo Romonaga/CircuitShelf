@@ -114,6 +114,27 @@ Creation and activation are separate. A new change starts as draft. Activate it
 before implementation so Verlyn can bind the work branch and enforce the normal
 workflow trail.
 
+`verlyn changes create` also seeds required starter work items. These are
+workflow tickets, not finished task plans. Read them with
+`verlyn work-items list <change-id>`, then flesh them out for the specific
+change before starting work. The first two starter items are tailored to the
+change type, and `Review findings` plus `Finalize handoff` are always included.
+`Review findings` is the required code/task review ticket when no separate
+mandatory human review applies. Use it to confirm the implementation matches
+the change ticket and work items, did not hallucinate behavior, and did not
+make unrelated edits before delivery. Common seeds are:
+
+| Change type | Starter work items |
+|---|---|
+| `feature` or default | `Implement <title>`, `Validate acceptance for <title>`, `Review findings` code/task review, `Finalize handoff` |
+| `bugfix` | `Reproduce and fix <title>`, `Add regression coverage for <title>`, `Review findings` code/task review, `Finalize handoff` |
+| `workflow` | `Implement workflow change for <title>`, `Validate workflow behavior for <title>`, `Review findings` code/task review, `Finalize handoff` |
+| `api` | `Implement API change for <title>`, `Validate contract and acceptance for <title>`, `Review findings` code/task review, `Finalize handoff` |
+| `performance` | `Profile and optimize <title>`, `Validate <title> responsiveness and load behavior`, `Review findings` code/task review, `Finalize handoff` |
+| `refactor` | `Refactor <title>`, `Validate <title> behavior parity`, `Review findings` code/task review, `Finalize handoff` |
+| `architecture` | `Shape architecture change for <title>`, `Validate dependency and workflow impact for <title>`, `Review findings` code/task review, `Finalize handoff` |
+| `security` or `compliance` | `Implement remediation for <title>`, `Validate <title> security posture`, `Review findings` code/task review, `Finalize handoff` |
+
 Use the batchable work-item update command for one or many work-item mutations.
 Do not create ad hoc local workflow files as durable truth.
 

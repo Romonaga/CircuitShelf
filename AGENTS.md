@@ -55,6 +55,13 @@ After session compaction, summary recovery, or any other context-compressed resu
 
 - Record review findings and dispositions in Verlyn reviews or work items before summarizing them in chat.
 - Keep Verlyn work items current while implementation is in progress.
+- `verlyn changes create` seeds required starter work items for the change. Treat
+  them as placeholders to flesh out for the concrete scope before implementation,
+  validation, review, or handoff is considered complete.
+- The seeded `Review findings` work item is the required code/task review ticket
+  when no separate mandatory human review applies. Use it to verify the work did
+  not hallucinate behavior, exceed the assigned change/work-item scope, or leave
+  unreviewed edits before delivery.
 - Prefer archive/cancel over destructive deletion for durable workflow items.
 - Generated analyzer artifacts are external evidence, not committed source of truth.
 - Prefer installed public `verlyn` CLI commands over retyping workflow steps from memory.

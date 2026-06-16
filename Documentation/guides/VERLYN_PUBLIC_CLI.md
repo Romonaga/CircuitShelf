@@ -73,6 +73,7 @@ verlyn changes next
 
 - `changes create` creates a draft change. `--change-type` and
   `--effort-band` are required so the change can be categorized and planned.
+  It also creates required starter work items for the change.
 - `changes show` reads the current durable change record.
 - `changes update` changes metadata such as proposal sections, acceptance
   criteria, priority, dependencies, and owner.
@@ -80,6 +81,27 @@ verlyn changes next
   work branch. Do this before editing code for a change.
 - `changes refresh-branch` repairs or refreshes the bound local work branch.
 - `changes next` asks Verlyn for the next unblocked change in the current chain.
+
+Starter work items are required workflow tickets, but they are only a starting
+point. After creating a change, run `verlyn work-items list <change-id>` and
+flesh out the seeded tasks for the actual scope before implementation,
+validation, review, or handoff. Verlyn always includes `Review findings` and
+`Finalize handoff`; the first two work items vary by `--change-type`.
+`Review findings` is the required code/task review ticket when no separate
+mandatory human review applies. Use it to check for hallucinated behavior,
+scope drift, unrelated edits, and mismatches between the implementation and
+the change ticket/work items before delivery:
+
+| Change type | Seeded first work items |
+|---|---|
+| `feature` or default | `Implement <title>`; `Validate acceptance for <title>` |
+| `bugfix` | `Reproduce and fix <title>`; `Add regression coverage for <title>` |
+| `workflow` | `Implement workflow change for <title>`; `Validate workflow behavior for <title>` |
+| `api` | `Implement API change for <title>`; `Validate contract and acceptance for <title>` |
+| `performance` | `Profile and optimize <title>`; `Validate <title> responsiveness and load behavior` |
+| `refactor` | `Refactor <title>`; `Validate <title> behavior parity` |
+| `architecture` | `Shape architecture change for <title>`; `Validate dependency and workflow impact for <title>` |
+| `security` or `compliance` | `Implement remediation for <title>`; `Validate <title> security posture` |
 
 Work-item commands use JSON arrays so one call can update one or many items:
 

@@ -15,6 +15,13 @@ Before editing anything on an in-progress branch:
 6. Identify the next incomplete acceptance-bearing work item before making edits.
 
 Use Verlyn-managed changes and work items as the live workflow source of truth.
+When `verlyn changes create` creates a change, it also creates required starter
+work items. These are placeholders for implementation, validation, review, and
+handoff; read them, flesh them out for the concrete change, and keep them
+current as the work progresses. The seeded `Review findings` item is the
+required code/task review ticket when no separate mandatory human review
+applies; use it to check for hallucinated behavior, scope drift, unrelated
+edits, and mismatches between the implementation and the assigned work.
 
 ## Installed CLI Mode
 
