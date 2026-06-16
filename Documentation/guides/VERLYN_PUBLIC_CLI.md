@@ -96,6 +96,14 @@ existing work items. Each item in the JSON array is one work-item mutation.
 
 Use the command that matches the outcome you want:
 
+Both `verlyn changes deliver <change-id>` and
+`verlyn changes deploy <change-id>` run Verlyn's hosted source-control closeout
+path. That path performs the PR step: it commits eligible dirty work when
+requested, pushes the governed branch, opens or updates the pull request,
+merges it, records closeout, and repairs local checkout state when safe.
+`deploy` then continues from the merged source-control result into provider
+deployment.
+
 | Command | Outcome |
 |---|---|
 | `verlyn changes deliver <change-id>` | Source-control closeout only. It commits local dirty work when `--commit-message` is supplied, pushes with Verlyn-managed provider credentials, opens or updates the pull request, merges it, records closeout, and returns the local checkout to the base branch when safe. It does not deploy. |

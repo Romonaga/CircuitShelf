@@ -23,10 +23,14 @@ If a rule in this file conflicts with `AGENTS.md` or `CONTRIBUTING.md`, the high
 - Prefer installed Verlyn CLI/API commands over retyping workflow steps from memory.
 - For hosted GitHub closeout, use Verlyn's hosted delivery routes first. If a session cannot see the repo, fix the scope or switch to a repo-visible owner session instead of falling back to shell tools like `gh`.
 - Once a Verlyn change is active, do not use raw `git` commands for branch repair, PR delivery, merge, or workflow state changes. Use the installed Verlyn CLI/API path first. If the Verlyn path fails or is missing needed behavior, stop and report the blocker so a Verlyn change can be created to fix Verlyn instead of bypassing it.
-- Use `verlyn changes deliver <change-id>` for full hosted closeout. `verlyn changes publish-pr` is PR-only and must not be treated as merge or Verlyn closeout.
+- Use `verlyn changes deliver <change-id>` for hosted source-control closeout. It performs the PR step by creating or updating the pull request, merging it, and recording closeout.
+- Use `verlyn changes deploy <change-id>` when the same hosted PR closeout should also deploy to the configured provider.
 - Keep change, task, review, and handoff records current while work is in progress.
 - Treat workflow friction as real product work: if the process is confusing, log it as a change or task instead of bypassing it.
 - Prefer component-first design when the same UI or workflow pattern appears in multiple places or is likely to drift: extract a reusable component early instead of duplicating code. This keeps tests narrower, reduces code bloat, and lowers drift risk.
+- Application state must be owned by the established state managers and route managers. Do not spread durable app state, routing decisions, selection persistence, or workflow transition logic across ad hoc component-level effects or one-off local storage paths.
+- Use state managers when state needs to be managed. Do not duplicate state management across unrelated components.
+- Only use async behavior for work that is actually long-running. Routing to a new view should not require async control flow; route and state machines are responsible for view transitions.
 - When workflow, API, startup order, or installed CLI behavior changes, update `Documentation/guides/VERLYN_ASSISTANT_STARTUP.md` in the same change so fresh assistants do not have to infer the new path from source.
 - Do not commit or merge without explicit human approval.
 
