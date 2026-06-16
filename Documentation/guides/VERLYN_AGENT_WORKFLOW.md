@@ -134,6 +134,11 @@ are intentionally bootstrapping or overriding context.
 8. When the change is ready to land without deployment, use `verlyn changes deliver <change-id> --merge-method squash`.
 9. When the change should land and deploy to the configured provider, use `verlyn changes deploy <change-id>`.
 
+Important: `verlyn changes deliver` and `verlyn changes deploy` both run the
+PR step. Both commands create or update the pull request, merge it, and record
+source-control closeout. Use `deliver` when you want PR closeout only. Use
+`deploy` when you want that same PR closeout followed by provider deployment.
+
 Both commands perform the hosted PR closeout step. `deliver` creates or updates
 the pull request, merges it, records closeout, and stops before deployment.
 `deploy` runs that same PR closeout path first, then triggers or monitors the

@@ -96,6 +96,11 @@ existing work items. Each item in the JSON array is one work-item mutation.
 
 Use the command that matches the outcome you want:
 
+Important: `verlyn changes deliver` and `verlyn changes deploy` both run the
+PR step. Both commands create or update the pull request, merge it, and record
+source-control closeout. Use `deliver` when you want PR closeout only. Use
+`deploy` when you want that same PR closeout followed by provider deployment.
+
 Both `verlyn changes deliver <change-id>` and
 `verlyn changes deploy <change-id>` run Verlyn's hosted source-control closeout
 path. That path performs the PR step: it commits eligible dirty work when
@@ -106,8 +111,8 @@ deployment.
 
 | Command | Outcome |
 |---|---|
-| `verlyn changes deliver <change-id>` | Source-control closeout only. It commits local dirty work when `--commit-message` is supplied, pushes with Verlyn-managed provider credentials, opens or updates the pull request, merges it, records closeout, and returns the local checkout to the base branch when safe. It does not deploy. |
-| `verlyn changes deploy <change-id>` | Runs the same source-control closeout path as `deliver`, then triggers or monitors the configured deployment provider and records deployment evidence. |
+| `verlyn changes deliver <change-id>` | PR closeout only. It commits local dirty work when `--commit-message` is supplied, pushes with Verlyn-managed provider credentials, opens or updates the pull request, merges it, records closeout, and returns the local checkout to the base branch when safe. It does not deploy. |
+| `verlyn changes deploy <change-id>` | PR closeout plus deployment. It runs the same source-control closeout path as `deliver`, then triggers or monitors the configured deployment provider and records deployment evidence. |
 
 Examples:
 
