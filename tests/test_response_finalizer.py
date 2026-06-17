@@ -65,6 +65,42 @@ class ResponseFinalizerTests(unittest.TestCase):
         self.assertEqual(validation.confidence, 0.82)
         self.assertIn("Missing source citation.", validation.issues)
 
+    def test_parse_non_json_keeps_answer_and_deterministic_issues(self):
+        answer, validation = parse_response_finalizer_output(
+            "This answer looks fine, but I did not follow the requested schema.",
+            fallback_answer="Original source-backed answer.",
+            deterministic_issues=["The answer does not clearly reference the retrieved material."],
+        )
+
+        self.assertEqual(answer, "Original source-backed answer.")
+        self.assertTrue(validation.useful)
+        self.assertFalse(validation.changed)
+        self.assertIn("The answer does not clearly reference the retrieved material.", validation.issues)
+        self.assertFalse(any("valid JSON" in issue for issue in validation.issues))
+        self.assertIn("original answer was kept", " ".join(validation.notes))
+
+    def test_parse_extracts_fenced_json_finalizer_output(self):
+        raw = """```json
+        {
+            "useful": true,
+            "confidence": 0.74,
+            "issues": [],
+            "notes": ["Parsed from fenced JSON."],
+            "revisedAnswer": "## Checked answer\\nUse the retrieved source."
+        }
+        ```"""
+
+        answer, validation = parse_response_finalizer_output(
+            raw,
+            fallback_answer="Original answer.",
+            deterministic_issues=[],
+        )
+
+        self.assertEqual(answer, "## Checked answer\nUse the retrieved source.")
+        self.assertTrue(validation.changed)
+        self.assertEqual(validation.confidence, 0.74)
+        self.assertIn("Parsed from fenced JSON.", validation.notes)
+
     def test_should_run_modes(self):
         self.assertTrue(should_run_response_finalizer(enabled=True, mode="always", confidence=0.99, build_card=None, issues=[], min_confidence=0.8))
         self.assertFalse(should_run_response_finalizer(enabled=False, mode="always", confidence=0.1, build_card={}, issues=["x"], min_confidence=0.8))

@@ -22,6 +22,7 @@ WIRING_INTENT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 SOURCE_REFERENCE_PATTERN = re.compile(r"\b(source|page|datasheet|book|context|retrieved)\b", re.IGNORECASE)
+FINALIZER_PARSE_FALLBACK_NOTE = "Response validation could not parse the finalizer output, so the original answer was kept."
 
 
 @dataclass
@@ -166,7 +167,8 @@ def parse_response_finalizer_output(
             ran=True,
             useful=True,
             changed=False,
-            issues=deterministic_issues + ["Response finalizer did not return valid JSON."],
+            issues=_dedupe_strings(deterministic_issues)[:16],
+            notes=[FINALIZER_PARSE_FALLBACK_NOTE],
         )
 
     schema_issue = []
