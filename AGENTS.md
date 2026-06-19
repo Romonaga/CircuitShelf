@@ -58,6 +58,11 @@ After session compaction, summary recovery, or any other context-compressed resu
 - `verlyn changes create` seeds required starter work items for the change. Treat
   them as placeholders to flesh out for the concrete scope before implementation,
   validation, review, or handoff is considered complete.
+- When the seeded implementation and validation placeholders are too generic,
+  update those existing work item IDs in place with concrete scope, acceptance,
+  and validation details. Use `--replace-starter-items` only as an explicit
+  escape hatch when the canonical starter ticket IDs must be canceled; the CLI
+  requires `--confirm-replace-starter-items` for that destructive replacement.
 - The seeded `Review findings` work item is the required code/task review ticket
   when no separate mandatory human review applies. Use it to verify the work did
   not hallucinate behavior, exceed the assigned change/work-item scope, or leave
@@ -65,6 +70,7 @@ After session compaction, summary recovery, or any other context-compressed resu
 - Prefer archive/cancel over destructive deletion for durable workflow items.
 - Generated analyzer artifacts are external evidence, not committed source of truth.
 - Prefer installed public `verlyn` CLI commands over retyping workflow steps from memory.
+- Public CLI first, API-backed workflow context, no direct PostgreSQL access, no private helper scripts, no provider-secret handling, and no bypassing gates.
 - Treat a missing active Verlyn change or unauthorized repo binding as a workflow failure to fix before editing, not a suggestion to proceed from memory.
 - Once a Verlyn change is active, use the installed public `verlyn` CLI path first for branch repair, PR delivery, merge, and workflow state changes. If the product path is missing or blocked, record the blocker as Verlyn workflow feedback instead of bypassing it.
 - When a workflow mutation or delivery action exists in Verlyn, use the installed public CLI path before shell fallbacks such as `gh`.
