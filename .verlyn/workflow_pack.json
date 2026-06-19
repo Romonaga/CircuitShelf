@@ -1,7 +1,166 @@
 {
   "product": "Verlyn",
-  "workflow_pack_version": "2026.06.15.1",
-  "repo_name": "CircuitShelf",
+  "workflow_pack_version": "2026.06.19.1",
+  "repo_name": "circuitshelf",
   "install_mode": "governance",
-  "installed_at": "2026-06-16T19:04:34.139550+00:00"
+  "installed_at": "2026-06-18T18:43:12.088870+00:00",
+  "refreshed_at": "2026-06-19T14:50:27.205383+00:00",
+  "governance_pack": {
+    "name": "verlyn-standard",
+    "version": "2026.06.19.1",
+    "source": "verlyn_api",
+    "refreshed_at": "2026-06-19T14:50:27.205383+00:00",
+    "repo_owned_paths": [
+      "RULES.md"
+    ],
+    "files": {
+      "AGENTS.md": {
+        "owner": "verlyn",
+        "sha256": "4e5571a68c81724db5d2dd27aa79a465c16603495486063d91a8dff034e747ad",
+        "required": true,
+        "category": "governance",
+        "purpose": "repo_rules"
+      },
+      "CONTRIBUTING.md": {
+        "owner": "verlyn",
+        "sha256": "f6ddf0c33e769a7410d3ed4ae92475fc322392e28a096f74bed615db431e910b",
+        "required": true,
+        "category": "governance",
+        "purpose": "contributor_guidance"
+      },
+      "RULES.md": {
+        "owner": "repo",
+        "sha256": "bf7feaf69fde85539a4f702f9cc123e0d81bfc050fbd3d98180c5f29fba415d5",
+        "required": true,
+        "category": "governance",
+        "purpose": "project_rules"
+      },
+      "CLAUDE.md": {
+        "owner": "verlyn",
+        "sha256": "fdd925a4cb1cf53038f02b936ffb16929d2c888ad53919b99a5f52f2f5699708",
+        "required": false,
+        "category": "governance",
+        "purpose": "tool_wrapper"
+      },
+      ".verlyn/runtime_context.json": {
+        "owner": "verlyn",
+        "sha256": "5b0cdf57cb9cef2b83065037ef07d0ac0d5014ee2d015757db78d92ac1e4391e",
+        "required": true,
+        "category": "governance",
+        "purpose": "assistant_runtime_context"
+      },
+      ".verlyn/.gitignore": {
+        "owner": "verlyn",
+        "sha256": "e3fc7396d65933d9d5be043043a53277a24da6b95d9c93cfc88299bf19a3f943",
+        "required": false,
+        "category": "governance",
+        "purpose": "helper_session_state_ignore"
+      },
+      ".verlyn/agent-skills/verlyn-public-cli.md": {
+        "owner": "verlyn",
+        "sha256": "1132e939837505436d309b25c8d16e440d8e1b2d3a931d821e3839c7fc8c7551",
+        "required": false,
+        "category": "governance",
+        "purpose": "agent_skill_reference"
+      },
+      ".verlyn/.codex/skills/verlyn-public-cli/SKILL.md": {
+        "owner": "verlyn",
+        "sha256": "9db32f7c72a3a4b74bb2be8447c32bb47c105de3880c91f4659fbe0817d17292",
+        "required": false,
+        "category": "governance",
+        "purpose": "codex_skill"
+      },
+      ".github/CODEOWNERS": {
+        "owner": "verlyn",
+        "sha256": "2dcab0ec218057d8bb03bf3b1aa0bbd70bffe146455fc86442bc9acd33abba15",
+        "required": true,
+        "category": "github",
+        "purpose": "review_ownership"
+      },
+      ".github/pull_request_template.md": {
+        "owner": "verlyn",
+        "sha256": "877e1670983382f20df168e762e52c2eb92b90d9e5622b19c226cc9a45f8ec44",
+        "required": true,
+        "category": "github",
+        "purpose": "pr_governance"
+      },
+      ".github/ISSUE_TEMPLATE/bug_report.md": {
+        "owner": "verlyn",
+        "sha256": "3ba612a0ef313eaa1340f0dd83e1f0d81f7f6a9e1c64831831614690f7d0282a",
+        "required": false,
+        "category": "github",
+        "purpose": "issue_template"
+      },
+      ".github/ISSUE_TEMPLATE/feature_request.md": {
+        "owner": "verlyn",
+        "sha256": "aea3fedb12294e6cb2893d19f23a22c74086f3aac411dabf27c7721df461701b",
+        "required": false,
+        "category": "github",
+        "purpose": "issue_template"
+      },
+      ".github/workflows/verlyn-pr-gate.yml": {
+        "owner": "verlyn",
+        "sha256": "1f42859145522cb4d03fb23716038938b25f17711be51d646b915c17729b00f8",
+        "required": true,
+        "category": "github",
+        "purpose": "ci_gate"
+      },
+      "Documentation/AI_USAGE_POLICY.md": {
+        "owner": "verlyn",
+        "sha256": "5fcf74201a69669d70d3e0f418915d2ba39e2e35d442d0a4c306d106580742b5",
+        "required": true,
+        "category": "documentation",
+        "purpose": "policy"
+      },
+      "Documentation/guides/REPO_COLLABORATION_WORKFLOW.md": {
+        "owner": "verlyn",
+        "sha256": "693c9cf05af44ac41dca51556c1cfcc5d8f49af8dfb77635d3107c96e5f4e6b5",
+        "required": true,
+        "category": "documentation",
+        "purpose": "workflow"
+      },
+      "Documentation/guides/VERLYN_AGENT_WORKFLOW.md": {
+        "owner": "verlyn",
+        "sha256": "448fffc15e600d339075e9ac965375716d2dc3b34ecc98e4c188748a61aa8595",
+        "required": false,
+        "category": "documentation",
+        "purpose": "workflow"
+      },
+      "Documentation/guides/VERLYN_PUBLIC_CLI.md": {
+        "owner": "verlyn",
+        "sha256": "0ff9dacac180296e4fbc391a64d4c4ef507d06b0d3055f893cd0cc75771cc8f4",
+        "required": true,
+        "category": "documentation",
+        "purpose": "cli_reference"
+      },
+      "Documentation/hooks.md": {
+        "owner": "verlyn",
+        "sha256": "7eba9a332c0a369a4b36214193b1ac568dcb5e1c1028d2d33dced0920baf3c28",
+        "required": true,
+        "category": "documentation",
+        "purpose": "hooks"
+      },
+      ".git-hooks/pre-commit": {
+        "owner": "verlyn",
+        "sha256": "5b459094c910e12bbb3ee3220db82a9a66bf83c17b0c07828d2baa8415c77b34",
+        "required": false,
+        "category": "governance",
+        "purpose": "hook"
+      },
+      "Documentation/guides/AI_INCIDENT_TEMPLATE.md": {
+        "owner": "verlyn",
+        "sha256": "0a0e31840402b97f3567ea5c6034923600235d28562fc78ca24e9e490cc8e3b6",
+        "required": true,
+        "category": "documentation",
+        "purpose": "incident_template"
+      },
+      "Documentation/guides/PRODUCT_INTENT_OWNERSHIP.md": {
+        "owner": "verlyn",
+        "sha256": "be299298af0130696698753c7716fa051dced6b14b7679ca64846246e46f501e",
+        "required": true,
+        "category": "documentation",
+        "purpose": "product_ownership"
+      }
+    }
+  }
 }

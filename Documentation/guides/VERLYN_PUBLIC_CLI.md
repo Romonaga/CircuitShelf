@@ -12,8 +12,9 @@ saved CLI login state plus the current checkout. In normal daily work, after you
 are logged in and working inside a known repo, you should not need to pass
 `--profile`, `--server`, `--repo-slug`, or `--target`.
 
-Use optional context arguments only when you are bootstrapping or overriding
-context deliberately:
+Required daily workflow commands should resolve context from login state and
+the current checkout. Optional context arguments are overrides; use them only
+when you are bootstrapping, diagnosing, or performing explicit recovery:
 
 | Argument | Meaning | Normal use |
 |---|---|---|
@@ -61,6 +62,42 @@ verlyn --version
 Use `--dry-run --json` to inspect the planned source executable, destination,
 and PATH entry without changing the machine.
 
+## Governance Pack Commands
+
+Use these when a local repository needs Verlyn governance files
+installed or refreshed from the Verlyn API:
+
+```bash
+verlyn governance install --target /path/to/repo
+verlyn governance refresh --target /path/to/repo
+verlyn governance refresh --target /path/to/repo --dry-run --json
+```
+
+The CLI fetches the canonical governance pack from Verlyn before
+writing local files. Verlyn owns files installed from that pack
+except `RULES.md`, which is the repo-owned customization layer. Refresh creates
+`RULES.md` when it is missing, preserves it when it exists, and reports
+conflicts for locally edited Verlyn-owned files unless `--force` is
+supplied.
+
+Verlyn-owned governance files include `AGENTS.md`, `CONTRIBUTING.md`,
+`CLAUDE.md`, `.verlyn/runtime_context.json`, `.verlyn/workflow_pack.json`,
+`.verlyn/.gitignore`, `Documentation/guides/VERLYN_AGENT_WORKFLOW.md`,
+`Documentation/guides/VERLYN_PUBLIC_CLI.md`, the tool-neutral
+`.verlyn/agent-skills/verlyn-public-cli.md`, and the Codex adapter at
+`.verlyn/.codex/skills/verlyn-public-cli/SKILL.md`. `RULES.md` is intentionally
+repo-owned so the repository owner can add project-specific guidance without
+forking the Verlyn pack.
+
+Agent and Codex skill files are guidance, not an alternate workflow engine.
+They tell AI-assisted tools how to use the installed public CLI, how to reload
+governance after compaction, and which commands are required versus optional.
+They must defer to `AGENTS.md`, `CONTRIBUTING.md`, and `RULES.md`.
+
+For local-folder onboarding that creates a hosted repository, ask whether the
+new hosted repo should be `private` or `public` before creation. Do not infer
+visibility from the folder name or local Git state.
+
 ## Startup Commands
 
 Use these at the beginning of an assistant session:
@@ -71,6 +108,7 @@ verlyn workflow assistant-startup --json
 verlyn workflow assert-edit-route --json
 verlyn target show --json
 verlyn changes list
+verlyn runs --limit 3 --json
 ```
 
 - `auth status` confirms the saved session, user, API server, expiry, and idle
@@ -82,6 +120,7 @@ verlyn changes list
   not authorized for edits or no active route exists.
 - `target show --json` confirms which repo this checkout is bound to.
 - `changes list` shows your working changes by default.
+- `runs --limit 3 --json` shows recent API-backed analysis/run context.
 
 For diagnostics across visible owners and statuses:
 
@@ -149,11 +188,16 @@ Work-item commands use JSON arrays so one call can update one or many items:
 ```bash
 verlyn work-items list <change-id>
 verlyn work-items update <change-id> --creates-json '[{"title":"Add validation"}]'
+verlyn work-items update <change-id> --updates-json '[{"task_id":"<starter-work-item-id>","notes":"Concrete scope and acceptance for this change."}]'
 verlyn work-items update <change-id> --updates-json '[{"task_id":"<work-item-id>","status":"done"}]'
 ```
 
 Use `--creates-json` for new work items and `--updates-json` for changes to
 existing work items. Each item in the JSON array is one work-item mutation.
+When seeded implementation and validation items are too generic, update those
+existing starter work item IDs in place with concrete scope, acceptance, notes,
+and validation guidance before implementation. Do not add duplicates and do
+not replace the required starter tickets as the normal path.
 `verlyn work-items list <change-id>` and
 `verlyn work-items show <change-id> <work-item-id>` are the review surfaces for
 task planning. They include parent change context, dependency/chain context,
@@ -163,6 +207,20 @@ structured, sanitized fields. `changes show --json` and
 `work-items show --json` also place enriched task descriptions and planning
 fields on the top-level `tasks`, `work_items`, or `work_item` entries so
 consumers do not have to know that `review_context` is the richer source.
+
+## Controlled Run Recovery
+
+Use run abort only when an active run is stuck, mis-scoped, superseded, or
+needs operator-controlled recovery:
+
+```bash
+verlyn runs abort <run-id>
+```
+
+`verlyn runs abort <run-id>` is not part of the normal happy path. Prefer a
+properly scoped run, tracked change, and normal gate/deliver/deploy workflow.
+When abort is necessary, record the reason in the relevant change, work item,
+or handoff notes so later reviewers know why the run was stopped.
 
 ## Delivery Versus Deployment
 
@@ -214,9 +272,19 @@ Deployment-only options:
 | `--source-ref` | Deploy an already delivered source ref instead of running delivery first. Omit it for normal deliver-and-deploy. |
 | `--commit-sha` | Expected commit for an already delivered source ref. Use with `--source-ref` when you need commit verification. |
 
+`--source-ref` and `--commit-sha` are recovery or explicit deployment controls.
+They are not required for normal `verlyn changes deploy <change-id>` usage.
+
 If a change explicitly has no governed work branch, `deliver` performs a
 no-code closeout. It closes the workflow item without opening a pull request
 because no source branch exists to merge.
+If an activated governed work branch has no remaining diff against the base
+branch, `deliver` records a no-diff/no-code closeout instead of opening a pull
+request, then safely removes local and remote work branches when the branch is
+tree-equivalent or already contained in the base branch. To repair cleanup
+metadata for an old no-PR closeout, use
+`verlyn changes recover-delivery <change-id> --no-code --work-branch <branch>`
+with the applicable branch-deleted flags.
 
 ## Repositories
 
@@ -236,6 +304,13 @@ verlyn repos clone <repo-slug> ./local-folder --project-id <project-id>
   default branch.
 - `--no-save-checkout` prevents the clone from becoming the saved local checkout
   mapping.
+- After cloning, the CLI inspects the checkout for installed Verlyn agent
+  guidance and reports local Codex/Claude tool detection. Governed repos may
+  include the tool-neutral `.verlyn/agent-skills/verlyn-public-cli.md` and a
+  Codex adapter at `.verlyn/.codex/skills/verlyn-public-cli/SKILL.md`. Claude
+  continues to use the normal `CLAUDE.md` wrapper and repo governance files; no
+  separate Claude skill adapter is installed. The clone command reports these
+  paths but does not create untracked adapter files in the checkout.
 
 ## Reviews And Gates
 
@@ -243,12 +318,14 @@ Use review and gate commands to keep evidence in Verlyn:
 
 ```bash
 verlyn workflow gate <change-id> --scope delivery
-verlyn reviews record <change-id> --tier 1 --reviewer <name> --disposition accepted --summary "Reviewed."
+verlyn reviews record <change-id> --tier changed_file_review --disposition accepted --summary "Changed-file review passed."
 ```
 
 - `workflow gate` inspects whether a change is ready for a named scope such as
   delivery.
 - `reviews record` writes review evidence to the durable Verlyn workflow record.
+- Changed-file review evidence is required before real source-control delivery
+  unless Verlyn records a no-diff exemption.
 
 When a command fails because the current user cannot see a repo, project, or
 change, treat that as a scope or authorization issue. Do not switch to private

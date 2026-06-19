@@ -10,7 +10,7 @@ venv/
 
 # Local editor/tool state
 .vscode/
-.codex/
+/.codex
 .agents/
 
 # Frontend
