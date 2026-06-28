@@ -72,6 +72,8 @@ After session compaction, summary recovery, or any other context-compressed resu
 - Prefer installed public `verlyn` CLI commands over retyping workflow steps from memory.
 - Public CLI first, API-backed workflow context, no direct PostgreSQL access, no private helper scripts, no provider-secret handling, and no bypassing gates.
 - Treat a missing active Verlyn change or unauthorized repo binding as a workflow failure to fix before editing, not a suggestion to proceed from memory.
+- Creating a change or fleshing out draft work items is planning, not edit authorization. Do not modify files, run formatters that write files, generate source artifacts, or apply patches until the applicable change is activated and `verlyn workflow assert-edit-route --json` reports `allowed: true` for that change.
+- Activation is the branch boundary: `verlyn changes activate <change-id>` creates or binds the governed work branch. If the ticket is still `draft`, stay in read-only inspection/planning mode.
 - Once a Verlyn change is active, use the installed public `verlyn` CLI path first for branch repair, PR delivery, merge, and workflow state changes. If the product path is missing or blocked, record the blocker as Verlyn workflow feedback instead of bypassing it.
 - When a workflow mutation or delivery action exists in Verlyn, use the installed public CLI path before shell fallbacks such as `gh`.
 - For hosted PR closeout, prefer the Verlyn hosted delivery path from a repo-visible owner session. If the current session cannot see the repo, treat that as a scope/access gap to fix or switch sessions for, not as permission to bypass Verlyn's hosted workflow or fall back to `gh`.

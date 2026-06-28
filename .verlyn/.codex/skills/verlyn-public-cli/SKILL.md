@@ -23,8 +23,22 @@ Required Codex behavior:
 - Run `verlyn auth status`, `verlyn workflow assistant-startup --json`,
   `verlyn workflow assert-edit-route --json`, and `verlyn target show --json`
   before edits.
+- Treat normal Verlyn commands as repo-scoped from the current governed
+  checkout plus saved CLI login. Optional overrides are for bootstrap,
+  diagnostics, automation outside a checkout, or explicit recovery.
+- Inspect Verlyn JSON hints such as `recommended_next_action`, `next_action`,
+  `recommended_next_command`, `review_context`, `task_rollup`,
+  `workflow_gate`, `repair_status`, and `next_step` before guessing the next
+  workflow command.
+- Inspect login-time `governance_status` JSON when present. If it reports an
+  action-required governance install, refresh, repair, or manifest update,
+  follow the returned `recommended_next_command` and the user's choice through
+  the public CLI.
 - Inspect active changes and work items through `verlyn changes show --json`
   and `verlyn work-items list`.
+- Treat draft changes as planning-only. Do not write files, run modifying
+  formatters, generate source artifacts, or apply patches until the change is
+  active and `verlyn workflow assert-edit-route --json` returns `allowed: true`.
 - Record changed-file review evidence before delivery when real files changed.
 - Use `verlyn changes deliver <change-id>` for source-control closeout and
   `verlyn changes deploy <change-id>` for closeout plus provider deployment.
