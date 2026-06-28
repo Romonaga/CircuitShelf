@@ -1,22 +1,23 @@
 {
   "product": "Verlyn",
-  "workflow_pack_version": "2026.06.19.1",
+  "workflow_pack_version": "2026.06.27.1",
   "repo_name": "circuitshelf",
   "install_mode": "governance",
   "installed_at": "2026-06-18T18:43:12.088870+00:00",
-  "refreshed_at": "2026-06-19T14:50:27.205383+00:00",
+  "refreshed_at": "2026-06-28T02:57:48.940547+00:00",
   "governance_pack": {
     "name": "verlyn-standard",
-    "version": "2026.06.19.1",
+    "version": "2026.06.27.1",
+    "manifest_hash": "37444df3438279ac27fb97d579aab3e408767c8209a0f18a58267ee0c217a929",
     "source": "verlyn_api",
-    "refreshed_at": "2026-06-19T14:50:27.205383+00:00",
+    "refreshed_at": "2026-06-28T02:57:48.940547+00:00",
     "repo_owned_paths": [
       "RULES.md"
     ],
     "files": {
       "AGENTS.md": {
         "owner": "verlyn",
-        "sha256": "4e5571a68c81724db5d2dd27aa79a465c16603495486063d91a8dff034e747ad",
+        "sha256": "a62cebbe724fde62e04501d3afea6d9a904c622a54b7747b94cc6578f2857831",
         "required": true,
         "category": "governance",
         "purpose": "repo_rules"
@@ -44,7 +45,7 @@
       },
       ".verlyn/runtime_context.json": {
         "owner": "verlyn",
-        "sha256": "5b0cdf57cb9cef2b83065037ef07d0ac0d5014ee2d015757db78d92ac1e4391e",
+        "sha256": "5d6b98cbfd9611a0278cad836a3803e9be5363c575c9b2998d6c8f87b2660b5f",
         "required": true,
         "category": "governance",
         "purpose": "assistant_runtime_context"
@@ -58,14 +59,14 @@
       },
       ".verlyn/agent-skills/verlyn-public-cli.md": {
         "owner": "verlyn",
-        "sha256": "1132e939837505436d309b25c8d16e440d8e1b2d3a931d821e3839c7fc8c7551",
+        "sha256": "341d0b2df09cda0cdeebbce87e8a84ef9af18d4bee55b2aa692740508d134651",
         "required": false,
         "category": "governance",
         "purpose": "agent_skill_reference"
       },
       ".verlyn/.codex/skills/verlyn-public-cli/SKILL.md": {
         "owner": "verlyn",
-        "sha256": "9db32f7c72a3a4b74bb2be8447c32bb47c105de3880c91f4659fbe0817d17292",
+        "sha256": "3c7b802c585984091d869c837cb17a5a40b6953537e7073e05ebe0449d941c64",
         "required": false,
         "category": "governance",
         "purpose": "codex_skill"
@@ -121,14 +122,14 @@
       },
       "Documentation/guides/VERLYN_AGENT_WORKFLOW.md": {
         "owner": "verlyn",
-        "sha256": "448fffc15e600d339075e9ac965375716d2dc3b34ecc98e4c188748a61aa8595",
+        "sha256": "9bef8369453d82e572df878c8d6e871ce717728b239cc2a84ef44aff004b7543",
         "required": false,
         "category": "documentation",
         "purpose": "workflow"
       },
       "Documentation/guides/VERLYN_PUBLIC_CLI.md": {
         "owner": "verlyn",
-        "sha256": "0ff9dacac180296e4fbc391a64d4c4ef507d06b0d3055f893cd0cc75771cc8f4",
+        "sha256": "eb749606cdd27c17300414b01a6701eecedc27d148628e21b635bb8b9cd48dfd",
         "required": true,
         "category": "documentation",
         "purpose": "cli_reference"
@@ -162,5 +163,6 @@
         "purpose": "product_ownership"
       }
     }
-  }
+  },
+  "manifest_hash": "37444df3438279ac27fb97d579aab3e408767c8209a0f18a58267ee0c217a929"
 }

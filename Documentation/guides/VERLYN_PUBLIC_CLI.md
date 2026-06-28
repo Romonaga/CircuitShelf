@@ -5,16 +5,27 @@ assistants inside a governed repository. It documents the product workflow only:
 do not use private Verlyn developer commands, direct database access, or shell
 provider tools as substitutes for these commands.
 
+## CLI Surface Names
+
+- `verlyn` is the installed public API-backed product CLI.
+- `python -m runtime.source_cli` is source-local developer/analyzer tooling for
+  Verlyn source checkouts.
+- `cli.py` is a developer compatibility shim only. Public product usage should
+  not be explained through `cli.py`.
+
 ## Context Resolution
 
-Most commands resolve the current user, server, project, and repository from
-saved CLI login state plus the current checkout. In normal daily work, after you
-are logged in and working inside a known repo, you should not need to pass
-`--profile`, `--server`, `--repo-slug`, or `--target`.
+Most commands are repo-scoped: run them from the governed repository checkout
+and let the installed CLI resolve the current user, entity, project,
+repository, branch, and active change from saved CLI login state plus the
+current checkout. In normal daily work, after you are logged in and working
+inside a known repo, you should not need to pass `--profile`, `--server`,
+`--repo-slug`, or `--target`.
 
 Required daily workflow commands should resolve context from login state and
-the current checkout. Optional context arguments are overrides; use them only
-when you are bootstrapping, diagnosing, or performing explicit recovery:
+the current checkout. Optional context arguments are overrides for special
+cases; use them only when you are bootstrapping, diagnosing, automating outside
+a checkout, or performing explicit recovery:
 
 | Argument | Meaning | Normal use |
 |---|---|---|
@@ -28,6 +39,30 @@ when you are bootstrapping, diagnosing, or performing explicit recovery:
 If a command cannot resolve the repo without an override, treat that as a
 target/login/binding issue to repair, not as a reason to hard-code overrides in
 normal workflow.
+
+Use the API service URL for `verlyn auth login --server`. A saved CLI profile
+may reuse its saved `api_base_url` for later logins, but the web/UI origin is
+not a supported CLI API surface. The web/UI service should reject public CLI
+bearer-token API calls and should not host CLI-only routes such as
+`/api/cli/auth/login`.
+
+JSON output is part of the product contract for agents and automation. Inspect
+`workflow_hint` first when it is present. `workflow_hint` is the canonical
+chain-aware resolver payload shared by `workflow assistant-startup --json`,
+`workflow inbox --json`, and `changes next --json`; it prevents agents from
+guessing from flat lists when chains, blockers, or branch context matter.
+Additional fields such as `recommended_next_action`, `next_action`,
+`recommended_next_command`, `review_context`, `task_rollup`, `workflow_gate`,
+`repair_status`, and `next_step` remain guidance, not permission to bypass
+governance or ignore the user's request.
+
+When `verlyn auth login` runs from a repository checkout, the CLI sends a
+lightweight local governance summary with the login request. The login response
+can include `governance_status` with the installed version, latest version,
+missing required files, change notes, and a `recommended_next_command`. This
+status response never includes governance file contents. In interactive mode,
+the CLI may prompt before installing or refreshing governance files; in
+`--json` mode it reports the status and does not prompt.
 
 For managed checkout commands, the CLI uses the local target path only to
 validate that the checkout maps to an authorized Verlyn repository. Server
@@ -76,9 +111,11 @@ verlyn governance refresh --target /path/to/repo --dry-run --json
 The CLI fetches the canonical governance pack from Verlyn before
 writing local files. Verlyn owns files installed from that pack
 except `RULES.md`, which is the repo-owned customization layer. Refresh creates
-`RULES.md` when it is missing, preserves it when it exists, and reports
-conflicts for locally edited Verlyn-owned files unless `--force` is
-supplied.
+`RULES.md` when it is missing, preserves it when it exists, and overwrites
+Verlyn-owned governance files so old or locally edited generated
+guidance returns to the current contract. Use `--dry-run --json` to preview the
+file actions before writing. `--force` is only for remaining non-`RULES.md`
+conflicts such as unsafe path shapes.
 
 Verlyn-owned governance files include `AGENTS.md`, `CONTRIBUTING.md`,
 `CLAUDE.md`, `.verlyn/runtime_context.json`, `.verlyn/workflow_pack.json`,
@@ -158,7 +195,7 @@ verlyn changes next
 - `changes update` changes metadata such as proposal sections, acceptance
   criteria, priority, dependencies, and owner.
 - `changes activate` starts implementation and binds or creates the governed
-  work branch. Do this before editing code for a change.
+  work branch. Do this before editing files for a change.
 - `changes refresh-branch` repairs or refreshes the bound local work branch.
 - `changes next` asks Verlyn for the next unblocked change in the current chain.
 
@@ -171,6 +208,13 @@ validation, review, or handoff. Verlyn always includes `Review findings` and
 mandatory human review applies. Use it to check for hallucinated behavior,
 scope drift, unrelated edits, and mismatches between the implementation and
 the change ticket/work items before delivery:
+
+Draft change work is planning only. It is acceptable to inspect files and
+update the change/work-item records while a change is draft, but do not write
+files, run commands that modify the checkout, or generate source artifacts
+until `verlyn changes activate <change-id>` has created or bound the work
+branch and `verlyn workflow assert-edit-route --json` reports `allowed: true`
+for that active change.
 
 | Change type | Seeded first work items |
 |---|---|
